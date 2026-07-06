@@ -5,8 +5,8 @@ import ScholarshipCard from '../components/ScholarshipCard';
 import { ArrowRight, BookOpen, ShieldCheck, HelpCircle, ChevronDown, ChevronUp, Star, Users, DollarSign, Calendar, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-// Import local hero image as requested
-import heroImage from '../assets/hero.jpg';
+// Use the DLSUD background image for the hero section
+import heroImage from '../assets/dlsud_background.png';
 
 interface LandingPageProps {
   onLoginClick: () => void;

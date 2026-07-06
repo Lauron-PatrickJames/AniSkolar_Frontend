@@ -12,7 +12,7 @@ interface LoginPageProps {
 export function AniSkolarLogo({ className = "w-12 h-12" }: { className?: string }) {
   return (
     <div className={`bg-white rounded-2xl flex items-center justify-center p-2.5 shadow-md ${className}`}>
-      <svg viewBox="0 0 64 64" className="w-full h-full text-[#006937]" fill="none" stroke="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 64 64" className="w-full h-full text-brand-green" fill="none" stroke="currentColor" xmlns="http://www.w3.org/2000/svg">
         {/* Shield Body */}
         <path d="M32 54C32 54 50 43.2 50 26.8V15.6L32 9L14 15.6V26.8C14 43.2 32 54 32 54Z" fill="white" stroke="#006937" strokeWidth="4" strokeLinejoin="round" />
         
@@ -70,12 +70,12 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
 
   return (
     <div id={id} className="min-h-screen bg-[#f1f5f9] flex items-center justify-center p-4 sm:p-6 md:p-10 lg:p-12">
-      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col lg:flex-row min-h-[640px] border border-slate-100">
+      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col lg:flex-row min-h-160 border border-slate-100">
         
         {/* Left Side: Solid DLSU Green Branding Sidebar */}
-        <div className="lg:w-[45%] bg-[#006937] text-white p-8 sm:p-12 flex flex-col justify-between relative overflow-hidden">
+        <div className="lg:w-[45%] bg-brand-green text-white p-8 sm:p-12 flex flex-col justify-between relative overflow-hidden">
           {/* Subtle design helper grid background */}
-          <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]"></div>
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#ffffff_1px,transparent_1px)] bg-size-[16px_16px]"></div>
           
           <button
             onClick={onBackToLanding}
@@ -139,7 +139,7 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="e.g. scholar@dlsud.edu.ph"
-                    className="block w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-[#006937]/10 focus:border-[#006937] transition-all"
+                    className="block w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/10 focus:border-brand-green transition-all"
                   />
                 </div>
               </div>
@@ -150,7 +150,7 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                   <label htmlFor="password" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                     Password
                   </label>
-                  <a href="#" className="text-xs font-bold text-[#006937] hover:underline" onClick={(e) => e.preventDefault()}>
+                  <a href="#" className="text-xs font-bold text-brand-green hover:underline" onClick={(e) => e.preventDefault()}>
                     Forgot Password?
                   </a>
                 </div>
@@ -165,7 +165,7 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="block w-full pl-10 pr-10 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-[#006937]/10 focus:border-[#006937] transition-all"
+                    className="block w-full pl-10 pr-10 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/10 focus:border-brand-green transition-all"
                   />
                   <button
                     type="button"
@@ -184,7 +184,7 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-[#006937] focus:ring-[#006937]/10 accent-[#006937] cursor-pointer"
+                  className="h-4 w-4 rounded border-slate-300 text-brand-green focus:ring-brand-green/10 accent-brand-green cursor-pointer"
                 />
                 <label htmlFor="remember-me" className="ml-2.5 block text-xs font-medium text-slate-500 select-none cursor-pointer">
                   Remember my session on this device
@@ -196,7 +196,7 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full font-display font-bold text-xs tracking-wider text-white bg-[#006937] hover:bg-[#00542c] py-3.5 rounded-lg transition-all duration-200 shadow-sm flex items-center justify-center focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed uppercase"
+                  className="w-full font-display font-bold text-xs tracking-wider text-white bg-brand-green hover:bg-[#00542c] py-3.5 rounded-lg transition-all duration-200 shadow-sm flex items-center justify-center focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed uppercase"
                 >
                   {isLoading ? 'SIGNING IN...' : 'SIGN IN'}
                 </button>

@@ -45,7 +45,7 @@ export default function PublicLayout({ children, onLoginClick, id }: PublicLayou
                 className="flex items-center space-x-1.5 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-3 rounded-lg transition-all duration-200 shadow-sm shadow-emerald-900/10 focus:outline-hidden"
               >
                 <User className="w-4 h-4" />
-                <span>Student Login</span>
+                <span>Login</span>
               </button>
             </div>
           </div>

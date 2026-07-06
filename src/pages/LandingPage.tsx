@@ -49,7 +49,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       <section
         id="hero"
         className="relative min-h-[85vh] flex items-center justify-center bg-cover bg-center text-white"
-      style={{ backgroundImage: `linear-gradient(135deg, rgba(0, 112, 60, 0.3), rgba(0, 112, 60, 0.8)), url(${heroImage})` }}
+      style={{ backgroundImage: `linear-gradient(135deg, rgba(0, 112, 60, 0.3), rgba(0, 112, 60, 0.7)), url(${heroImage})` }}
       >
         {/* Decorative Grid Accent */}
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-24 text-center">
@@ -57,29 +57,27 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
 
             {/* Title & Slogan */}
             <h1 className="font-display font-extrabold text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-tight text-white">
-            Fulfill Your Dreams{" "}
-            <span className="whitespace-nowrap">
-              with <span className="text-[#00703C] bg-white px-5 py-0.5 rounded-lg">AniSkolar</span>
-            </span>
-          </h1>
+            Fulfill Your Dreams with <span className="text-[#00703C] bg-white px-7 py-0.5 rounded-lg">AniSkolar</span>
+            </h1>
             
             <p className="text-lg text-white font-normal leading-relaxed max-w-2xl mx-auto">
               The centralized scholarship portal of DLSU-D. Discover, apply, and manage your university grants effortlessly, empowering Lasallians to create a lasting global impact.
             </p>
 
             {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
               <button
                 onClick={onExploreClick}
-                className="w-full sm:w-auto font-display font-bold uppercase text-xs tracking-wider text-white bg-[#00703C] hover:bg-[#005c30] px-8 py-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg shadow-white/10"              >
+                className="w-full sm:w-auto sm:min-w-60 font-display font-bold uppercase text-xs tracking-wider text-white bg-[#00703C] hover:bg-[#005c30] px-8 py-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg shadow-white/10"
+              >
                 <span>Explore Scholarships</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
               <button
                 onClick={onLoginClick}
-                className="w-full sm:w-auto font-display font-bold uppercase text-xs tracking-wider text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 px-8 py-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2"
+                className="w-full sm:w-auto sm:min-w-60 font-display font-bold uppercase text-xs tracking-wider text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 px-8 py-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2"
               >
-                <span>Student Login</span>
+                <span>Login to Access More</span>
               </button>
             </div>
           </div>

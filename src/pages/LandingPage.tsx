@@ -6,7 +6,7 @@ import { ArrowRight, BookOpen, ShieldCheck, HelpCircle, ChevronDown, ChevronUp, 
 import { motion, AnimatePresence } from 'motion/react';
 
 // Use the DLSUD background image for the hero section
-import heroImage from '../assets/dlsud_background.png';
+import heroImage from '../assets/sample hero 1.jpg';
 
 interface LandingPageProps {
   onLoginClick: () => void;
@@ -49,20 +49,21 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       <section
         id="hero"
         className="relative min-h-[85vh] flex items-center justify-center bg-cover bg-center text-white"
-        style={{ backgroundImage: `linear-gradient(to right, rgba(0, 50, 26, 0.9), rgba(15, 23, 42, 0.85)), url(${heroImage})` }}
+      style={{ backgroundImage: `linear-gradient(135deg, rgba(0, 112, 60, 0.3), rgba(0, 112, 60, 0.8)), url(${heroImage})` }}
       >
         {/* Decorative Grid Accent */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-brand-green/20 via-transparent to-transparent opacity-60"></div>
-
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-24 text-center">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-24 text-center">
           <div className="space-y-6">
 
             {/* Title & Slogan */}
             <h1 className="font-display font-extrabold text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-tight text-white">
-              Fulfill Your Dreams with <span className="text-emerald-400">AniSkolar</span>
-            </h1>
+            Fulfill Your Dreams{" "}
+            <span className="whitespace-nowrap">
+              with <span className="text-[#00703C] bg-white px-5 py-0.5 rounded-lg">AniSkolar</span>
+            </span>
+          </h1>
             
-            <p className="text-lg text-slate-300 font-normal leading-relaxed max-w-2xl mx-auto">
+            <p className="text-lg text-white font-normal leading-relaxed max-w-2xl mx-auto">
               The centralized scholarship portal of DLSU-D. Discover, apply, and manage your university grants effortlessly, empowering Lasallians to create a lasting global impact.
             </p>
 
@@ -70,8 +71,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
               <button
                 onClick={onExploreClick}
-                className="w-full sm:w-auto font-display font-bold uppercase text-xs tracking-wider text-slate-900 bg-emerald-400 hover:bg-emerald-300 px-8 py-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg shadow-emerald-400/20"
-              >
+                className="w-full sm:w-auto font-display font-bold uppercase text-xs tracking-wider text-white bg-[#00703C] hover:bg-[#005c30] px-8 py-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg shadow-white/10"              >
                 <span>Explore Scholarships</span>
                 <ArrowRight className="w-4 h-4" />
               </button>

@@ -17,8 +17,12 @@ export default function PublicLayout({ children, onLoginClick, id }: PublicLayou
           <div className="flex justify-between items-center h-20">
             {/* Branding */}
             <div className="flex items-center space-x-3 cursor-pointer">
-              <div className="w-11 h-11 rounded-full bg-brand-green flex items-center justify-center font-display font-extrabold text-white text-xl shadow-md border-2 border-white">
-                AS
+              <div className="w-13 h-13 rounded-full bg-white flex items-center justify-center shadow-md border-2 border-white overflow-hidden">
+                <img 
+                  src="src\assets\logo.png" 
+                  alt="AniSkolar logo" 
+                  className="w-4/5 h-4/5 object-contain"
+                />
               </div>
               <div>
                 <span className="font-display font-black text-xl text-slate-900 tracking-tight block">AniSkolar</span>

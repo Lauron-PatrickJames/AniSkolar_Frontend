@@ -86,7 +86,13 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
           </button>
 
           <div className="my-10 space-y-6 z-10">
-            <AniSkolarLogo className="w-16 h-16" />
+            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-md border-2 border-white overflow-hidden">
+                <img 
+                  src="src\assets\logo.png" 
+                  alt="AniSkolar logo" 
+                  className="w-4/5 h-4/5 object-contain"
+                />
+              </div>
             <div className="space-y-3">
               <h1 className="text-3xl sm:text-4xl font-display font-extrabold tracking-tight">AniSkolar Portal</h1>
               <p className="text-emerald-100/80 text-sm leading-relaxed max-w-xs">
@@ -223,16 +229,6 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                 </svg>
                 <span>Sign in with Microsoft</span>
               </button>
-            </div>
-
-            {/* Helper Mock Note */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-start gap-2.5 text-[11px] text-slate-500 leading-relaxed shadow-3xs">
-              <ShieldCheck className="w-4 h-4 text-[#006937] shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold text-slate-700">Demonstration Credentials:</p>
-                <p className="mt-0.5">Email: <span className="font-mono bg-slate-200/50 px-1 py-0.5 rounded text-[#006937] font-semibold">student@dlsud.edu.ph</span></p>
-                <p>Password: <span className="font-mono bg-slate-200/50 px-1 py-0.5 rounded text-[#006937] font-semibold">animo1911</span></p>
-              </div>
             </div>
           </div>
         </div>

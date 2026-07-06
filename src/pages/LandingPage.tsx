@@ -25,7 +25,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
     },
     {
       q: "How can I renew my active scholarship for the next term?",
-      a: "Scholars can renew their grants by submitting their latest Certified True Copy of Grades (TCG) and any other program-specific requirements during the announced renewal period in the Student Portal. SFAO will evaluate your academic compliance before automatically renewing your discount."
+      a: "Scholars can renew their grants by submitting their latest Certified True Copy of Grades (TCG) and any other program-specific requirements during the announced renewal period in the Student Portal. LSO will evaluate your academic compliance before automatically renewing your discount."
     },
     {
       q: "Can I apply for multiple scholarships at the same time?",
@@ -33,7 +33,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
     },
     {
       q: "What should I do if my document uploads are failing?",
-      a: "Ensure your documents are in PDF, JPEG, or PNG format and do not exceed 5MB in size. If issues persist, you can contact the Scholarship and Financial Assistance Office (SFAO) directly or visit the office on the Ground Floor of the Admin Building."
+      a: "Ensure your documents are in PDF, JPEG, or PNG format and do not exceed 5MB in size. If issues persist, you can contact the Linkages and Scholarship Office (LSO) directly or visit the office on the Ground Floor of the Admin Building."
     }
   ];
 
@@ -56,11 +56,6 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-24 text-center">
           <div className="space-y-6">
-            {/* University Name Accent */}
-            <div className="inline-flex items-center space-x-2 bg-brand-green-light/20 border border-brand-green-light/30 px-3.5 py-1.5 rounded-full text-brand-green-light text-xs font-bold uppercase tracking-wider">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>De La Salle University–Dasmariñas</span>
-            </div>
 
             {/* Title & Slogan */}
             <h1 className="font-display font-extrabold text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-tight text-white">
@@ -100,7 +95,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
             </h2>
             <div className="w-16 h-1 bg-brand-green mx-auto mb-6 rounded-full"></div>
             <p className="text-base text-slate-600 leading-relaxed">
-              AniSkolar is the official, student-centered digital scholarship solution of De La Salle University–Dasmariñas. Managed by the Scholarship and Financial Assistance Office (SFAO), AniSkolar replaces traditional paperwork with a simple, secure, and modern online environment designed specifically for the Lasallian community.
+              AniSkolar is the official, student-centered digital scholarship solution of De La Salle University–Dasmariñas. Managed by the Linkages and Scholarship Office (LSO), AniSkolar replaces traditional paperwork with a simple, secure, and modern online environment designed specifically for the Lasallian community.
             </p>
           </div>
 
@@ -121,7 +116,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               </div>
               <h3 className="font-display font-bold text-lg text-slate-900 mb-2">Transparent Evaluations</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Monitor your application status, view evaluation progress, and receive SFAO updates directly in your private dashboard.
+                Monitor your application status, view evaluation progress, and receive SFAG updates directly in your private dashboard.
               </p>
             </div>
 
@@ -184,7 +179,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               { step: '01', title: 'Explore Grants', desc: 'Browse and search our categorized scholarships and find the perfect match.' },
               { step: '02', title: 'Check Eligibility', desc: 'Review required grade averages and necessary documentation rules.' },
               { step: '03', title: 'Submit Requirements', desc: 'Log in and upload scanned digital copies of your credentials directly.' },
-              { step: '04', title: 'Wait for Evaluation', desc: 'SFAO evaluates submissions; receive real-time notifications on outcomes.' }
+              { step: '04', title: 'Wait for Evaluation', desc: 'SFAG evaluates submissions; receive real-time notifications on outcomes.' }
             ].map((item, idx) => (
               <div key={idx} className="relative p-6 rounded-xl border border-slate-100 bg-slate-50/30">
                 <span className="text-5xl font-display font-black text-emerald-100 block mb-4">{item.step}</span>
@@ -200,9 +195,9 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       <section id="announcements" className="py-20 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="font-display font-black text-3xl text-slate-950 tracking-tight mb-4">Latest SFAO Announcements</h2>
+            <h2 className="font-display font-black text-3xl text-slate-950 tracking-tight mb-4">Latest SFAG Announcements</h2>
             <div className="w-16 h-1 bg-brand-green mx-auto mb-6 rounded-full"></div>
-            <p className="text-sm text-slate-600">Stay up to date with key SFAO announcements, deadlines, and requirements.</p>
+            <p className="text-sm text-slate-600">Stay up to date with key SFAG announcements, deadlines, and requirements.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
@@ -238,7 +233,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               <HelpCircle className="w-8 h-8 text-brand-green" />
               <span>Frequently Asked Questions</span>
             </h2>
-            <p className="text-sm text-slate-500">Quick answers to common questions about SFAO and AniSkolar portal.</p>
+            <p className="text-sm text-slate-500">Quick answers to common questions about SFAG and AniSkolar portal.</p>
           </div>
 
           <div className="space-y-4">
@@ -287,7 +282,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
           <div className="mt-12 p-4 bg-emerald-50 rounded-xl border border-emerald-100 flex items-start gap-3">
             <Info className="w-5 h-5 text-brand-green shrink-0 mt-0.5" />
             <p className="text-xs text-brand-green-dark leading-relaxed">
-              <strong>Need extra support?</strong> If you have questions not covered here, please email us directly at <a href="mailto:sfao@dlsud.edu.ph" className="underline font-bold">sfao@dlsud.edu.ph</a> or visit our help desk in the administration offices.
+              <strong>Need extra support?</strong> If you have questions not covered here, please email us directly at <a href="mailto:lso@dlsud.edu.ph" className="underline font-bold">lso@dlsud.edu.ph</a> or visit our help desk in the administration offices.
             </p>
           </div>
         </div>

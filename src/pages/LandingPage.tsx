@@ -68,7 +68,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
               <button
                 onClick={onExploreClick}
-                className="w-full sm:w-auto sm:min-w-60 font-display font-bold uppercase text-xs tracking-wider text-white bg-[#00703C] hover:bg-[#005c30] px-8 py-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg shadow-white/10"
+                className="w-full sm:w-auto sm:min-w-60 font-display font-bold uppercase text-xs tracking-wider text-white bg-[#00703C]/80 hover:bg-[#005c30] px-8 py-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg shadow-white/10"
               >
                 <span>Explore Scholarships</span>
                 <ArrowRight className="w-4 h-4" />

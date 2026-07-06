@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-brand-green: #006937;
+  --color-brand-green-dark: #00502a;
+  --color-brand-green-light: #058f4c;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+}
+
+@layer base {
+  body {
+    @apply font-sans bg-slate-50 text-slate-900 selection:bg-brand-green/20 selection:text-brand-green;
+  }
+}
+
+/* Clean Minimalism Theme styles */
+.dlsu-green {
+  color: #006937;
+}
+
+.dlsu-bg {
+  background-color: #006937;
+}
+
+.dlsu-border {
+  border-color: #006937;
+}
+
+.sidebar-item-active {
+  background-color: rgba(0, 105, 55, 0.06);
+  color: #006937 !important;
+  border-right: 4px solid #006937;
+}
+
+.glass-header {
+  backdrop-filter: blur(8px);
+  background-color: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.card-shadow {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.hero-placeholder {
+  background: linear-gradient(rgba(0, 105, 55, 0.88), rgba(0, 105, 55, 0.88)), url('https://images.unsplash.com/photo-1541339907198-e08756ebafe3?auto=format&fit=crop&q=80&w=1000');
+  background-size: cover;
+  background-position: center;
+}
+
+

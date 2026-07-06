@@ -1,0 +1,6 @@
+{
+  "name": "AniSkolar",
+  "description": "A production-quality Scholarship Management System frontend for De La Salle University–Dasmariñas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

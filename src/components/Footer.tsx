@@ -20,10 +20,6 @@ export default function Footer() {
             <p className="text-sm text-slate-400 leading-relaxed mb-4">
               Providing modern, streamlined scholarship access for Lasallians. Bridging dreams with opportunities for a brighter tomorrow.
             </p>
-            <div className="flex items-center space-x-2 text-xs text-brand-green font-semibold">
-              <ShieldCheck className="w-4 h-4" />
-              <span>SFAO Certified Official Portal</span>
-            </div>
           </div>
 
           {/* Quick Links */}
@@ -55,14 +51,9 @@ export default function Footer() {
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </li>
+              
               <li>
-                <a href="https://dlsud.edu.ph/sfao" target="_blank" rel="noopener noreferrer" className="hover:text-brand-green transition-colors flex items-center space-x-1 text-slate-400">
-                  <span>SFAO Web Office</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </li>
-              <li>
-                <a href="#" className="hover:text-brand-green transition-colors text-slate-400">Student Portal (OSRP)</a>
+                <a href="#" className="hover:text-brand-green transition-colors text-slate-400">Schoolbook</a>
               </li>
               <li>
                 <a href="#" className="hover:text-brand-green transition-colors text-slate-400">University Registrar</a>
@@ -70,9 +61,9 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Contact SFAO */}
+          {/* Contact LSO */}
           <div id="footer-contact">
-            <h3 className="font-display font-semibold text-white mb-4 text-sm uppercase tracking-wider">Contact SFAO</h3>
+            <h3 className="font-display font-semibold text-white mb-4 text-sm uppercase tracking-wider">Contact LSO</h3>
             <ul className="space-y-3 text-sm text-slate-400">
               <li className="flex items-start space-x-3">
                 <MapPin className="w-4 h-4 text-brand-green shrink-0 mt-1" />
@@ -84,7 +75,7 @@ export default function Footer() {
               </li>
               <li className="flex items-center space-x-3">
                 <Mail className="w-4 h-4 text-brand-green shrink-0" />
-                <span>sfao@dlsud.edu.ph</span>
+                <span>lso@dlsud.edu.ph</span>
               </li>
             </ul>
           </div>

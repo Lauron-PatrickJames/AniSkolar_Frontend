@@ -278,13 +278,6 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               );
             })}
           </div>
-
-          <div className="mt-12 p-4 bg-emerald-50 rounded-xl border border-emerald-100 flex items-start gap-3">
-            <Info className="w-5 h-5 text-brand-green shrink-0 mt-0.5" />
-            <p className="text-xs text-brand-green-dark leading-relaxed">
-              <strong>Need extra support?</strong> If you have questions not covered here, please email us directly at <a href="mailto:lso@dlsud.edu.ph" className="underline font-bold">lso@dlsud.edu.ph</a> or visit our help desk in the administration offices.
-            </p>
-          </div>
         </div>
       </section>
     </div>

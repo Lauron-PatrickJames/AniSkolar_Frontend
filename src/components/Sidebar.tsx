@@ -66,23 +66,8 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* Mini Student Profile inside Sidebar */}
-        <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-brand-green text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
-              {student.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-            </div>
-            <div className="overflow-hidden">
-              <p className="text-xs font-bold text-slate-800 truncate leading-tight">{student.name}</p>
-              <p className="text-[10px] text-slate-400 truncate leading-none mt-1">Non-Scholar</p>
-              <p className="text-[10px] text-brand-green font-semibold leading-none mt-1">GPA: {student.gpa}</p>
-            </div>
-          </div>
-        </div>
-
         {/* Navigation Items */}
-        <nav className="flex-1 py-6 space-y-1 overflow-y-auto">
-          <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Main Menu</div>
+        <nav className="flex-1 py-0 space-y-1 overflow-y-auto">
           {menuItems.map(item => {
             const Icon = item.icon;
             const isActive = currentPage === item.id || (item.id === 'explore' && currentPage === 'scholarship-details') || (item.id === 'explore' && currentPage === 'apply-scholarship');

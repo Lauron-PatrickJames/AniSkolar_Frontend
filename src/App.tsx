@@ -153,7 +153,7 @@ export default function App() {
         profile: 'Student Profile Verification'
       };
 
-      const title = pageTitleMap[currentPage] || 'SFAO Student Portal';
+      const title = pageTitleMap[currentPage] || 'Student Portal';
 
       return (
         <StudentLayout

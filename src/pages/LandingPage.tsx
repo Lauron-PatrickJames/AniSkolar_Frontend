@@ -33,7 +33,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
     },
     {
       q: "What should I do if my document uploads are failing?",
-      a: "Ensure your documents are in PDF, JPEG, or PNG format and do not exceed 5MB in size. If issues persist, you can contact the Linkages and Scholarship Office (LSO) directly or visit the office on the Ground Floor of the Admin Building."
+      a: "Ensure your documents are in JPEG/JPG format and do not exceed 10MB in size. If issues persist, you can contact the Linkages and Scholarship Office (LSO) directly or visit the office on the Ground Floor of the Admin Building."
     }
   ];
 
@@ -137,7 +137,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-12 gap-4">
             <div>
               <h2 className="font-display font-black text-3xl text-slate-950 tracking-tight">Available Scholarships</h2>
-              <p className="text-sm text-slate-500 mt-2">Explore active grants. Log in to start your electronic application.</p>
+              <p className="text-sm text-slate-500 mt-2">Explore active grants. Log in to start your online application.</p>
             </div>
             <button
               onClick={onExploreClick}
@@ -177,7 +177,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               { step: '01', title: 'Explore Grants', desc: 'Browse and search our categorized scholarships and find the perfect match.' },
               { step: '02', title: 'Check Eligibility', desc: 'Review required grade averages and necessary documentation rules.' },
               { step: '03', title: 'Submit Requirements', desc: 'Log in and upload scanned digital copies of your credentials directly.' },
-              { step: '04', title: 'Wait for Evaluation', desc: 'SFAG evaluates submissions; receive real-time notifications on outcomes.' }
+              { step: '04', title: 'Wait for Evaluation', desc: 'The LSO evaluates submissions; receive real-time notifications on outcomes.' }
             ].map((item, idx) => (
               <div key={idx} className="relative p-6 rounded-xl border border-slate-100 bg-slate-50/30">
                 <span className="text-5xl font-display font-black text-emerald-100 block mb-4">{item.step}</span>
@@ -193,9 +193,9 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       <section id="announcements" className="py-20 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="font-display font-black text-3xl text-slate-950 tracking-tight mb-4">Latest SFAG Announcements</h2>
+            <h2 className="font-display font-black text-3xl text-slate-950 tracking-tight mb-4">Latest Scholarship Announcements</h2>
             <div className="w-16 h-1 bg-brand-green mx-auto mb-6 rounded-full"></div>
-            <p className="text-sm text-slate-600">Stay up to date with key SFAG announcements, deadlines, and requirements.</p>
+            <p className="text-sm text-slate-600">Stay up to date with key scholarship announcements, deadlines, and requirements.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
@@ -231,7 +231,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               <HelpCircle className="w-8 h-8 text-brand-green" />
               <span>Frequently Asked Questions</span>
             </h2>
-            <p className="text-sm text-slate-500">Quick answers to common questions about SFAG and AniSkolar portal.</p>
+            <p className="text-sm text-slate-500">Quick answers to common questions about scholarships and AniSkolar portal.</p>
           </div>
 
           <div className="space-y-4">

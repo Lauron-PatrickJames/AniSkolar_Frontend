@@ -19,24 +19,83 @@ import ApplyScholarship from './pages/student/ApplyScholarship';
 import Announcements from './pages/student/Announcements';
 import Profile from './pages/student/Profile';
 
+// --- Persistence helpers -----------------------------------------------
+// Everything lives in memory by default, so a page reload wipes the
+// current session (login state, active page, selected scholarship, etc).
+// We mirror the important bits into localStorage so a reload restores
+// exactly where the user left off.
+
+const STORAGE_KEY = 'aniskolar_session';
+
+interface PersistedState {
+  isLoggedIn: boolean;
+  currentPage: string;
+  selectedScholarshipId: string | null;
+  student: StudentProfile;
+  applications: Application[];
+}
+
+const defaultStudent: StudentProfile = {
+  studentNumber: '202312345',
+  name: 'Christian Gabriel J. Del Rosario',
+  course: 'BS in Information Technology',
+  college: 'College of Information and Computer Studies',
+  yearLevel: '3rd Year',
+  email: 'dcj@dlsud.edu.ph',
+  gpa: '3.68'
+};
+
+function loadPersistedState(): PersistedState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) throw new Error('no saved session');
+    const parsed = JSON.parse(raw);
+    return {
+      isLoggedIn: !!parsed.isLoggedIn,
+      currentPage: typeof parsed.currentPage === 'string' ? parsed.currentPage : 'landing',
+      selectedScholarshipId: parsed.selectedScholarshipId ?? null,
+      student: parsed.student ?? defaultStudent,
+      applications: Array.isArray(parsed.applications) ? parsed.applications : []
+    };
+  } catch {
+    return {
+      isLoggedIn: false,
+      currentPage: 'landing',
+      selectedScholarshipId: null,
+      student: defaultStudent,
+      applications: []
+    };
+  }
+}
+
 export default function App() {
+  const initial = loadPersistedState();
+
   // Authentication & Navigation state
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentPage, setCurrentPage] = useState<string>('landing');
-  const [selectedScholarshipId, setSelectedScholarshipId] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(initial.isLoggedIn);
+  const [currentPage, setCurrentPage] = useState<string>(initial.currentPage);
+  const [selectedScholarshipId, setSelectedScholarshipId] = useState<string | null>(initial.selectedScholarshipId);
 
   // Core Data States
-  const [student, setStudent] = useState<StudentProfile>({
-    studentNumber: '2024-10254',
-    name: 'Christian Gabriel J. Del Rosario',
-    course: 'BS in Computer Science',
-    college: 'College of Science and Computer Studies',
-    yearLevel: '3rd Year',
-    email: 'christian.delrosario@dlsud.edu.ph',
-    gpa: '3.68'
-  });
+  const [student, setStudent] = useState<StudentProfile>(initial.student);
+  const [applications, setApplications] = useState<Application[]>(initial.applications);
 
-  const [applications, setApplications] = useState<Application[]>([]);
+  // Persist session state whenever any of it changes
+  useEffect(() => {
+    try {
+      const toSave: PersistedState = {
+        isLoggedIn,
+        currentPage,
+        selectedScholarshipId,
+        student,
+        applications
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    } catch {
+      // Storage can fail (private browsing, quota, etc) - fail silently,
+      // the app still works, it just won't survive a reload.
+    }
+  }, [isLoggedIn, currentPage, selectedScholarshipId, student, applications]);
 
   // Auto scroll to top on page navigation
   useEffect(() => {
@@ -113,7 +172,7 @@ export default function App() {
           );
         case 'scholarship-details':
           return (
-            <PublicLayout onLoginClick={() => handleNavigate('login')}>
+            <PublicLayout onLoginClick={() => handleNavigate('login')} onLogoClick={() => handleNavigate('landing')}>
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
                 <ScholarshipDetails
                   scholarship={activeScholarship}
@@ -127,7 +186,7 @@ export default function App() {
         case 'landing':
         default:
           return (
-            <PublicLayout onLoginClick={() => handleNavigate('login')}>
+            <PublicLayout onLoginClick={() => handleNavigate('login')} onLogoClick={() => handleNavigate('landing')}>
               <LandingPage
                 onLoginClick={() => handleNavigate('login')}
                 onExploreClick={() => {

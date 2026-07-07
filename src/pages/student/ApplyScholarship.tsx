@@ -84,7 +84,7 @@ export default function ApplyScholarship({
 
     setIsSubmitting(true);
 
-    // Simulate SFAO identity routing and electronic submission
+    // Simulate LSO identity routing and electronic submission
     setTimeout(() => {
       setIsSubmitting(false);
       setIsSuccess(true);
@@ -129,14 +129,14 @@ export default function ApplyScholarship({
         </div>
         <div className="space-y-2">
           <h2 className="font-display font-black text-2xl text-slate-900 tracking-tight">Application Submitted Successfully!</h2>
-          <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: DLSU-D-SFAO-{Math.floor(Math.random() * 900000 + 100000)}</p>
+          <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: DLSU-D-LSO-{Math.floor(Math.random() * 900000 + 100000)}</p>
         </div>
         <p className="text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
-          Your application for the <strong>{scholarship.name}</strong> has been received by the Scholarship and Financial Assistance Office (SFAO).
+          Your application for the <strong>{scholarship.name}</strong> has been received by the Linkages and Scholarship Office (LSO).
         </p>
         <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-left text-xs text-slate-500 space-y-2">
           <p><strong>What happens next?</strong></p>
-          <p>1. SFAO Officers will verify your uploaded grades and certifications.</p>
+          <p>1. LSO Officers will verify your uploaded grades and certifications.</p>
           <p>2. Keep an eye on your email and the Portal notifications tab for updates.</p>
           <p>3. Do not re-submit unless requested by the coordinators.</p>
         </div>
@@ -355,11 +355,11 @@ export default function ApplyScholarship({
             </div>
           </div>
 
-          {/* SFAO Security Notice */}
+          {/* LSO Security Notice */}
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-2.5">
             <ShieldAlert className="w-4.5 h-4.5 text-slate-400 shrink-0 mt-0.5" />
             <div className="text-[10px] text-slate-500 leading-relaxed">
-              <span className="font-bold">Privacy Certification:</span> SFAO complies with the Philippine Data Privacy Act of 2012. Information submitted is kept confidential and utilized solely for scholarship scoring.
+              <span className="font-bold">Privacy Certification:</span> LSO complies with the Philippine Data Privacy Act of 2012. Information submitted is kept confidential and utilized solely for scholarship scoring.
             </div>
           </div>
         </div>

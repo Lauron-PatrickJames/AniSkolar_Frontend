@@ -80,7 +80,7 @@ export default function Announcements({ announcements, id }: AnnouncementsProps)
           <Info className="w-12 h-12 text-slate-300 mx-auto mb-4" />
           <h3 className="font-display font-bold text-lg text-slate-700">No Announcements Found</h3>
           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            Try adjusting your search filters or check back later for updates from the Scholarship and Financial Assistance Office (SFAO).
+            Try adjusting your search filters or check back later for updates from the Linkages and Scholarship Office (LSO).
           </p>
         </div>
       ) : (

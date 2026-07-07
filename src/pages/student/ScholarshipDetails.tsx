@@ -49,7 +49,7 @@ export default function ScholarshipDetails({
           </h2>
           <div className="flex items-center text-slate-500 text-xs gap-1.5">
             <Calendar className="w-4 h-4 text-slate-400" />
-            <span className="font-semibold">SFAO Submission Deadline:</span>
+            <span className="font-semibold">LSO Submission Deadline:</span>
             <span className="text-slate-800 font-bold">{scholarship.deadline}</span>
           </div>
         </div>
@@ -160,7 +160,7 @@ export default function ScholarshipDetails({
             </ul>
           </div>
 
-          {/* SFAO Integrity Notice */}
+          {/* LSO Integrity Notice */}
           <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-2.5">
             <ShieldAlert className="w-4.5 h-4.5 text-amber-700 shrink-0 mt-0.5" />
             <div className="text-[11px] text-amber-800 leading-relaxed">

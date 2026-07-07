@@ -1,14 +1,16 @@
 import React from 'react';
 import { ShieldCheck, User } from 'lucide-react';
 import Footer from '../components/Footer';
+import logo from '/src/assets/logo.png';
 
 interface PublicLayoutProps {
   children: React.ReactNode;
   onLoginClick: () => void;
+  onLogoClick: () => void;
   id?: string;
 }
 
-export default function PublicLayout({ children, onLoginClick, id }: PublicLayoutProps) {
+export default function PublicLayout({ children, onLoginClick, onLogoClick, id }: PublicLayoutProps) {
   return (
     <div id={id} className="min-h-screen flex flex-col bg-slate-50">
       {/* Public Navigation Header */}
@@ -16,10 +18,13 @@ export default function PublicLayout({ children, onLoginClick, id }: PublicLayou
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             {/* Branding */}
-            <div className="flex items-center space-x-3 cursor-pointer">
+            <div
+              onClick={onLogoClick}
+              className="flex items-center space-x-3 cursor-pointer"
+            >
               <div className="w-13 h-13 rounded-full bg-white flex items-center justify-center shadow-md border-2 border-white overflow-hidden">
                 <img 
-                  src="src\assets\logo.png" 
+                  src={logo} 
                   alt="AniSkolar logo" 
                   className="w-4/5 h-4/5 object-contain"
                 />

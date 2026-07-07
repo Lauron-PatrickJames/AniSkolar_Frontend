@@ -1,6 +1,7 @@
 import React from 'react';
 import { LayoutDashboard, Compass, Megaphone, UserCircle, LogOut, X, ChevronLeft, ChevronRight, Award } from 'lucide-react';
 import { StudentProfile } from '../types';
+import logo from '/src/assets/logo.png';
 
 interface SidebarProps {
   currentPage: string;
@@ -48,9 +49,13 @@ export default function Sidebar({
         {/* Sidebar Header with University Branding */}
         <div className="p-6 flex items-center justify-between border-b border-slate-50 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-brand-green rounded-lg flex items-center justify-center text-white font-bold text-xl">
-              A
-            </div>
+            <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md border-2 border-white overflow-hidden">
+                <img 
+                  src={logo} 
+                  alt="AniSkolar logo" 
+                  className="w-4/5 h-4/5 object-contain"
+                />
+              </div>
             <div>
               <h1 className="text-lg font-bold leading-none text-brand-green uppercase tracking-tight">AniSkolar</h1>
               <p className="text-[10px] text-slate-400 font-semibold mt-1">DLSU-DASMARIÑAS</p>

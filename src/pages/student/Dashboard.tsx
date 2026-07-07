@@ -38,9 +38,8 @@ export default function Dashboard({
   return (
     <div id={id} className="space-y-8">
       {/* Welcome Banner */}
-      <div className="hero-placeholder h-44 rounded-2xl flex flex-col justify-center px-8 sm:px-10 text-white card-shadow shrink-0 relative overflow-hidden">
+      <div className="hero-placeholder h-50 rounded-2xl flex flex-col justify-center px-8 sm:px-10 text-white card-shadow shrink-0 relative overflow-hidden">
         <div className="relative z-10 max-w-2xl space-y-2">
-          <p className="text-xs sm:text-sm font-bold text-emerald-300 uppercase tracking-widest">Student Portal Home</p>
           <h2 className="text-2xl sm:text-3xl font-display font-extrabold tracking-tight leading-tight">
             Welcome back, <span className="text-emerald-300">{student.name.split(' ')[0]}</span>!
           </h2>
@@ -66,7 +65,7 @@ export default function Dashboard({
         <DashboardCard
           title="Total Grants Available"
           value={totalScholarships}
-          description="Active scholarship models"
+          description="Active scholarship applications"
           icon={Award}
           onClick={() => onNavigate('explore')}
         />
@@ -89,7 +88,7 @@ export default function Dashboard({
         <DashboardCard
           title="Announcements"
           value={totalAnnouncements}
-          description="Latest SFAO releases"
+          description="Latest LSO releases"
           icon={Bell}
           onClick={() => onNavigate('announcements')}
         />
@@ -100,7 +99,7 @@ export default function Dashboard({
         {/* Left Column: Recent Announcements */}
         <div className="lg:col-span-2 space-y-6">
           <div className="flex justify-between items-center">
-            <h3 className="font-display font-bold text-lg text-slate-900">Recent SFAO Announcements</h3>
+            <h3 className="font-display font-bold text-lg text-slate-900">Recent LSO Announcements</h3>
             <button
               onClick={() => onNavigate('announcements')}
               className="text-xs font-semibold text-brand-green hover:text-brand-green-dark flex items-center space-x-1 focus:outline-hidden"
@@ -160,7 +159,7 @@ export default function Dashboard({
               >
                 <span className="flex items-center space-x-2.5">
                   <Compass className="w-4 h-4 text-brand-green" />
-                  <span>Browse Scholarship List</span>
+                  <span>Browse Available Scholarships</span>
                 </span>
                 <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
               </button>
@@ -171,7 +170,7 @@ export default function Dashboard({
               >
                 <span className="flex items-center space-x-2.5">
                   <UserCheck className="w-4 h-4 text-brand-green" />
-                  <span>Update Profile Verification</span>
+                  <span>Update Profile</span>
                 </span>
                 <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
               </button>

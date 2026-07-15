@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StudentProfile, Application, Scholarship } from './types';
 import { mockScholarships } from './data/scholarships';
 import { mockAnnouncements } from './data/announcements';
@@ -20,19 +20,30 @@ import Announcements from './pages/student/Announcements';
 import Profile from './pages/student/Profile';
 
 // --- Persistence helpers -----------------------------------------------
-// Everything lives in memory by default, so a page reload wipes the
-// current session (login state, active page, selected scholarship, etc).
-// We mirror the important bits into localStorage so a reload restores
-// exactly where the user left off.
+// Two different lifetimes are needed here:
+//
+// 1. Data worth keeping indefinitely (student profile, submitted
+//    applications) -> localStorage. Survives reloads AND closing/
+//    reopening the browser entirely.
+//
+// 2. Navigation/session state (are you logged in, what page are you
+//    on) -> sessionStorage. This survives a page reload (F5) so you
+//    stay exactly where you were, but is automatically cleared by the
+//    browser when the tab/window is closed - so a fresh launch later
+//    always starts back at the public landing page, logged out.
 
-const STORAGE_KEY = 'aniskolar_session';
+const DATA_STORAGE_KEY = 'aniskolar_data';
+const SESSION_STORAGE_KEY = 'aniskolar_session';
 
-interface PersistedState {
+interface PersistedData {
+  student: StudentProfile;
+  applications: Application[];
+}
+
+interface PersistedSession {
   isLoggedIn: boolean;
   currentPage: string;
   selectedScholarshipId: string | null;
-  student: StudentProfile;
-  applications: Application[];
 }
 
 const defaultStudent: StudentProfile = {
@@ -45,57 +56,147 @@ const defaultStudent: StudentProfile = {
   gpa: '3.68'
 };
 
-function loadPersistedState(): PersistedState {
+function loadPersistedData(): PersistedData {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) throw new Error('no saved session');
+    const raw = localStorage.getItem(DATA_STORAGE_KEY);
+    if (!raw) throw new Error('no saved data');
     const parsed = JSON.parse(raw);
     return {
-      isLoggedIn: !!parsed.isLoggedIn,
-      currentPage: typeof parsed.currentPage === 'string' ? parsed.currentPage : 'landing',
-      selectedScholarshipId: parsed.selectedScholarshipId ?? null,
       student: parsed.student ?? defaultStudent,
       applications: Array.isArray(parsed.applications) ? parsed.applications : []
     };
   } catch {
     return {
-      isLoggedIn: false,
-      currentPage: 'landing',
-      selectedScholarshipId: null,
       student: defaultStudent,
       applications: []
     };
   }
 }
 
+function loadPersistedSession(): PersistedSession {
+  try {
+    // sessionStorage is scoped to the current tab/window session - it
+    // will simply be empty after the browser/tab has been closed and
+    // reopened, which is exactly what makes this "reload keeps you
+    // logged in, fresh launch doesn't" behavior work.
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) throw new Error('no active session');
+    const parsed = JSON.parse(raw);
+    return {
+      isLoggedIn: !!parsed.isLoggedIn,
+      currentPage: typeof parsed.currentPage === 'string' ? parsed.currentPage : 'landing',
+      selectedScholarshipId: parsed.selectedScholarshipId ?? null
+    };
+  } catch {
+    return {
+      isLoggedIn: false,
+      currentPage: 'landing',
+      selectedScholarshipId: null
+    };
+  }
+}
+
+// Shape of the state we stash into each browser history entry so that
+// the back/forward buttons can restore it via the popstate event.
+interface HistoryEntryState {
+  page: string;
+  scholarshipId: string | null;
+  loggedIn: boolean;
+}
+
 export default function App() {
-  const initial = loadPersistedState();
+  const initialData = loadPersistedData();
+  const initialSession = loadPersistedSession();
 
   // Authentication & Navigation state
-  const [isLoggedIn, setIsLoggedIn] = useState(initial.isLoggedIn);
-  const [currentPage, setCurrentPage] = useState<string>(initial.currentPage);
-  const [selectedScholarshipId, setSelectedScholarshipId] = useState<string | null>(initial.selectedScholarshipId);
+  const [isLoggedIn, setIsLoggedIn] = useState(initialSession.isLoggedIn);
+  const [currentPage, setCurrentPage] = useState<string>(initialSession.currentPage);
+  const [selectedScholarshipId, setSelectedScholarshipId] = useState<string | null>(initialSession.selectedScholarshipId);
 
   // Core Data States
-  const [student, setStudent] = useState<StudentProfile>(initial.student);
-  const [applications, setApplications] = useState<Application[]>(initial.applications);
+  const [student, setStudent] = useState<StudentProfile>(initialData.student);
+  const [applications, setApplications] = useState<Application[]>(initialData.applications);
 
-  // Persist session state whenever any of it changes
+  // Refs used to coordinate the browser History API integration below,
+  // without needing to add react-router or restructure navigation.
+  const isFirstRender = useRef(true);
+  const isPopStateUpdate = useRef(false);
+
+  // Persist student profile and applications indefinitely.
   useEffect(() => {
     try {
-      const toSave: PersistedState = {
-        isLoggedIn,
-        currentPage,
-        selectedScholarshipId,
-        student,
-        applications
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+      const toSave: PersistedData = { student, applications };
+      localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(toSave));
     } catch {
       // Storage can fail (private browsing, quota, etc) - fail silently,
       // the app still works, it just won't survive a reload.
     }
-  }, [isLoggedIn, currentPage, selectedScholarshipId, student, applications]);
+  }, [student, applications]);
+
+  // Persist navigation/session state for the current tab session only.
+  useEffect(() => {
+    try {
+      const toSave: PersistedSession = { isLoggedIn, currentPage, selectedScholarshipId };
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(toSave));
+    } catch {
+      // Same fallback as above - session just won't survive a reload.
+    }
+  }, [isLoggedIn, currentPage, selectedScholarshipId]);
+
+  // --- Browser History integration --------------------------------------
+  // The app has no real routes/URLs; every "page" is just React state.
+  // That means the browser's back/forward buttons have nothing of ours
+  // in their history stack, so clicking back leaves the app entirely.
+  // To fix that, we push a history entry every time the visible page
+  // changes, and listen for popstate (back/forward) to restore state
+  // from the entry the user navigated to.
+
+  // One-time setup: seed the initial history entry with the restored
+  // session state, and start listening for back/forward navigation.
+  useEffect(() => {
+    const initialState: HistoryEntryState = {
+      page: currentPage,
+      scholarshipId: selectedScholarshipId,
+      loggedIn: isLoggedIn
+    };
+    window.history.replaceState(initialState, '', '');
+
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state as HistoryEntryState | null;
+      if (!state) return;
+      isPopStateUpdate.current = true;
+      setIsLoggedIn(!!state.loggedIn);
+      setCurrentPage(state.page || 'landing');
+      setSelectedScholarshipId(state.scholarshipId ?? null);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Push a new history entry whenever the visible page changes, so the
+  // back/forward buttons move within AniSkolar instead of away from it.
+  useEffect(() => {
+    if (isFirstRender.current) {
+      // The very first render already matches the entry we just set
+      // via replaceState above - don't push a duplicate.
+      isFirstRender.current = false;
+      return;
+    }
+    if (isPopStateUpdate.current) {
+      // This change came from the user clicking back/forward, not from
+      // in-app navigation - the browser already owns this entry.
+      isPopStateUpdate.current = false;
+      return;
+    }
+    const nextState: HistoryEntryState = {
+      page: currentPage,
+      scholarshipId: selectedScholarshipId,
+      loggedIn: isLoggedIn
+    };
+    window.history.pushState(nextState, '', '');
+  }, [currentPage, selectedScholarshipId, isLoggedIn]);
 
   // Auto scroll to top on page navigation
   useEffect(() => {

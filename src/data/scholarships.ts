@@ -31,7 +31,8 @@ export const mockScholarships: Scholarship[] = [
       'Step 2: Await notification of your application status via the DLSU-D Student Portal, email, or Schoolbook.'
     ],
     deadline: 'Applications open June 15, 2026',
-    status: 'Open'
+    status: 'Open',
+    applicationFormType: 'sfag'
   },
   {
     id: 's2',
@@ -57,6 +58,7 @@ export const mockScholarships: Scholarship[] = [
       'Step 4: Wait for your application status notification via the DLSU-D Student Portal. If approved, the scholarship is applied to your tuition fee upon enrollment. If disapproved, you may still enroll but will not receive the entrance scholarship discount.'
     ],
     deadline: 'Before scheduled enrollment (form available June 1, 2026)',
-    status: 'Open'
+    status: 'Open',
+    applicationFormType: 'standard'
   }
 ];

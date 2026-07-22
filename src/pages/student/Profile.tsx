@@ -61,7 +61,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
       {/* Main Profile Info Banner */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
         {/* Banner Accents */}
-        <div className="h-32 bg-gradient-to-r from-brand-green/80 to-slate-900/90 relative">
+        <div className="h-32 bg-linear-to-r from-brand-green/80 to-slate-900/90 relative">
           
         </div>
 
@@ -174,13 +174,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
               </div>
             </div>
 
-            {/* LSO Status Verification */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-2.5">
-              <ShieldCheck className="w-5 h-5 text-brand-green shrink-0 mt-0.5" />
-              <div className="text-[11px] text-slate-500 leading-relaxed">
-                <strong>Registrar Synchronization:</strong> Your profile is synchronized with the DLSU-D Registrar Office. General profile changes may take up to 24 hours to sync automatically.
-              </div>
-            </div>
+            
           </div>
         </div>
       </div>

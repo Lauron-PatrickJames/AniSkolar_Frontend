@@ -75,6 +75,22 @@ const SIBLING_SOCIAL_STATUS_OPTIONS = [
   'N/A'
 ];
 
+// Computes age in whole years from a yyyy-mm-dd date string, matching
+// how the real form auto-fills Age from Date of Birth. Returns '' for
+// an empty/invalid input so the field can be blanked out cleanly.
+function calculateAge(dateOfBirth: string): string {
+  if (!dateOfBirth) return '';
+  const dob = new Date(dateOfBirth);
+  if (isNaN(dob.getTime())) return '';
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const hasHadBirthdayThisYear =
+    today.getMonth() > dob.getMonth() ||
+    (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
+  if (!hasHadBirthdayThisYear) age--;
+  return age >= 0 ? String(age) : '';
+}
+
 function emptyPersonalInfo(student: StudentProfile): SfagPersonalInfo {
   const nameParts = student.name.split(' ');
   return {
@@ -226,6 +242,13 @@ export default function ApplyScholarship({
   const handleFileChange = (docName: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+      const isJpeg = file.type === 'image/jpeg' || /\.(jpe?g)$/i.test(file.name);
+      if (!isJpeg) {
+        setFormError('Only JPG files are allowed. Please convert your file and try again.');
+        e.target.value = '';
+        return;
+      }
+      setFormError('');
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
       setUploads(prev => ({
         ...prev,
@@ -265,9 +288,8 @@ export default function ApplyScholarship({
     setSiblings(prev => prev.filter(s => s.id !== sibId));
   };
 
-  // Validate the currently active SFAG tab. Returns a message plus the
-  // list of field keys that are missing, so every offending input can be
-  // highlighted at once (not just the first one found).
+  // Validate a single SFAG tab's own fields. Returns a message plus the
+  // list of field keys that are missing on that tab.
   const validateSfagStep = (step: number): StepValidation => {
     const fields: string[] = [];
 
@@ -293,22 +315,46 @@ export default function ApplyScholarship({
       if (!parentsGuardian.father.fullName) fields.push('father.fullName');
       if (!parentsGuardian.mother.fullName) fields.push('mother.fullName');
     }
-
-    if (fields.length === 0) return { message: '', fields: [] };
-
-    if (step === 3) {
-      return {
-        message: 'Fill out all required fields. Use "N/A" for any parent field that does not apply, rather than leaving it blank.',
-        fields
-      };
+    if (step === 5) {
+      if (!assetsExpenses.incomeSources) fields.push('incomeSources');
     }
-    return { message: 'Fill out all required fields.', fields };
+
+    return { message: '', fields };
+  };
+
+  // Builds a human-readable summary for however many fields are missing,
+  // e.g. "1 field is missing." vs "4 fields are missing." so it's clear
+  // at a glance that this covers everything, not just a single field.
+  const summarizeMissing = (fields: string[], extraNote?: string): string => {
+    const label = fields.length === 1 ? 'field is' : 'fields are';
+    return `Fill out all required fields. ${fields.length} ${label} missing.${extraNote ? ` ${extraNote}` : ''}`;
+  };
+
+  // Validates every tab from 1 up to (and including) `uptoStep`, merging
+  // all of their missing fields into one list. Used so that jumping ahead
+  // - whether via the Next button or by clicking a tab further along -
+  // flags everything left incomplete along the way, not just the single
+  // tab being left.
+  const validateStepsUpTo = (uptoStep: number): StepValidation => {
+    let fields: string[] = [];
+    for (let s = 1; s <= uptoStep; s++) {
+      fields = fields.concat(validateSfagStep(s).fields);
+    }
+    if (fields.length === 0) return { message: '', fields: [] };
+    const touchesParents = uptoStep >= 3;
+    return {
+      message: summarizeMissing(fields, touchesParents ? 'Use "N/A" for any parent field that does not apply.' : undefined),
+      fields
+    };
   };
 
   const goToSfagStep = (nextStep: number) => {
     // Only block forward navigation on validation errors; allow going back freely.
+    // Validates every tab being passed over (1 through nextStep - 1), not
+    // just the tab currently being left, so skipping ahead via the tab
+    // bar still catches everything missing along the way.
     if (nextStep > wizardStep) {
-      const { message, fields } = validateSfagStep(wizardStep);
+      const { message, fields } = validateStepsUpTo(nextStep - 1);
       if (fields.length > 0) {
         setSfagFormError(message);
         setMissingFields(new Set(fields));
@@ -330,11 +376,16 @@ export default function ApplyScholarship({
   });
 
   const handleSfagAgreementNext = () => {
-    const fields: string[] = [];
+    // Final check before document upload: re-validate every prior tab
+    // (in case something was cleared after going back), plus this tab's
+    // own required field and the two certification checkboxes.
+    const cumulative = validateStepsUpTo(5);
+    const fields = [...cumulative.fields];
     if (!agreement.certifyConsulted) fields.push('certifyConsulted');
     if (!agreement.certifyAccuracy) fields.push('certifyAccuracy');
+
     if (fields.length > 0) {
-      setSfagFormError('Fill out all required fields. Check both certification boxes before proceeding to document upload.');
+      setSfagFormError(summarizeMissing(fields, 'Check both certification boxes before proceeding to document upload.'));
       setMissingFields(new Set(fields));
       return;
     }
@@ -453,7 +504,7 @@ export default function ApplyScholarship({
             Upload Required Documents
           </h3>
           <p className="text-xs text-slate-500 mb-4">
-            Please review the requirements below and upload a digital scan or photo for each item.
+            Please review the requirements below and upload a JPG scan or photo for each item.
           </p>
 
           {formError && (
@@ -490,10 +541,10 @@ export default function ApplyScholarship({
                   ) : (
                     <label className="flex items-center justify-center border-2 border-dashed border-slate-200 hover:border-brand-green/40 hover:bg-brand-green/2 rounded-lg p-3 cursor-pointer transition-colors text-xs text-slate-500 font-semibold gap-1.5">
                       <Upload className="w-4 h-4 text-slate-400" />
-                      <span>Select Document</span>
+                      <span>Select JPG File</span>
                       <input
                         type="file"
-                        accept=".pdf,.png,.jpg,.jpeg"
+                        accept=".jpg,.jpeg,image/jpeg"
                         onChange={(e) => handleFileChange(req, e)}
                         className="hidden"
                       />
@@ -827,12 +878,21 @@ export default function ApplyScholarship({
                       type="date"
                       className={fieldClass('dateOfBirth')}
                       value={personalInfo.dateOfBirth}
-                      onChange={e => { setPersonalInfo(p => ({ ...p, dateOfBirth: e.target.value })); clearFieldError('dateOfBirth'); }}
+                      onChange={e => {
+                        const dob = e.target.value;
+                        setPersonalInfo(p => ({ ...p, dateOfBirth: dob, age: calculateAge(dob) }));
+                        clearFieldError('dateOfBirth');
+                      }}
                     />
                   </div>
                   <div>
                     <label className={labelClass}>Age</label>
-                    <input className={inputClass} value={personalInfo.age} onChange={e => setPersonalInfo(p => ({ ...p, age: e.target.value }))} />
+                    <input
+                      className={`${inputClass} bg-slate-50/20 text-slate-500 cursor-not-allowed`}
+                      value={personalInfo.age}
+                      disabled
+                      placeholder="Auto-calculated"
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 items-end">
@@ -991,46 +1051,120 @@ export default function ApplyScholarship({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {(['father', 'mother'] as const).map(parentKey => {
                   const parent = parentsGuardian[parentKey];
+                  const otherKey = parentKey === 'father' ? 'mother' : 'father';
+                  // This block is disabled (auto-N/A) when the OTHER parent
+                  // has been marked as the solo parent - only one parent
+                  // can be the solo parent at a time.
+                  const isDisabled = parentsGuardian[otherKey].isSoloParent;
                   const setParent = (updates: Partial<typeof parent>) =>
                     setParentsGuardian(pg => ({ ...pg, [parentKey]: { ...pg[parentKey], ...updates } }));
                   const fullNameKey = `${parentKey}.fullName`;
+                  const disabledInputClass = `${inputClass} bg-slate-50/40 text-slate-400 cursor-not-allowed`;
+
+                  const handleSoloToggle = (checked: boolean) => {
+                    setParentsGuardian(pg => {
+                      if (checked) {
+                        return {
+                          ...pg,
+                          [parentKey]: { ...pg[parentKey], isSoloParent: true },
+                          [otherKey]: {
+                            ...pg[otherKey],
+                            fullName: 'N/A',
+                            occupation: 'N/A',
+                            company: 'N/A',
+                            companyTel: 'N/A',
+                            isSoloParent: false
+                          }
+                        };
+                      }
+                      // Unchecking: re-open the other parent's fields for
+                      // input by clearing any auto-filled "N/A" values.
+                      return {
+                        ...pg,
+                        [parentKey]: { ...pg[parentKey], isSoloParent: false },
+                        [otherKey]: {
+                          ...pg[otherKey],
+                          fullName: pg[otherKey].fullName === 'N/A' ? '' : pg[otherKey].fullName,
+                          occupation: pg[otherKey].occupation === 'N/A' ? '' : pg[otherKey].occupation,
+                          company: pg[otherKey].company === 'N/A' ? '' : pg[otherKey].company,
+                          companyTel: pg[otherKey].companyTel === 'N/A' ? '' : pg[otherKey].companyTel
+                        }
+                      };
+                    });
+                    clearFieldError(fullNameKey);
+                    clearFieldError(`${otherKey}.fullName`);
+                  };
+
                   return (
                     <div key={parentKey} className="rounded-xl border border-slate-200 overflow-hidden">
-                      <div className="bg-brand-green text-white px-4 py-2.5 font-display font-bold text-xs uppercase tracking-wider">
-                        {parentKey}
+                      <div className="bg-brand-green text-white px-4 py-2.5 font-display font-bold text-xs uppercase tracking-wider flex items-center justify-between gap-2">
+                        <span>{parentKey}</span>
+                        {isDisabled && (
+                          <span className="text-[10px] font-semibold bg-white/15 px-2 py-0.5 rounded-full normal-case tracking-normal">
+                            N/A (solo parent)
+                          </span>
+                        )}
                       </div>
                       <div className="p-4 space-y-3">
                         <div>
                           <label className={labelClass}>Full Name *</label>
                           <input
-                            className={fieldClass(fullNameKey)}
+                            className={isDisabled ? disabledInputClass : fieldClass(fullNameKey)}
                             value={parent.fullName}
+                            disabled={isDisabled}
                             onChange={e => { setParent({ fullName: e.target.value }); clearFieldError(fullNameKey); }}
                           />
                         </div>
                         <div>
                           <label className={labelClass}>Occupation *</label>
-                          <input className={inputClass} value={parent.occupation} onChange={e => setParent({ occupation: e.target.value })} />
+                          <input
+                            className={isDisabled ? disabledInputClass : inputClass}
+                            value={parent.occupation}
+                            disabled={isDisabled}
+                            onChange={e => setParent({ occupation: e.target.value })}
+                          />
                         </div>
                         <div>
                           <label className={labelClass}>Company *</label>
-                          <input className={inputClass} value={parent.company} onChange={e => setParent({ company: e.target.value })} />
+                          <input
+                            className={isDisabled ? disabledInputClass : inputClass}
+                            value={parent.company}
+                            disabled={isDisabled}
+                            onChange={e => setParent({ company: e.target.value })}
+                          />
                         </div>
                         <div>
                           <label className={labelClass}>Company Tel. *</label>
-                          <input className={inputClass} value={parent.companyTel} onChange={e => setParent({ companyTel: e.target.value })} />
+                          <input
+                            className={isDisabled ? disabledInputClass : inputClass}
+                            value={parent.companyTel}
+                            disabled={isDisabled}
+                            onChange={e => setParent({ companyTel: e.target.value })}
+                          />
                         </div>
                         <div>
                           <label className={labelClass}>Monthly Income</label>
-                          <select className={inputClass} value={parent.monthlyIncome} onChange={e => setParent({ monthlyIncome: e.target.value })}>
+                          <select
+                            className={isDisabled ? disabledInputClass : inputClass}
+                            value={parent.monthlyIncome}
+                            disabled={isDisabled}
+                            onChange={e => setParent({ monthlyIncome: e.target.value })}
+                          >
                             {INCOME_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
                           </select>
                         </div>
-                        <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                          <input type="checkbox" checked={parent.isSoloParent} onChange={e => setParent({ isSoloParent: e.target.checked })} className="accent-brand-green" />
+                        <label className={`flex items-center gap-1.5 text-xs font-semibold ${isDisabled ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 cursor-pointer'}`}>
+                          <input
+                            type="checkbox"
+                            checked={parent.isSoloParent}
+                            disabled={isDisabled}
+                            onChange={e => handleSoloToggle(e.target.checked)}
+                            className="accent-brand-green"
+                          />
                           Solo Parent?
                         </label>
                       </div>
+
                     </div>
                   );
                 })}

@@ -18,6 +18,7 @@ import ScholarshipDetails from './pages/student/ScholarshipDetails';
 import ApplyScholarship from './pages/student/ApplyScholarship';
 import Announcements from './pages/student/Announcements';
 import Profile from './pages/student/Profile';
+import GPACalculator from './pages/student/GPACalculator';
 
 // --- Persistence helpers -----------------------------------------------
 // Two different lifetimes are needed here:
@@ -307,6 +308,7 @@ export default function App() {
       const pageTitleMap: Record<string, string> = {
         dashboard: 'Student Portal Dashboard',
         explore: 'Scholarship Opportunities',
+        'gpa-calculator': 'GPA Calculator',
         'scholarship-details': 'Scholarship Specifications',
         'apply-scholarship': 'Scholarship Digital Application',
         announcements: 'Office Announcements',
@@ -334,6 +336,8 @@ export default function App() {
                     onApply={handleApplyScholarship}
                   />
                 );
+              case 'gpa-calculator':
+                return <GPACalculator />;
               case 'scholarship-details':
                 return (
                   <ScholarshipDetails

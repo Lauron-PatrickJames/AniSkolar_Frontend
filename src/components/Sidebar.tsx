@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Compass, Megaphone, UserCircle, LogOut, X, ChevronLeft, ChevronRight, Award } from 'lucide-react';
+import { LayoutDashboard, Compass, Megaphone, UserCircle, LogOut, X, ChevronLeft, ChevronRight, Award, Calculator } from 'lucide-react';
 import { StudentProfile } from '../types';
 import logo from '/src/assets/logo.png';
 
@@ -25,6 +25,7 @@ export default function Sidebar({
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
     { id: 'explore', name: 'Explore Grants', icon: Compass },
+    { id: 'gpa-calculator', name: 'GPA Calculator', icon: Calculator },
     { id: 'announcements', name: 'Announcements', icon: Megaphone },
     { id: 'profile', name: 'Profile', icon: UserCircle }
   ];

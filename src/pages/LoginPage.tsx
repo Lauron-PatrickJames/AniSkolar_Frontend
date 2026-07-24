@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Mail, Lock, ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { StudentProfile } from '../types';
 
 interface LoginPageProps {
-  onLoginSuccess: (email: string) => void;
+  onLoginSuccess: (student: StudentProfile) => void;
   onBackToLanding: () => void;
   id?: string;
 }
 
 type LoginMode = 'student' | 'admin';
+
+// Change this when you deploy the backend somewhere other than localhost
+const API_BASE_URL = 'http://localhost:5000';
 
 // Editable SVG logo of AniSkolar (overlapping shield and graduation cap with center A)
 export function AniSkolarLogo({ className = "w-12 h-12" }: { className?: string }) {
@@ -27,14 +31,37 @@ export function AniSkolarLogo({ className = "w-12 h-12" }: { className?: string 
 
 export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: LoginPageProps) {
   const [loginMode, setLoginMode] = useState<LoginMode>('student');
-  const [email, setEmail] = useState('student@dlsud.edu.ph');
-  const [password, setPassword] = useState('animo1911');
+  const [email, setEmail] = useState('test@dlsud.edu.ph');
+  const [password, setPassword] = useState('testpass123');
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Shared login logic used by both the admin form and the (currently
+  // mocked) Microsoft SSO button — avoids duplicating the fetch/error/
+  // storage logic in two places.
+  const performLogin = async (loginEmail: string, loginPassword: string) => {
+    const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed. Please try again.');
+
+    if (rememberMe) {
+      localStorage.setItem('aniskolar_token', data.token);
+    } else {
+      sessionStorage.setItem('aniskolar_token', data.token);
+    }
+    localStorage.setItem('aniskolar_student', JSON.stringify(data.student));
+
+    return data.student as StudentProfile;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -42,25 +69,37 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
       setError('Please fill in all fields.');
       return;
     }
-
     if (!email.endsWith('@dlsud.edu.ph')) {
       setError('Please use your official university email (e.g., username@dlsud.edu.ph).');
       return;
     }
 
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const student = await performLogin(email, password);
+      onLoginSuccess(student); // pass the FULL student object
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to reach the server. Please try again.');
+    } finally {
       setIsLoading(false);
-      onLoginSuccess(email);
-    }, 1000);
+    }
   };
 
-  const handleMicrosoftLogin = () => {
+  // No real Azure AD integration yet — this button authenticates against
+  // the same /api/auth/login endpoint as the admin form, using whatever
+  // email/password is currently filled in. Swap in real MSAL later
+  // without touching anything else in this component.
+  const handleMicrosoftLogin = async () => {
+    setError('');
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const student = await performLogin(email, password);
+      onLoginSuccess(student); // fixed: pass the full student object, not just the email
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to reach the server. Please try again.');
+    } finally {
       setIsLoading(false);
-      onLoginSuccess('student@dlsud.edu.ph');
-    }, 1200);
+    }
   };
 
   const switchToAdmin = () => {
@@ -80,7 +119,6 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
         {/* Left Side: Solid DLSU Green Branding Sidebar */}
         <div className="lg:w-[45%] bg-brand-green text-white p-8 sm:p-12 flex flex-col justify-between relative overflow-hidden">
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#ffffff_1px,transparent_1px)] bg-size-[16px_16px]"></div>
-          {/* Soft glow accent */}
           <div className="absolute -top-24 -right-24 w-72 h-72 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
           <div className="absolute -bottom-32 -left-16 w-72 h-72 bg-black/10 rounded-full blur-3xl pointer-events-none"></div>
           

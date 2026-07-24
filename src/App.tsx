@@ -21,24 +21,15 @@ import Profile from './pages/student/Profile';
 import GPACalculator from './pages/student/GPACalculator';
 
 // --- Persistence helpers -----------------------------------------------
-// Two different lifetimes are needed here:
-//
-// 1. Data worth keeping indefinitely (student profile, submitted
-//    applications) -> localStorage. Survives reloads AND closing/
-//    reopening the browser entirely.
-//
-// 2. Navigation/session state (are you logged in, what page are you
-//    on) -> sessionStorage. This survives a page reload (F5) so you
-//    stay exactly where you were, but is automatically cleared by the
-//    browser when the tab/window is closed - so a fresh launch later
-//    always starts back at the public landing page, logged out.
-
 const DATA_STORAGE_KEY = 'aniskolar_data';
 const SESSION_STORAGE_KEY = 'aniskolar_session';
 
+// Change this when you deploy the backend somewhere other than localhost
+const API_BASE_URL = 'http://localhost:5000';
+
 interface PersistedData {
   student: StudentProfile;
-  applications: Application[];
+  // applications removed — now sourced live from MongoDB per logged-in student, not cached locally
 }
 
 interface PersistedSession {
@@ -63,23 +54,17 @@ function loadPersistedData(): PersistedData {
     if (!raw) throw new Error('no saved data');
     const parsed = JSON.parse(raw);
     return {
-      student: parsed.student ?? defaultStudent,
-      applications: Array.isArray(parsed.applications) ? parsed.applications : []
+      student: parsed.student ?? defaultStudent
     };
   } catch {
     return {
-      student: defaultStudent,
-      applications: []
+      student: defaultStudent
     };
   }
 }
 
 function loadPersistedSession(): PersistedSession {
   try {
-    // sessionStorage is scoped to the current tab/window session - it
-    // will simply be empty after the browser/tab has been closed and
-    // reopened, which is exactly what makes this "reload keeps you
-    // logged in, fresh launch doesn't" behavior work.
     const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (!raw) throw new Error('no active session');
     const parsed = JSON.parse(raw);
@@ -97,8 +82,6 @@ function loadPersistedSession(): PersistedSession {
   }
 }
 
-// Shape of the state we stash into each browser history entry so that
-// the back/forward buttons can restore it via the popstate event.
 interface HistoryEntryState {
   page: string;
   scholarshipId: string | null;
@@ -109,51 +92,34 @@ export default function App() {
   const initialData = loadPersistedData();
   const initialSession = loadPersistedSession();
 
-  // Authentication & Navigation state
   const [isLoggedIn, setIsLoggedIn] = useState(initialSession.isLoggedIn);
   const [currentPage, setCurrentPage] = useState<string>(initialSession.currentPage);
   const [selectedScholarshipId, setSelectedScholarshipId] = useState<string | null>(initialSession.selectedScholarshipId);
 
-  // Core Data States
   const [student, setStudent] = useState<StudentProfile>(initialData.student);
-  const [applications, setApplications] = useState<Application[]>(initialData.applications);
+  const [applications, setApplications] = useState<Application[]>([]); // starts empty, gets populated on login
 
-  // Refs used to coordinate the browser History API integration below,
-  // without needing to add react-router or restructure navigation.
   const isFirstRender = useRef(true);
   const isPopStateUpdate = useRef(false);
 
-  // Persist student profile and applications indefinitely.
   useEffect(() => {
     try {
-      const toSave: PersistedData = { student, applications };
+      const toSave: PersistedData = { student };
       localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(toSave));
     } catch {
-      // Storage can fail (private browsing, quota, etc) - fail silently,
-      // the app still works, it just won't survive a reload.
+      // Storage can fail (private browsing, quota, etc) - fail silently
     }
-  }, [student, applications]);
+  }, [student]); // no longer depends on `applications`
 
-  // Persist navigation/session state for the current tab session only.
   useEffect(() => {
     try {
       const toSave: PersistedSession = { isLoggedIn, currentPage, selectedScholarshipId };
       sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(toSave));
     } catch {
-      // Same fallback as above - session just won't survive a reload.
+      // Same fallback as above
     }
   }, [isLoggedIn, currentPage, selectedScholarshipId]);
 
-  // --- Browser History integration --------------------------------------
-  // The app has no real routes/URLs; every "page" is just React state.
-  // That means the browser's back/forward buttons have nothing of ours
-  // in their history stack, so clicking back leaves the app entirely.
-  // To fix that, we push a history entry every time the visible page
-  // changes, and listen for popstate (back/forward) to restore state
-  // from the entry the user navigated to.
-
-  // One-time setup: seed the initial history entry with the restored
-  // session state, and start listening for back/forward navigation.
   useEffect(() => {
     const initialState: HistoryEntryState = {
       page: currentPage,
@@ -176,18 +142,12 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Push a new history entry whenever the visible page changes, so the
-  // back/forward buttons move within AniSkolar instead of away from it.
   useEffect(() => {
     if (isFirstRender.current) {
-      // The very first render already matches the entry we just set
-      // via replaceState above - don't push a duplicate.
       isFirstRender.current = false;
       return;
     }
     if (isPopStateUpdate.current) {
-      // This change came from the user clicking back/forward, not from
-      // in-app navigation - the browser already owns this entry.
       isPopStateUpdate.current = false;
       return;
     }
@@ -199,30 +159,48 @@ export default function App() {
     window.history.pushState(nextState, '', '');
   }, [currentPage, selectedScholarshipId, isLoggedIn]);
 
-  // Auto scroll to top on page navigation
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentPage, selectedScholarshipId]);
 
-  // Login handler
-  const handleLoginSuccess = (email: string) => {
+  // Fetches applications for a given student number from MongoDB. Shared
+  // by login and post-submission refresh so both paths stay in sync with
+  // the backend instead of trusting local/optimistic state alone.
+  const fetchApplicationsForStudent = async (studentNumber: string): Promise<Application[]> => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/applications/student/${studentNumber}`);
+      const data = await res.json();
+      return res.ok ? data.applications : [];
+    } catch {
+      return [];
+    }
+  };
+
+  // Login handler — replaces student state entirely with the logged-in
+  // account's data and fetches only that student's applications from
+  // MongoDB, rather than trusting whatever was left over locally.
+  const handleLoginSuccess = async (loggedInStudent: StudentProfile) => {
     setIsLoggedIn(true);
-    // Sync email from input (or fallback to default mock)
-    setStudent(prev => ({
-      ...prev,
-      email: email || prev.email
-    }));
+    setStudent(loggedInStudent);
+
+    const studentApplications = await fetchApplicationsForStudent(loggedInStudent.studentNumber);
+    setApplications(studentApplications);
+
     setCurrentPage('dashboard');
   };
 
-  // Logout handler
+  // Logout handler — clears cached auth/profile/application data so the
+  // next login (possibly a different account) never starts with leftovers.
   const handleLogout = () => {
     setIsLoggedIn(false);
     setCurrentPage('landing');
     setSelectedScholarshipId(null);
+    setApplications([]);
+    localStorage.removeItem('aniskolar_student');
+    localStorage.removeItem('aniskolar_token');
+    sessionStorage.removeItem('aniskolar_token');
   };
 
-  // Navigation router action
   const handleNavigate = (page: string) => {
     setCurrentPage(page);
     if (page !== 'scholarship-details' && page !== 'apply-scholarship') {
@@ -230,16 +208,13 @@ export default function App() {
     }
   };
 
-  // View Details trigger
   const handleViewScholarship = (id: string) => {
     setSelectedScholarshipId(id);
     setCurrentPage('scholarship-details');
   };
 
-  // Apply trigger
   const handleApplyScholarship = (id: string) => {
     if (!isLoggedIn) {
-      // Force login first
       setCurrentPage('login');
       return;
     }
@@ -247,23 +222,27 @@ export default function App() {
     setCurrentPage('apply-scholarship');
   };
 
-  // Submit mock application handler
-  const handleSubmitApplication = (newApp: Application) => {
+  // Submit handler — optimistically shows the new application immediately,
+  // then re-syncs with MongoDB to pick up the authoritative version
+  // (e.g. server-generated referenceCode, timestamps).
+  const handleSubmitApplication = async (newApp: Application) => {
     setApplications(prev => [newApp, ...prev]);
+
+    const refreshed = await fetchApplicationsForStudent(student.studentNumber);
+    if (refreshed.length > 0) {
+      setApplications(refreshed);
+    }
+    // if refetch fails or returns empty, the optimistic update above stays as-is
   };
 
-  // Update profile handler
   const handleUpdateProfile = (updated: StudentProfile) => {
     setStudent(updated);
   };
 
-  // Get current active scholarship
   const activeScholarship = mockScholarships.find(s => s.id === selectedScholarshipId) || mockScholarships[0];
 
-  // Router layout binding helper
   const renderContent = () => {
     if (!isLoggedIn) {
-      // --- PUBLIC VIEWS ---
       switch (currentPage) {
         case 'login':
           return (
@@ -292,7 +271,6 @@ export default function App() {
               <LandingPage
                 onLoginClick={() => handleNavigate('login')}
                 onExploreClick={() => {
-                  // If logged out, scroll them down to scholarships preview
                   const scElem = document.getElementById('scholarships');
                   if (scElem) {
                     scElem.scrollIntoView({ behavior: 'smooth' });
@@ -304,7 +282,6 @@ export default function App() {
           );
       }
     } else {
-      // --- PRIVATE STUDENT PORTAL VIEWS ---
       const pageTitleMap: Record<string, string> = {
         dashboard: 'Student Portal Dashboard',
         explore: 'Scholarship Opportunities',

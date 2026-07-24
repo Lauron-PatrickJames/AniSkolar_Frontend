@@ -29,6 +29,7 @@ interface UploadedFile {
   docName: string;
   fileName: string;
   fileSize: string;
+  file: File; // add this — needed to actually send the file to the backend
 }
 
 // --- Shared option lists --------------------------------------------------
@@ -39,6 +40,11 @@ interface UploadedFile {
 // of brackets against the live system before relying on this for real
 // evaluations - these are placeholders sized to look plausible, not a
 // verified official schedule.
+
+const API_BASE_URL = 'http://localhost:5000';
+// for application
+
+
 const INCOME_BRACKETS = [
   '₱0 – ₱5,166.65',
   '₱5,166.66 – ₱10,333.30',
@@ -248,11 +254,16 @@ export default function ApplyScholarship({
         e.target.value = '';
         return;
       }
+      if (file.size > 10 * 1024 * 1024) {
+        setFormError('Each file must be under 10MB.');
+        e.target.value = '';
+        return;
+      }
       setFormError('');
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
       setUploads(prev => ({
         ...prev,
-        [docName]: { docName, fileName: file.name, fileSize: `${fileSizeMB} MB` }
+        [docName]: { docName, fileName: file.name, fileSize: `${fileSizeMB} MB`, file }
       }));
     }
   };
@@ -394,7 +405,7 @@ export default function ApplyScholarship({
     setWizardStep(6); // move to shared document upload step
   };
 
-  const submitFinal = (sfagDetails?: SfagApplicationDetails) => {
+  const submitFinal = async (sfagDetails?: SfagApplicationDetails) => {
     const missingDocs = scholarship.requirements.filter(req => !uploads[req]);
     if (missingDocs.length > 0) {
       setFormError(`Please upload all required files. Missing: ${missingDocs.slice(0, 2).join(', ')}${missingDocs.length > 2 ? ' and others.' : '.'}`);
@@ -418,39 +429,55 @@ export default function ApplyScholarship({
     }
 
     setIsSubmitting(true);
+    setFormError('');
 
-    setTimeout(() => {
+    try {
+      const formData = new FormData();
+      formData.append('studentNumber', student.studentNumber);
+      formData.append('scholarshipId', scholarship.id);
+      formData.append('scholarshipName', scholarship.name);
+      formData.append('applicationFormType', isSfag ? 'sfag' : 'standard');
+
+      if (isSfag && sfagDetails) {
+        formData.append('personalInfo', JSON.stringify(sfagDetails.personalInfo));
+        formData.append('contactSchool', JSON.stringify(sfagDetails.contactSchool));
+        formData.append('parentsGuardian', JSON.stringify(sfagDetails.parentsGuardian));
+        formData.append('siblings', JSON.stringify(sfagDetails.siblings));
+        formData.append('assetsExpenses', JSON.stringify(sfagDetails.assetsExpenses));
+        formData.append('agreement', JSON.stringify(sfagDetails.agreement));
+      } else {
+        formData.append('standardInfo', JSON.stringify({
+          firstName, lastName, email, phone, studentNumber, program, yearLevel, gpa,
+        }));
+      }
+
+      // Append files in the same order as their labels, so the backend
+      // can zip req.files[i] with documentLabels[i]
+      const documentLabels: string[] = [];
+      scholarship.requirements.forEach((req) => {
+        const uploaded = uploads[req];
+        if (uploaded?.file) {
+          formData.append('documents', uploaded.file);
+          documentLabels.push(req);
+        }
+      });
+      formData.append('documentLabels', JSON.stringify(documentLabels));
+
+      const res = await fetch(`${API_BASE_URL}/api/applications`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Submission failed.');
+
       setIsSubmitting(false);
       setIsSuccess(true);
-
-      const newApplication: Application = {
-        id: `app_${Math.random().toString(36).substr(2, 9)}`,
-        scholarshipId: scholarship.id,
-        scholarshipName: scholarship.name,
-        personalInfo: isSfag
-          ? {
-              firstName: personalInfo.firstName,
-              lastName: personalInfo.lastName,
-              email: contactSchool.email,
-              phone: contactSchool.mobileNo,
-              studentNumber: personalInfo.studentNumber
-            }
-          : { firstName, lastName, email, phone, studentNumber },
-        program: isSfag ? personalInfo.course : program,
-        yearLevel: isSfag ? personalInfo.yearLevel : yearLevel,
-        gpa: isSfag ? student.gpa : gpa,
-        documents: scholarship.requirements.map(req => ({
-          name: req,
-          uploaded: true,
-          fileName: uploads[req]?.fileName
-        })),
-        status: 'Under Evaluation',
-        submittedAt: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-        ...(sfagDetails ? { sfagDetails } : {})
-      };
-
-      onSubmitApplication(newApplication);
-    }, 1500);
+      onSubmitApplication(data.application);
+    } catch (err) {
+      setIsSubmitting(false);
+      setFormError(err instanceof Error ? err.message : 'Something went wrong submitting your application.');
+    }
   };
 
   const handleStandardSubmit = (e: React.FormEvent) => {
@@ -474,14 +501,14 @@ export default function ApplyScholarship({
         </div>
         <div className="space-y-2">
           <h2 className="font-display font-black text-2xl text-slate-900 tracking-tight">Application Submitted Successfully!</h2>
-          <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: DLSU-D-SFAO-{Math.floor(Math.random() * 900000 + 100000)}</p>
+          <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: DLSU-D-SFAG-{Math.floor(Math.random() * 900000 + 100000)}</p>
         </div>
         <p className="text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
           Your application for the <strong>{scholarship.name}</strong> has been received by the Scholarship and Financial Assistance Office (SFAO).
         </p>
         <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-left text-xs text-slate-500 space-y-2">
           <p><strong>What happens next?</strong></p>
-          <p>1. SFAO Officers will verify your uploaded grades and certifications.</p>
+          <p>1. Scholarship officce will verify your uploaded grades and certifications.</p>
           <p>2. Keep an eye on your email and the Portal notifications tab for updates.</p>
           <p>3. Do not re-submit unless requested by the coordinators.</p>
         </div>
@@ -580,7 +607,7 @@ export default function ApplyScholarship({
         <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-2.5">
           <ShieldAlert className="w-4.5 h-4.5 text-slate-400 shrink-0 mt-0.5" />
           <div className="text-[10px] text-slate-500 leading-relaxed">
-            <span className="font-bold">Privacy Certification:</span> SFAO complies with the Philippine Data Privacy Act of 2012. Information submitted is kept confidential and utilized solely for scholarship scoring.
+            <span className="font-bold">Privacy Certification:</span> LSO complies with the Philippine Data Privacy Act of 2012. Information submitted is kept confidential and utilized solely for scholarship scoring.
           </div>
         </div>
       </div>

@@ -19,6 +19,10 @@ interface NotificationItem {
   isRead: boolean;
 }
 
+// Shared spring-like ease for dropdown open/close — gives a soft, deliberate
+// motion instead of Framer's very fast default transition.
+const dropdownTransition = { duration: 0.22, ease: [0.16, 1, 0.3, 1] };
+
 export default function Navbar({
   pageTitle,
   student,
@@ -49,24 +53,39 @@ export default function Navbar({
     <header id={id} className="h-16 glass-header px-4 md:px-6 flex items-center justify-between sticky top-0 z-40">
       <div className="flex items-center space-x-3">
         {/* Toggle Sidebar Button (Mobile) */}
-        <button
+        <motion.button
+          whileTap={{ scale: 0.9 }}
           onClick={onToggleSidebar}
           className="p-2 -ml-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 md:hidden focus:outline-hidden"
           aria-label="Toggle Sidebar"
         >
           <Menu className="w-5 h-5" />
-        </button>
+        </motion.button>
 
         {/* Page Title */}
-        <h1 className="font-display font-bold text-lg md:text-xl text-slate-800 tracking-tight">
-          {pageTitle}
-        </h1>
+        <div className="overflow-hidden">
+          <AnimatePresence mode="wait">
+            <motion.h1
+              key={pageTitle}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className="font-display font-bold text-lg md:text-xl text-slate-800 tracking-tight"
+            >
+              {pageTitle}
+            </motion.h1>
+          </AnimatePresence>
+        </div>
       </div>
 
       <div className="flex items-center space-x-4">
         {/* Notifications Popover */}
         <div className="relative">
-          <button
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            animate={unreadCount > 0 ? { rotate: [0, -12, 10, -6, 0] } : {}}
+            transition={{ duration: 0.5, ease: 'easeInOut' }}
             onClick={() => {
               setShowNotifications(!showNotifications);
               setShowProfileMenu(false);
@@ -75,18 +94,25 @@ export default function Navbar({
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+                className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white"
+              />
             )}
-          </button>
+          </motion.button>
 
           <AnimatePresence>
             {showNotifications && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setShowNotifications(false)}></div>
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                  transition={dropdownTransition}
+                  style={{ transformOrigin: 'top right' }}
                   className="absolute right-0 mt-2 w-80 bg-white rounded-xl border border-slate-200 shadow-xl z-20 overflow-hidden"
                 >
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
@@ -107,20 +133,27 @@ export default function Navbar({
                         No notifications
                       </div>
                     ) : (
-                      notifications.map(item => (
-                        <div
-                          key={item.id}
-                          className={`p-4 hover:bg-slate-50 transition-colors text-left flex items-start space-x-2.5 ${
-                            !item.isRead ? 'bg-brand-green/3' : ''
-                          }`}
-                        >
-                          <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${!item.isRead ? 'bg-brand-green' : 'bg-transparent'}`} />
-                          <div>
-                            <p className="text-xs text-slate-700 leading-normal">{item.text}</p>
-                            <span className="text-[10px] text-slate-400 block mt-1">{item.time}</span>
-                          </div>
-                        </div>
-                      ))
+                      <AnimatePresence initial={false}>
+                        {notifications.map((item, idx) => (
+                          <motion.div
+                            key={item.id}
+                            layout
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0 }}
+                            transition={{ duration: 0.18, delay: idx * 0.03, ease: 'easeOut' }}
+                            className={`p-4 hover:bg-slate-50 transition-colors text-left flex items-start space-x-2.5 ${
+                              !item.isRead ? 'bg-brand-green/3' : ''
+                            }`}
+                          >
+                            <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${!item.isRead ? 'bg-brand-green' : 'bg-transparent'}`} />
+                            <div>
+                              <p className="text-xs text-slate-700 leading-normal">{item.text}</p>
+                              <span className="text-[10px] text-slate-400 block mt-1">{item.time}</span>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                     )}
                   </div>
 
@@ -142,7 +175,8 @@ export default function Navbar({
 
         {/* Profile Dropdown Menu */}
         <div className="relative">
-          <button
+          <motion.button
+            whileTap={{ scale: 0.97 }}
             onClick={() => {
               setShowProfileMenu(!showProfileMenu);
               setShowNotifications(false);
@@ -156,17 +190,25 @@ export default function Navbar({
               <p className="text-xs font-bold text-slate-700 leading-none">{student.name}</p>
               <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">{student.studentNumber}</p>
             </div>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden md:block" />
-          </button>
+            <motion.div
+              animate={{ rotate: showProfileMenu ? 180 : 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="hidden md:block"
+            >
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </motion.div>
+          </motion.button>
 
           <AnimatePresence>
             {showProfileMenu && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setShowProfileMenu(false)}></div>
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                  transition={dropdownTransition}
+                  style={{ transformOrigin: 'top right' }}
                   className="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-slate-200 shadow-xl z-20 py-1 divide-y divide-slate-100"
                 >
                   <div className="p-4 text-left">

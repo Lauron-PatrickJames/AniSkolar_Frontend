@@ -97,7 +97,8 @@ export default function App() {
   const [selectedScholarshipId, setSelectedScholarshipId] = useState<string | null>(initialSession.selectedScholarshipId);
 
   const [student, setStudent] = useState<StudentProfile>(initialData.student);
-  const [applications, setApplications] = useState<Application[]>([]); // starts empty, gets populated on login
+  const [applications, setApplications] = useState<Application[]>([]); // starts empty, gets populated on login or on mount if already logged in
+  const [isLoadingApplications, setIsLoadingApplications] = useState(initialSession.isLoggedIn);
 
   const isFirstRender = useRef(true);
   const isPopStateUpdate = useRef(false);
@@ -164,8 +165,9 @@ export default function App() {
   }, [currentPage, selectedScholarshipId]);
 
   // Fetches applications for a given student number from MongoDB. Shared
-  // by login and post-submission refresh so both paths stay in sync with
-  // the backend instead of trusting local/optimistic state alone.
+  // by login, the on-refresh restore below, and post-submission refresh so
+  // every path stays in sync with the backend instead of trusting local/
+  // optimistic state alone.
   const fetchApplicationsForStudent = async (studentNumber: string): Promise<Application[]> => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/applications/student/${studentNumber}`);
@@ -176,15 +178,33 @@ export default function App() {
     }
   };
 
+  // On a hard refresh, isLoggedIn/currentPage/student all come back fine
+  // (sessionStorage + localStorage), but `applications` always starts at []
+  // since it's never persisted — only handleLoginSuccess used to populate it.
+  // This restores it whenever the app mounts already logged in, so refresh
+  // no longer looks like the application disappeared.
+  useEffect(() => {
+    if (initialSession.isLoggedIn && initialData.student.studentNumber) {
+      fetchApplicationsForStudent(initialData.student.studentNumber)
+        .then(setApplications)
+        .finally(() => setIsLoadingApplications(false));
+    }
+    // Intentionally run once on mount only — login and submit flows handle
+    // their own refetches after this point.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Login handler — replaces student state entirely with the logged-in
   // account's data and fetches only that student's applications from
   // MongoDB, rather than trusting whatever was left over locally.
   const handleLoginSuccess = async (loggedInStudent: StudentProfile) => {
     setIsLoggedIn(true);
     setStudent(loggedInStudent);
+    setIsLoadingApplications(true);
 
     const studentApplications = await fetchApplicationsForStudent(loggedInStudent.studentNumber);
     setApplications(studentApplications);
+    setIsLoadingApplications(false);
 
     setCurrentPage('dashboard');
   };
@@ -314,7 +334,7 @@ export default function App() {
                   />
                 );
               case 'gpa-calculator':
-                return <GPACalculator />;
+                return <GPACalculator student={student} />;
               case 'scholarship-details':
                 return (
                   <ScholarshipDetails

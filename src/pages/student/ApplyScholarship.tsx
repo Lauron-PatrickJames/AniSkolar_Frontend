@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Scholarship,
   StudentProfile,
@@ -13,7 +13,8 @@ import {
 } from '../../types';
 import {
   ArrowLeft, ArrowRight, FileText, CheckCircle, Upload, Trash2, ShieldAlert,
-  AlertCircle, User, MapPin, Users, PiggyBank, ClipboardCheck, Plus, ExternalLink
+  AlertCircle, User, MapPin, Users, PiggyBank, ClipboardCheck, Plus, ExternalLink,
+  Info
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -29,22 +30,13 @@ interface UploadedFile {
   docName: string;
   fileName: string;
   fileSize: string;
-  file: File; // add this — needed to actually send the file to the backend
+  file: File; // kept so we can actually send the bytes to the backend on submit
 }
 
+// Change this to wherever the Express API is mounted (e.g. via a proxy or env var).
+const API_BASE_URL = 'http://localhost:5000/api';
+
 // --- Shared option lists --------------------------------------------------
-// NOTE: The monthly income / expense brackets below reproduce only the
-// specific values that were visible in the reference screenshots of the
-// real SFA Grant form (the dropdowns themselves weren't expanded, so the
-// full official bracket ladder isn't confirmed). Verify the complete list
-// of brackets against the live system before relying on this for real
-// evaluations - these are placeholders sized to look plausible, not a
-// verified official schedule.
-
-const API_BASE_URL = 'http://localhost:5000';
-// for application
-
-
 const INCOME_BRACKETS = [
   '₱0 – ₱5,166.65',
   '₱5,166.66 – ₱10,333.30',
@@ -70,7 +62,7 @@ const ASSET_BRACKETS = [
 ];
 
 const CIVIL_STATUS_OPTIONS = ['SINGLE', 'MARRIED', 'WIDOWED', 'SEPARATED', 'ANNULLED'];
-const RELIGION_OPTIONS = ['CATHOLIC', 'CHRISTIAN', 'IGLESIA NI CRISTO', 'ISLAM', 'OTHERS'];
+const RELIGION_OPTIONS = ['ROMAN CATHOLIC', 'CHRISTIAN', 'IGLESIA NI CRISTO', 'ISLAM', 'OTHERS'];
 const GENDER_OPTIONS = ['Female', 'Male', 'Non-binary', 'Other', 'Prefer not to say'];
 const SIBLING_SOCIAL_STATUS_OPTIONS = [
   'STUDYING-ELEMENTARY',
@@ -81,9 +73,6 @@ const SIBLING_SOCIAL_STATUS_OPTIONS = [
   'N/A'
 ];
 
-// Computes age in whole years from a yyyy-mm-dd date string, matching
-// how the real form auto-fills Age from Date of Birth. Returns '' for
-// an empty/invalid input so the field can be blanked out cleanly.
 function calculateAge(dateOfBirth: string): string {
   if (!dateOfBirth) return '';
   const dob = new Date(dateOfBirth);
@@ -159,6 +148,111 @@ function emptyAssetsExpenses(): SfagAssetsExpenses {
   };
 }
 
+// --- Validation helpers -----------------------------------------------------
+const REQUIRED_MSG = 'This field is required.';
+const TODAY_ISO = new Date().toISOString().split('T')[0];
+
+function isBlank(value?: string): boolean {
+  return !value || !value.trim();
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+// Accepts PH mobile numbers like 09171234567 or +639171234567 (spaces/dashes ok)
+function isValidPhMobile(value: string): boolean {
+  const digits = value.replace(/[\s-]/g, '');
+  return /^(\+63|0)9\d{9}$/.test(digits);
+}
+
+function isValidDateOfBirth(value: string): boolean {
+  if (!value) return false;
+  const dob = new Date(value);
+  if (isNaN(dob.getTime())) return false;
+  if (dob > new Date()) return false;
+  const age = parseInt(calculateAge(value) || '-1', 10);
+  return age >= 15 && age <= 100;
+}
+
+function isValidGpa(value: string): boolean {
+  const n = parseFloat(value);
+  if (isNaN(n)) return false;
+  return n >= 1.0 && n <= 5.0;
+}
+
+function isValidAge(value: string): boolean {
+  if (isBlank(value)) return false;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= 120;
+}
+
+type FieldKind = 'text' | 'email' | 'phone' | 'gpa' | 'date';
+
+function messageForField(value: string, kind: FieldKind): string | undefined {
+  if (isBlank(value)) return REQUIRED_MSG;
+  switch (kind) {
+    case 'email':
+      return isValidEmail(value) ? undefined : 'Enter a valid email address.';
+    case 'phone':
+      return isValidPhMobile(value) ? undefined : 'Use a valid PH mobile number, e.g. 09171234567.';
+    case 'gpa':
+      return isValidGpa(value) ? undefined : 'Enter a GPA between 1.00 and 5.00.';
+    case 'date':
+      return isValidDateOfBirth(value) ? undefined : 'Enter a valid date of birth (age 15–100).';
+    default:
+      return undefined;
+  }
+}
+
+// --- Draft persistence (survives refresh, not actual browser close) -------
+// Keyed per scholarship + student so switching scholarships or accounts
+// never shows someone else's half-finished draft. File contents can't be
+// restored after a refresh (browser security restriction) — only the
+// typed fields and a reminder of which doc names were previously selected.
+
+const DRAFT_STORAGE_PREFIX = 'aniskolar_draft_';
+
+function getDraftKey(scholarshipId: string, studentNumber: string) {
+  return `${DRAFT_STORAGE_PREFIX}${scholarshipId}_${studentNumber}`;
+}
+
+interface DraftData {
+  wizardStep: number;
+  personalInfo: SfagPersonalInfo;
+  contactSchool: SfagContactSchool;
+  parentsGuardian: SfagParentsGuardian;
+  siblings: SfagSibling[];
+  assetsExpenses: SfagAssetsExpenses;
+  agreement: SfagAgreement;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  program: string;
+  yearLevel: string;
+  gpa: string;
+  previouslyUploadedDocNames: string[];
+}
+
+function loadDraft(scholarshipId: string, studentNumber: string): Partial<DraftData> | null {
+  try {
+    const raw = localStorage.getItem(getDraftKey(scholarshipId, studentNumber));
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft(scholarshipId: string, studentNumber: string) {
+  try {
+    localStorage.removeItem(getDraftKey(scholarshipId, studentNumber));
+  } catch {
+    // ignore
+  }
+}
+
 const SFAG_TABS = [
   { step: 1, label: 'Personal Info', icon: User },
   { step: 2, label: 'Contact & School', icon: MapPin },
@@ -168,16 +262,27 @@ const SFAG_TABS = [
 ];
 
 const inputClass =
-  'block w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all';
+  'block w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all placeholder:text-slate-300';
 const errorInputClass =
-  'block w-full px-3.5 py-2.5 border-2 border-rose-400 rounded-lg text-sm bg-rose-50/60 focus:outline-hidden focus:ring-2 focus:ring-rose-300 focus:border-rose-500 transition-all';
-const labelClass = 'block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5';
+  'block w-full px-3.5 py-2.5 border-2 border-rose-400 rounded-xl text-sm bg-rose-50/60 focus:outline-hidden focus:ring-2 focus:ring-rose-300 focus:border-rose-500 transition-all placeholder:text-rose-300';
+const labelClass = 'flex items-center gap-1 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5';
 
-// Result of validating a step: a human-readable message plus the exact
-// field keys that are missing, so the offending inputs can be highlighted.
-interface StepValidation {
-  message: string;
-  fields: string[];
+function Req() {
+  return <span className="text-rose-500">*</span>;
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-rose-500">
+      <AlertCircle className="w-3 h-3 shrink-0" />
+      <span>{message}</span>
+    </p>
+  );
+}
+
+function Hint({ children }: { children: React.ReactNode }) {
+  return <p className="mt-1 text-[11px] text-slate-400">{children}</p>;
 }
 
 export default function ApplyScholarship({
@@ -189,35 +294,45 @@ export default function ApplyScholarship({
 }: ApplyScholarshipProps) {
   const isSfag = scholarship.applicationFormType === 'sfag';
 
+  // Load any in-progress draft for this exact scholarship + student combo.
+  // Computed once per mount (scholarship/student don't change mid-session).
+  const savedDraft = React.useMemo(
+    () => loadDraft(scholarship.id, student.studentNumber),
+    [scholarship.id, student.studentNumber]
+  );
+
   // --- SFAG multi-step wizard state ---------------------------------------
-  // Step 1-5 = the detailed form tabs, step 6 = document upload (shared
-  // logic with the standard flow below).
-  const [wizardStep, setWizardStep] = useState<number>(1);
-  const [personalInfo, setPersonalInfo] = useState<SfagPersonalInfo>(() => emptyPersonalInfo(student));
-  const [contactSchool, setContactSchool] = useState<SfagContactSchool>(() => emptyContactSchool(student));
-  const [parentsGuardian, setParentsGuardian] = useState<SfagParentsGuardian>(emptyParentsGuardian);
-  const [siblings, setSiblings] = useState<SfagSibling[]>([]);
-  const [assetsExpenses, setAssetsExpenses] = useState<SfagAssetsExpenses>(emptyAssetsExpenses);
-  const [agreement, setAgreement] = useState<SfagAgreement>({ certifyConsulted: false, certifyAccuracy: false });
+  const [wizardStep, setWizardStep] = useState<number>(savedDraft?.wizardStep ?? 1);
+  const [personalInfo, setPersonalInfo] = useState<SfagPersonalInfo>(() => savedDraft?.personalInfo ?? emptyPersonalInfo(student));
+  const [contactSchool, setContactSchool] = useState<SfagContactSchool>(() => savedDraft?.contactSchool ?? emptyContactSchool(student));
+  const [parentsGuardian, setParentsGuardian] = useState<SfagParentsGuardian>(savedDraft?.parentsGuardian ?? emptyParentsGuardian());
+  const [siblings, setSiblings] = useState<SfagSibling[]>(savedDraft?.siblings ?? []);
+  const [assetsExpenses, setAssetsExpenses] = useState<SfagAssetsExpenses>(savedDraft?.assetsExpenses ?? emptyAssetsExpenses());
+  const [agreement, setAgreement] = useState<SfagAgreement>(savedDraft?.agreement ?? { certifyConsulted: false, certifyAccuracy: false });
   const [sfagFormError, setSfagFormError] = useState('');
 
-  // Tracks which field keys currently need to be highlighted red because
-  // they failed the last validation pass. Shared between the SFAG wizard
-  // and the standard form since only one of the two ever renders for a
-  // given scholarship. Cleared on every successful step change and as
-  // each individual field is edited.
-  const [missingFields, setMissingFields] = useState<Set<string>>(new Set());
-  const fieldClass = (key: string) => (missingFields.has(key) ? errorInputClass : inputClass);
+  // errors: fieldKey -> human readable message. Presence of a key = red highlight.
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const fieldClass = (key: string) => (errors[key] ? errorInputClass : inputClass);
+  const fieldError = (key: string) => errors[key];
   const clearFieldError = (key: string) => {
-    setMissingFields(prev => {
-      if (!prev.has(key)) return prev;
-      const next = new Set(prev);
-      next.delete(key);
+    setErrors(prev => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
       return next;
     });
   };
+  const setFieldErrorMsg = (key: string, msg: string) => {
+    setErrors(prev => ({ ...prev, [key]: msg }));
+  };
+  // Live validation on blur, so mistakes surface before the person tries to move on.
+  const validateOnBlur = (key: string, value: string, kind: FieldKind = 'text') => {
+    const msg = messageForField(value, kind);
+    if (msg) setFieldErrorMsg(key, msg);
+    else clearFieldError(key);
+  };
 
-  // New sibling draft row
   const [siblingDraft, setSiblingDraft] = useState({
     fullName: '',
     socialStatus: SIBLING_SOCIAL_STATUS_OPTIONS[0],
@@ -228,22 +343,58 @@ export default function ApplyScholarship({
     tuitionOrIncome: '',
     isDlsudScholar: false
   });
+  const [siblingDraftError, setSiblingDraftError] = useState('');
 
-  // --- Shared state (both flows use these for the standard/simple form
-  // and for document upload) --------------------------------------------
-  const [firstName, setFirstName] = useState(student.name.split(' ')[0] || '');
-  const [lastName, setLastName] = useState(student.name.split(' ').slice(1).join(' ') || '');
-  const [email, setEmail] = useState(student.email);
-  const [phone, setPhone] = useState('+63 917 123 4567');
+  // --- Shared state (both flows) ------------------------------------------
+  const [firstName, setFirstName] = useState(savedDraft?.firstName ?? (student.name.split(' ')[0] || ''));
+  const [lastName, setLastName] = useState(savedDraft?.lastName ?? (student.name.split(' ').slice(1).join(' ') || ''));
+  const [email, setEmail] = useState(savedDraft?.email ?? student.email);
+  const [phone, setPhone] = useState(savedDraft?.phone ?? '+63 917 123 4567');
   const [studentNumber, setStudentNumber] = useState(student.studentNumber);
-  const [program, setProgram] = useState(student.course);
-  const [yearLevel, setYearLevel] = useState(student.yearLevel);
-  const [gpa, setGpa] = useState(student.gpa);
+  const [program, setProgram] = useState(savedDraft?.program ?? student.course);
+  const [yearLevel, setYearLevel] = useState(savedDraft?.yearLevel ?? student.yearLevel);
+  const [gpa, setGpa] = useState(savedDraft?.gpa ?? student.gpa);
 
   const [uploads, setUploads] = useState<Record<string, UploadedFile>>({});
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [referenceCode, setReferenceCode] = useState('');
+
+  // Auto-save the draft to localStorage on every relevant change. File
+  // contents are intentionally excluded (see previouslyUploadedDocNames)
+  // since browsers can't restore actual File objects after a refresh.
+  useEffect(() => {
+    const draft: DraftData = {
+      wizardStep,
+      personalInfo,
+      contactSchool,
+      parentsGuardian,
+      siblings,
+      assetsExpenses,
+      agreement,
+      firstName,
+      lastName,
+      email,
+      phone,
+      program,
+      yearLevel,
+      gpa,
+      previouslyUploadedDocNames: Object.keys(uploads),
+    };
+    try {
+      localStorage.setItem(
+        getDraftKey(scholarship.id, student.studentNumber),
+        JSON.stringify(draft)
+      );
+    } catch {
+      // Storage can fail (private browsing, quota) — draft just won't persist, form still works
+    }
+  }, [
+    wizardStep, personalInfo, contactSchool, parentsGuardian, siblings,
+    assetsExpenses, agreement, firstName, lastName, email, phone, program,
+    yearLevel, gpa, uploads, scholarship.id, student.studentNumber
+  ]);
 
   const handleFileChange = (docName: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -277,7 +428,15 @@ export default function ApplyScholarship({
   };
 
   const addSibling = () => {
-    if (!siblingDraft.fullName.trim()) return;
+    if (isBlank(siblingDraft.fullName)) {
+      setSiblingDraftError('Enter the sibling\u2019s full name.');
+      return;
+    }
+    if (!isBlank(siblingDraft.age) && !isValidAge(siblingDraft.age)) {
+      setSiblingDraftError('Enter a valid age (0–120).');
+      return;
+    }
+    setSiblingDraftError('');
     const newSibling: SfagSibling = {
       id: `sib_${Math.random().toString(36).substr(2, 9)}`,
       ...siblingDraft
@@ -299,81 +458,96 @@ export default function ApplyScholarship({
     setSiblings(prev => prev.filter(s => s.id !== sibId));
   };
 
-  // Validate a single SFAG tab's own fields. Returns a message plus the
-  // list of field keys that are missing on that tab.
+  interface StepValidation {
+    fields: string[];
+    errors: Record<string, string>;
+  }
+
   const validateSfagStep = (step: number): StepValidation => {
-    const fields: string[] = [];
+    const errs: Record<string, string> = {};
 
     if (step === 1) {
-      if (!personalInfo.lastName) fields.push('lastName');
-      if (!personalInfo.firstName) fields.push('firstName');
-      if (!personalInfo.placeOfBirth) fields.push('placeOfBirth');
-      if (!personalInfo.dateOfBirth) fields.push('dateOfBirth');
-      if (!personalInfo.nationality) fields.push('nationality');
-      if (personalInfo.religion === 'OTHERS' && !personalInfo.specifyReligion) fields.push('specifyReligion');
+      if (isBlank(personalInfo.lastName)) errs.lastName = REQUIRED_MSG;
+      if (isBlank(personalInfo.firstName)) errs.firstName = REQUIRED_MSG;
+      if (isBlank(personalInfo.placeOfBirth)) errs.placeOfBirth = REQUIRED_MSG;
+      if (isBlank(personalInfo.dateOfBirth)) {
+        errs.dateOfBirth = REQUIRED_MSG;
+      } else if (!isValidDateOfBirth(personalInfo.dateOfBirth)) {
+        errs.dateOfBirth = 'Enter a valid date of birth (age 15–100).';
+      }
+      if (isBlank(personalInfo.nationality)) errs.nationality = REQUIRED_MSG;
+      if (isBlank(personalInfo.gender)) errs.gender = REQUIRED_MSG;
+      if (personalInfo.religion === 'OTHERS' && isBlank(personalInfo.specifyReligion)) {
+        errs.specifyReligion = REQUIRED_MSG;
+      }
     }
     if (step === 2) {
-      if (!contactSchool.streetAddress) fields.push('streetAddress');
-      if (!contactSchool.municipality) fields.push('municipality');
-      if (!contactSchool.province) fields.push('province');
-      if (!contactSchool.country) fields.push('country');
-      if (!contactSchool.mobileNo) fields.push('mobileNo');
-      if (!contactSchool.email) fields.push('email');
-      if (!contactSchool.secondarySchool) fields.push('secondarySchool');
-      if (!contactSchool.schoolAddress) fields.push('schoolAddress');
+      if (isBlank(contactSchool.streetAddress)) errs.streetAddress = REQUIRED_MSG;
+      if (isBlank(contactSchool.municipality)) errs.municipality = REQUIRED_MSG;
+      if (isBlank(contactSchool.province)) errs.province = REQUIRED_MSG;
+      if (isBlank(contactSchool.country)) errs.country = REQUIRED_MSG;
+      if (isBlank(contactSchool.mobileNo)) {
+        errs.mobileNo = REQUIRED_MSG;
+      } else if (!isValidPhMobile(contactSchool.mobileNo)) {
+        errs.mobileNo = 'Use a valid PH mobile number, e.g. 09171234567.';
+      }
+      if (isBlank(contactSchool.email)) {
+        errs.email = REQUIRED_MSG;
+      } else if (!isValidEmail(contactSchool.email)) {
+        errs.email = 'Enter a valid email address.';
+      }
+      if (isBlank(contactSchool.secondarySchool)) errs.secondarySchool = REQUIRED_MSG;
+      if (isBlank(contactSchool.schoolAddress)) errs.schoolAddress = REQUIRED_MSG;
     }
     if (step === 3) {
-      if (!parentsGuardian.father.fullName) fields.push('father.fullName');
-      if (!parentsGuardian.mother.fullName) fields.push('mother.fullName');
+      // A parent marked N/A because the other is a solo parent is exempt.
+      const fatherIsNA = parentsGuardian.mother.isSoloParent;
+      const motherIsNA = parentsGuardian.father.isSoloParent;
+      if (!fatherIsNA) {
+        if (isBlank(parentsGuardian.father.fullName)) errs['father.fullName'] = REQUIRED_MSG;
+        if (isBlank(parentsGuardian.father.occupation)) errs['father.occupation'] = REQUIRED_MSG;
+        if (isBlank(parentsGuardian.father.company)) errs['father.company'] = REQUIRED_MSG;
+        if (isBlank(parentsGuardian.father.companyTel)) errs['father.companyTel'] = REQUIRED_MSG;
+      }
+      if (!motherIsNA) {
+        if (isBlank(parentsGuardian.mother.fullName)) errs['mother.fullName'] = REQUIRED_MSG;
+        if (isBlank(parentsGuardian.mother.occupation)) errs['mother.occupation'] = REQUIRED_MSG;
+        if (isBlank(parentsGuardian.mother.company)) errs['mother.company'] = REQUIRED_MSG;
+        if (isBlank(parentsGuardian.mother.companyTel)) errs['mother.companyTel'] = REQUIRED_MSG;
+      }
     }
     if (step === 5) {
-      if (!assetsExpenses.incomeSources) fields.push('incomeSources');
+      if (isBlank(assetsExpenses.incomeSources)) errs.incomeSources = REQUIRED_MSG;
     }
 
-    return { message: '', fields };
+    return { fields: Object.keys(errs), errors: errs };
   };
 
-  // Builds a human-readable summary for however many fields are missing,
-  // e.g. "1 field is missing." vs "4 fields are missing." so it's clear
-  // at a glance that this covers everything, not just a single field.
-  const summarizeMissing = (fields: string[], extraNote?: string): string => {
-    const label = fields.length === 1 ? 'field is' : 'fields are';
-    return `Fill out all required fields. ${fields.length} ${label} missing.${extraNote ? ` ${extraNote}` : ''}`;
+  const summarizeMissing = (count: number, extraNote?: string): string => {
+    const label = count === 1 ? 'field is' : 'fields are';
+    return `Fill out all required fields. ${count} ${label} missing or invalid.${extraNote ? ` ${extraNote}` : ''}`;
   };
 
-  // Validates every tab from 1 up to (and including) `uptoStep`, merging
-  // all of their missing fields into one list. Used so that jumping ahead
-  // - whether via the Next button or by clicking a tab further along -
-  // flags everything left incomplete along the way, not just the single
-  // tab being left.
   const validateStepsUpTo = (uptoStep: number): StepValidation => {
-    let fields: string[] = [];
+    let errs: Record<string, string> = {};
     for (let s = 1; s <= uptoStep; s++) {
-      fields = fields.concat(validateSfagStep(s).fields);
+      errs = { ...errs, ...validateSfagStep(s).errors };
     }
-    if (fields.length === 0) return { message: '', fields: [] };
-    const touchesParents = uptoStep >= 3;
-    return {
-      message: summarizeMissing(fields, touchesParents ? 'Use "N/A" for any parent field that does not apply.' : undefined),
-      fields
-    };
+    return { fields: Object.keys(errs), errors: errs };
   };
 
   const goToSfagStep = (nextStep: number) => {
-    // Only block forward navigation on validation errors; allow going back freely.
-    // Validates every tab being passed over (1 through nextStep - 1), not
-    // just the tab currently being left, so skipping ahead via the tab
-    // bar still catches everything missing along the way.
     if (nextStep > wizardStep) {
-      const { message, fields } = validateStepsUpTo(nextStep - 1);
+      const { fields, errors: stepErrors } = validateStepsUpTo(nextStep - 1);
       if (fields.length > 0) {
-        setSfagFormError(message);
-        setMissingFields(new Set(fields));
+        const touchesParents = nextStep - 1 >= 3;
+        setSfagFormError(summarizeMissing(fields.length, touchesParents ? 'Use "N/A" for any parent field that does not apply.' : undefined));
+        setErrors(stepErrors);
         return;
       }
     }
     setSfagFormError('');
-    setMissingFields(new Set());
+    setErrors({});
     setWizardStep(nextStep);
   };
 
@@ -387,22 +561,89 @@ export default function ApplyScholarship({
   });
 
   const handleSfagAgreementNext = () => {
-    // Final check before document upload: re-validate every prior tab
-    // (in case something was cleared after going back), plus this tab's
-    // own required field and the two certification checkboxes.
     const cumulative = validateStepsUpTo(5);
-    const fields = [...cumulative.fields];
-    if (!agreement.certifyConsulted) fields.push('certifyConsulted');
-    if (!agreement.certifyAccuracy) fields.push('certifyAccuracy');
+    const errs = { ...cumulative.errors };
+    if (!agreement.certifyConsulted) errs.certifyConsulted = REQUIRED_MSG;
+    if (!agreement.certifyAccuracy) errs.certifyAccuracy = REQUIRED_MSG;
+    const fields = Object.keys(errs);
 
     if (fields.length > 0) {
-      setSfagFormError(summarizeMissing(fields, 'Check both certification boxes before proceeding to document upload.'));
-      setMissingFields(new Set(fields));
+      setSfagFormError(summarizeMissing(fields.length, 'Check both certification boxes before proceeding to document upload.'));
+      setErrors(errs);
       return;
     }
     setSfagFormError('');
-    setMissingFields(new Set());
-    setWizardStep(6); // move to shared document upload step
+    setErrors({});
+    setWizardStep(6);
+  };
+
+  const validateStandardFields = (): Record<string, string> => {
+    const errs: Record<string, string> = {};
+    if (isBlank(firstName)) errs.firstName = REQUIRED_MSG;
+    if (isBlank(lastName)) errs.lastName = REQUIRED_MSG;
+    if (isBlank(email)) {
+      errs.email = REQUIRED_MSG;
+    } else if (!isValidEmail(email)) {
+      errs.email = 'Enter a valid email address.';
+    }
+    if (isBlank(phone)) {
+      errs.phone = REQUIRED_MSG;
+    } else if (!isValidPhMobile(phone)) {
+      errs.phone = 'Use a valid PH mobile number, e.g. 09171234567.';
+    }
+    if (isBlank(program)) errs.program = REQUIRED_MSG;
+    if (isBlank(yearLevel)) errs.yearLevel = REQUIRED_MSG;
+    if (isBlank(gpa)) {
+      errs.gpa = REQUIRED_MSG;
+    } else if (!isValidGpa(gpa)) {
+      errs.gpa = 'Enter a GPA between 1.00 and 5.00.';
+    }
+    return errs;
+  };
+
+  // Matches your real backend contract: POST /api/applications, multipart/form-data,
+  // one "documents" file per requirement (in order), a parallel "documentLabels"
+  // JSON array naming each one, plus the form-section payloads as JSON strings.
+  // Returns the saved Mongo document (with _id and referenceCode) on success.
+  const submitToServer = async (sfagDetails?: SfagApplicationDetails): Promise<{ _id: string; referenceCode: string }> => {
+    const formData = new FormData();
+    const labels: string[] = [];
+
+    scholarship.requirements.forEach(req => {
+      const entry = uploads[req];
+      if (entry) {
+        formData.append('documents', entry.file, entry.fileName);
+        labels.push(req);
+      }
+    });
+    formData.append('documentLabels', JSON.stringify(labels));
+
+    formData.append('studentNumber', isSfag ? personalInfo.studentNumber : studentNumber);
+    formData.append('scholarshipId', scholarship.id);
+    formData.append('scholarshipName', scholarship.name);
+    formData.append('applicationFormType', isSfag ? 'sfag' : 'standard');
+
+    if (isSfag && sfagDetails) {
+      formData.append('personalInfo', JSON.stringify(sfagDetails.personalInfo));
+      formData.append('contactSchool', JSON.stringify(sfagDetails.contactSchool));
+      formData.append('parentsGuardian', JSON.stringify(sfagDetails.parentsGuardian));
+      formData.append('siblings', JSON.stringify(sfagDetails.siblings));
+      formData.append('assetsExpenses', JSON.stringify(sfagDetails.assetsExpenses));
+      formData.append('agreement', JSON.stringify(sfagDetails.agreement));
+    } else {
+      formData.append('standardInfo', JSON.stringify({ firstName, lastName, email, phone, studentNumber, program, yearLevel, gpa }));
+    }
+
+    const response = await fetch(`${API_BASE_URL}/applications`, {
+      method: 'POST',
+      body: formData
+    });
+
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || 'Failed to submit application. Please try again.');
+    }
+    return body.application;
   };
 
   const submitFinal = async (sfagDetails?: SfagApplicationDetails) => {
@@ -413,17 +654,10 @@ export default function ApplyScholarship({
     }
 
     if (!isSfag) {
-      const fields: string[] = [];
-      if (!firstName) fields.push('firstName');
-      if (!lastName) fields.push('lastName');
-      if (!email) fields.push('email');
-      if (!studentNumber) fields.push('studentNumber');
-      if (!program) fields.push('program');
-      if (!yearLevel) fields.push('yearLevel');
-      if (!gpa) fields.push('gpa');
-      if (fields.length > 0) {
-        setFormError('Fill out all required fields.');
-        setMissingFields(new Set(fields));
+      const errs = validateStandardFields();
+      if (Object.keys(errs).length > 0) {
+        setFormError('Fill out all required fields correctly.');
+        setErrors(errs);
         return;
       }
     }
@@ -432,51 +666,43 @@ export default function ApplyScholarship({
     setFormError('');
 
     try {
-      const formData = new FormData();
-      formData.append('studentNumber', student.studentNumber);
-      formData.append('scholarshipId', scholarship.id);
-      formData.append('scholarshipName', scholarship.name);
-      formData.append('applicationFormType', isSfag ? 'sfag' : 'standard');
+      const saved = await submitToServer(sfagDetails);
 
-      if (isSfag && sfagDetails) {
-        formData.append('personalInfo', JSON.stringify(sfagDetails.personalInfo));
-        formData.append('contactSchool', JSON.stringify(sfagDetails.contactSchool));
-        formData.append('parentsGuardian', JSON.stringify(sfagDetails.parentsGuardian));
-        formData.append('siblings', JSON.stringify(sfagDetails.siblings));
-        formData.append('assetsExpenses', JSON.stringify(sfagDetails.assetsExpenses));
-        formData.append('agreement', JSON.stringify(sfagDetails.agreement));
-      } else {
-        formData.append('standardInfo', JSON.stringify({
-          firstName, lastName, email, phone, studentNumber, program, yearLevel, gpa,
-        }));
-      }
+      const newApplication: Application = {
+        id: saved._id,
+        scholarshipId: scholarship.id,
+        scholarshipName: scholarship.name,
+        personalInfo: isSfag
+          ? {
+              firstName: personalInfo.firstName,
+              lastName: personalInfo.lastName,
+              email: contactSchool.email,
+              phone: contactSchool.mobileNo,
+              studentNumber: personalInfo.studentNumber
+            }
+          : { firstName, lastName, email, phone, studentNumber },
+        program: isSfag ? personalInfo.course : program,
+        yearLevel: isSfag ? personalInfo.yearLevel : yearLevel,
+        gpa: isSfag ? student.gpa : gpa,
+        documents: scholarship.requirements.map(req => ({
+          name: req,
+          uploaded: true,
+          fileName: uploads[req]?.fileName
+        })),
+        status: 'Under Evaluation',
+        submittedAt: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+        ...(sfagDetails ? { sfagDetails } : {})
+      };
 
-      // Append files in the same order as their labels, so the backend
-      // can zip req.files[i] with documentLabels[i]
-      const documentLabels: string[] = [];
-      scholarship.requirements.forEach((req) => {
-        const uploaded = uploads[req];
-        if (uploaded?.file) {
-          formData.append('documents', uploaded.file);
-          documentLabels.push(req);
-        }
-      });
-      formData.append('documentLabels', JSON.stringify(documentLabels));
-
-      const res = await fetch(`${API_BASE_URL}/api/applications`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Submission failed.');
-
+      // Application is submitted — the in-progress draft is no longer needed
+      clearDraft(scholarship.id, student.studentNumber);
+      setReferenceCode(saved.referenceCode);
       setIsSubmitting(false);
       setIsSuccess(true);
-      onSubmitApplication(data.application);
+      onSubmitApplication(newApplication);
     } catch (err) {
       setIsSubmitting(false);
-      setFormError(err instanceof Error ? err.message : 'Something went wrong submitting your application.');
+      setFormError(err instanceof Error ? err.message : 'Something went wrong submitting your application. Please try again.');
     }
   };
 
@@ -492,6 +718,11 @@ export default function ApplyScholarship({
     submitFinal(buildSfagDetails());
   };
 
+  const handleDiscardDraft = () => {
+    clearDraft(scholarship.id, student.studentNumber);
+    window.location.reload();
+  };
+
   // --- Success screen (shared) ---------------------------------------------
   if (isSuccess) {
     return (
@@ -501,14 +732,14 @@ export default function ApplyScholarship({
         </div>
         <div className="space-y-2">
           <h2 className="font-display font-black text-2xl text-slate-900 tracking-tight">Application Submitted Successfully!</h2>
-          <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: DLSU-D-SFAG-{Math.floor(Math.random() * 900000 + 100000)}</p>
+          <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: {referenceCode}</p>
         </div>
         <p className="text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
           Your application for the <strong>{scholarship.name}</strong> has been received by the Scholarship and Financial Assistance Office (SFAO).
         </p>
         <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-left text-xs text-slate-500 space-y-2">
           <p><strong>What happens next?</strong></p>
-          <p>1. Scholarship officce will verify your uploaded grades and certifications.</p>
+          <p>1. SFAO Officers will verify your uploaded grades and certifications.</p>
           <p>2. Keep an eye on your email and the Portal notifications tab for updates.</p>
           <p>3. Do not re-submit unless requested by the coordinators.</p>
         </div>
@@ -533,6 +764,16 @@ export default function ApplyScholarship({
           <p className="text-xs text-slate-500 mb-4">
             Please review the requirements below and upload a JPG scan or photo for each item.
           </p>
+
+          {savedDraft?.previouslyUploadedDocNames && savedDraft.previouslyUploadedDocNames.length > 0 && Object.keys(uploads).length === 0 && (
+            <div className="p-4 bg-amber-50 text-amber-800 rounded-xl border border-amber-100 text-xs font-semibold flex items-start gap-2 mb-4">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                Your typed information was restored, but for security reasons browsers can't restore
+                selected files after a refresh. Please re-select: {savedDraft.previouslyUploadedDocNames.join(', ')}.
+              </span>
+            </div>
+          )}
 
           {formError && (
             <div className="p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-100 text-xs font-bold flex items-center gap-2 mb-4">
@@ -566,7 +807,7 @@ export default function ApplyScholarship({
                       </button>
                     </div>
                   ) : (
-                    <label className="flex items-center justify-center border-2 border-dashed border-slate-200 hover:border-brand-green/40 hover:bg-brand-green/2 rounded-lg p-3 cursor-pointer transition-colors text-xs text-slate-500 font-semibold gap-1.5">
+                    <label className="flex items-center justify-center border-2 border-dashed border-slate-200 hover:border-brand-green/40 hover:bg-brand-green/5 rounded-lg p-3 cursor-pointer transition-colors text-xs text-slate-500 font-semibold gap-1.5">
                       <Upload className="w-4 h-4 text-slate-400" />
                       <span>Select JPG File</span>
                       <input
@@ -583,14 +824,23 @@ export default function ApplyScholarship({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onBackClick}
-          className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors focus:outline-hidden"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{backLabel}</span>
-        </button>
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={onBackClick}
+            className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors focus:outline-hidden"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>{backLabel}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleDiscardDraft}
+            className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden"
+          >
+            Discard draft and start over
+          </button>
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -607,7 +857,7 @@ export default function ApplyScholarship({
         <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-2.5">
           <ShieldAlert className="w-4.5 h-4.5 text-slate-400 shrink-0 mt-0.5" />
           <div className="text-[10px] text-slate-500 leading-relaxed">
-            <span className="font-bold">Privacy Certification:</span> LSO complies with the Philippine Data Privacy Act of 2012. Information submitted is kept confidential and utilized solely for scholarship scoring.
+            <span className="font-bold">Privacy Certification:</span> SFAO complies with the Philippine Data Privacy Act of 2012. Information submitted is kept confidential and utilized solely for scholarship scoring.
           </div>
         </div>
       </div>
@@ -652,20 +902,13 @@ export default function ApplyScholarship({
           onSubmit={(e) => {
             e.preventDefault();
             setFormError('');
-            const fields: string[] = [];
-            if (!firstName) fields.push('firstName');
-            if (!lastName) fields.push('lastName');
-            if (!email) fields.push('email');
-            if (!studentNumber) fields.push('studentNumber');
-            if (!program) fields.push('program');
-            if (!yearLevel) fields.push('yearLevel');
-            if (!gpa) fields.push('gpa');
-            if (fields.length > 0) {
-              setFormError('Fill out all required fields.');
-              setMissingFields(new Set(fields));
+            const errs = validateStandardFields();
+            if (Object.keys(errs).length > 0) {
+              setFormError('Fill out all required fields correctly.');
+              setErrors(errs);
               return;
             }
-            setMissingFields(new Set());
+            setErrors({});
             setWizardStep(6);
           }}
           className="space-y-6"
@@ -684,55 +927,73 @@ export default function ApplyScholarship({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label className={labelClass}>First Name</label>
+                <label className={labelClass}>First Name <Req /></label>
                 <input
                   type="text"
-                  required
                   value={firstName}
                   onChange={(e) => { setFirstName(e.target.value); clearFieldError('firstName'); }}
+                  onBlur={(e) => validateOnBlur('firstName', e.target.value, 'text')}
                   className={fieldClass('firstName')}
+                  aria-invalid={!!fieldError('firstName')}
                 />
+                <FieldError message={fieldError('firstName')} />
               </div>
               <div>
-                <label className={labelClass}>Last Name</label>
+                <label className={labelClass}>Last Name <Req /></label>
                 <input
                   type="text"
-                  required
                   value={lastName}
                   onChange={(e) => { setLastName(e.target.value); clearFieldError('lastName'); }}
+                  onBlur={(e) => validateOnBlur('lastName', e.target.value, 'text')}
                   className={fieldClass('lastName')}
+                  aria-invalid={!!fieldError('lastName')}
                 />
+                <FieldError message={fieldError('lastName')} />
               </div>
               <div>
-                <label className={labelClass}>Email Address</label>
+                <label className={labelClass}>Email Address <Req /></label>
                 <input
                   type="email"
-                  required
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); clearFieldError('email'); }}
+                  onBlur={(e) => validateOnBlur('email', e.target.value, 'email')}
                   className={fieldClass('email')}
+                  aria-invalid={!!fieldError('email')}
                 />
+                <FieldError message={fieldError('email')} />
               </div>
               <div>
-                <label className={labelClass}>Mobile Phone</label>
-                <input type="text" required value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
+                <label className={labelClass}>Mobile Phone <Req /></label>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="09171234567"
+                  value={phone}
+                  onChange={(e) => { setPhone(e.target.value); clearFieldError('phone'); }}
+                  onBlur={(e) => validateOnBlur('phone', e.target.value, 'phone')}
+                  className={fieldClass('phone')}
+                  aria-invalid={!!fieldError('phone')}
+                />
+                <FieldError message={fieldError('phone')} />
               </div>
               <div>
                 <label className={labelClass}>Student Number</label>
-                <input type="text" required value={studentNumber} disabled className={`${inputClass} bg-slate-50/20 text-slate-500 cursor-not-allowed`} />
+                <input type="text" value={studentNumber} disabled className={`${inputClass} bg-slate-50/20 text-slate-500 cursor-not-allowed`} />
               </div>
               <div>
-                <label className={labelClass}>Academic Program (Course)</label>
+                <label className={labelClass}>Academic Program (Course) <Req /></label>
                 <input
                   type="text"
-                  required
                   value={program}
                   onChange={(e) => { setProgram(e.target.value); clearFieldError('program'); }}
+                  onBlur={(e) => validateOnBlur('program', e.target.value, 'text')}
                   className={fieldClass('program')}
+                  aria-invalid={!!fieldError('program')}
                 />
+                <FieldError message={fieldError('program')} />
               </div>
               <div>
-                <label className={labelClass}>Year Level</label>
+                <label className={labelClass}>Year Level <Req /></label>
                 <select
                   value={yearLevel}
                   onChange={(e) => { setYearLevel(e.target.value); clearFieldError('yearLevel'); }}
@@ -744,21 +1005,33 @@ export default function ApplyScholarship({
                   <option value="4th Year">4th Year</option>
                   <option value="5th Year">5th Year</option>
                 </select>
+                <FieldError message={fieldError('yearLevel')} />
               </div>
               <div>
-                <label className={labelClass}>Cumulative GPA</label>
+                <label className={labelClass}>Cumulative GPA <Req /></label>
                 <input
                   type="text"
-                  required
+                  inputMode="decimal"
+                  placeholder="e.g. 1.75"
                   value={gpa}
                   onChange={(e) => { setGpa(e.target.value); clearFieldError('gpa'); }}
+                  onBlur={(e) => validateOnBlur('gpa', e.target.value, 'gpa')}
                   className={fieldClass('gpa')}
+                  aria-invalid={!!fieldError('gpa')}
                 />
+                {fieldError('gpa') ? <FieldError message={fieldError('gpa')} /> : <Hint>Scale: 1.00 (highest) – 5.00 (lowest)</Hint>}
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden"
+            >
+              Discard draft and start over
+            </button>
             <button
               type="submit"
               className="inline-flex items-center space-x-1.5 font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-6 py-3.5 rounded-xl transition-all shadow-md shadow-emerald-900/10 focus:outline-hidden"
@@ -786,6 +1059,8 @@ export default function ApplyScholarship({
     );
   }
 
+  const progressPct = Math.round(((wizardStep - 1) / 5) * 100);
+
   return (
     <div id={id} className="space-y-6">
       <button
@@ -799,8 +1074,22 @@ export default function ApplyScholarship({
       <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-2.5">
         <AlertCircle className="w-4.5 h-4.5 text-yellow-600 shrink-0 mt-0.5" />
         <p className="text-xs text-yellow-800 leading-relaxed">
-          <strong>Fill out all required fields.</strong> Use "N/A" where not applicable. Information cannot be changed after submission.
+          <strong>Fill out all required fields.</strong> Fields marked <Req /> are mandatory. Use "N/A" where not applicable. Information cannot be changed after submission.
         </p>
+      </div>
+
+      {/* Progress bar */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs px-6 py-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Application Progress</span>
+          <span className="text-[11px] font-bold text-brand-green">{progressPct}% Complete</span>
+        </div>
+        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-brand-green rounded-full transition-all duration-300"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
       </div>
 
       {/* Tab Navigation */}
@@ -816,16 +1105,16 @@ export default function ApplyScholarship({
                 onClick={() => goToSfagStep(tab.step)}
                 className={`flex items-center gap-2 px-5 py-4 text-xs font-bold whitespace-nowrap border-b-2 transition-colors focus:outline-hidden ${
                   isActive
-                    ? 'border-brand-green text-brand-green'
+                    ? 'border-brand-green text-brand-green bg-brand-green/5'
                     : isComplete
-                    ? 'border-transparent text-slate-500 hover:text-brand-green'
-                    : 'border-transparent text-slate-400'
+                    ? 'border-transparent text-slate-500 hover:text-brand-green hover:bg-slate-50'
+                    : 'border-transparent text-slate-400 hover:bg-slate-50'
                 }`}
               >
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
-                  isActive || isComplete ? 'bg-brand-green text-white' : 'bg-slate-200 text-slate-500'
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0 ${
+                  isActive ? 'bg-brand-green text-white' : isComplete ? 'bg-brand-green/80 text-white' : 'bg-slate-200 text-slate-500'
                 }`}>
-                  {tab.step}
+                  {isComplete ? <CheckCircle className="w-3 h-3" /> : tab.step}
                 </span>
                 <span>{tab.label}</span>
               </button>
@@ -848,34 +1137,40 @@ export default function ApplyScholarship({
                 <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Name</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div>
-                    <label className={labelClass}>Last Name</label>
+                    <label className={labelClass}>Last Name <Req /></label>
                     <input
                       className={fieldClass('lastName')}
                       value={personalInfo.lastName}
                       onChange={e => { setPersonalInfo(p => ({ ...p, lastName: e.target.value })); clearFieldError('lastName'); }}
+                      onBlur={e => validateOnBlur('lastName', e.target.value, 'text')}
+                      aria-invalid={!!fieldError('lastName')}
                     />
+                    <FieldError message={fieldError('lastName')} />
                   </div>
                   <div>
-                    <label className={labelClass}>First Name</label>
+                    <label className={labelClass}>First Name <Req /></label>
                     <input
                       className={fieldClass('firstName')}
                       value={personalInfo.firstName}
                       onChange={e => { setPersonalInfo(p => ({ ...p, firstName: e.target.value })); clearFieldError('firstName'); }}
+                      onBlur={e => validateOnBlur('firstName', e.target.value, 'text')}
+                      aria-invalid={!!fieldError('firstName')}
                     />
+                    <FieldError message={fieldError('firstName')} />
                   </div>
                   <div>
                     <label className={labelClass}>M.I.</label>
-                    <input className={inputClass} value={personalInfo.middleInitial} onChange={e => setPersonalInfo(p => ({ ...p, middleInitial: e.target.value }))} />
+                    <input className={inputClass} value={personalInfo.middleInitial} onChange={e => setPersonalInfo(p => ({ ...p, middleInitial: e.target.value }))} maxLength={2} />
                   </div>
                   <div>
                     <label className={labelClass}>Suffix</label>
-                    <input className={inputClass} value={personalInfo.suffix} onChange={e => setPersonalInfo(p => ({ ...p, suffix: e.target.value }))} />
+                    <input className={inputClass} placeholder="Jr., III, etc." value={personalInfo.suffix} onChange={e => setPersonalInfo(p => ({ ...p, suffix: e.target.value }))} />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
                   <div>
                     <label className={labelClass}>Student No.</label>
-                    <input className={inputClass} value={personalInfo.studentNumber} disabled />
+                    <input className={`${inputClass} bg-slate-50/20 text-slate-500 cursor-not-allowed`} value={personalInfo.studentNumber} disabled />
                   </div>
                   <div>
                     <label className={labelClass}>Course / Program</label>
@@ -892,17 +1187,21 @@ export default function ApplyScholarship({
                 <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3 border-t border-slate-100 pt-6">Basic Information</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className={labelClass}>Place of Birth *</label>
+                    <label className={labelClass}>Place of Birth <Req /></label>
                     <input
                       className={fieldClass('placeOfBirth')}
                       value={personalInfo.placeOfBirth}
                       onChange={e => { setPersonalInfo(p => ({ ...p, placeOfBirth: e.target.value })); clearFieldError('placeOfBirth'); }}
+                      onBlur={e => validateOnBlur('placeOfBirth', e.target.value, 'text')}
+                      aria-invalid={!!fieldError('placeOfBirth')}
                     />
+                    <FieldError message={fieldError('placeOfBirth')} />
                   </div>
                   <div>
-                    <label className={labelClass}>Date of Birth *</label>
+                    <label className={labelClass}>Date of Birth <Req /></label>
                     <input
                       type="date"
+                      max={TODAY_ISO}
                       className={fieldClass('dateOfBirth')}
                       value={personalInfo.dateOfBirth}
                       onChange={e => {
@@ -910,7 +1209,10 @@ export default function ApplyScholarship({
                         setPersonalInfo(p => ({ ...p, dateOfBirth: dob, age: calculateAge(dob) }));
                         clearFieldError('dateOfBirth');
                       }}
+                      onBlur={e => validateOnBlur('dateOfBirth', e.target.value, 'date')}
+                      aria-invalid={!!fieldError('dateOfBirth')}
                     />
+                    <FieldError message={fieldError('dateOfBirth')} />
                   </div>
                   <div>
                     <label className={labelClass}>Age</label>
@@ -922,7 +1224,7 @@ export default function ApplyScholarship({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 items-end">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 items-start">
                   <div>
                     <label className={labelClass}>Civil Status</label>
                     <select className={inputClass} value={personalInfo.civilStatus} onChange={e => setPersonalInfo(p => ({ ...p, civilStatus: e.target.value }))}>
@@ -930,22 +1232,30 @@ export default function ApplyScholarship({
                     </select>
                   </div>
                   <div>
-                    <label className={labelClass}>Gender</label>
-                    <select className={inputClass} value={personalInfo.gender} onChange={e => setPersonalInfo(p => ({ ...p, gender: e.target.value }))}>
+                    <label className={labelClass}>Gender <Req /></label>
+                    <select
+                      className={fieldClass('gender')}
+                      value={personalInfo.gender}
+                      onChange={e => { setPersonalInfo(p => ({ ...p, gender: e.target.value })); clearFieldError('gender'); }}
+                    >
                       <option value="">Select</option>
                       {GENDER_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
+                    <FieldError message={fieldError('gender')} />
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-start gap-4">
                     <div className="flex-1">
-                      <label className={labelClass}>Nationality *</label>
+                      <label className={labelClass}>Nationality <Req /></label>
                       <input
                         className={fieldClass('nationality')}
                         value={personalInfo.nationality}
                         onChange={e => { setPersonalInfo(p => ({ ...p, nationality: e.target.value })); clearFieldError('nationality'); }}
+                        onBlur={e => validateOnBlur('nationality', e.target.value, 'text')}
+                        aria-invalid={!!fieldError('nationality')}
                       />
+                      <FieldError message={fieldError('nationality')} />
                     </div>
-                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 pb-2.5 shrink-0">
+                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 pt-6 shrink-0">
                       <input type="checkbox" checked={personalInfo.isPwd} onChange={e => setPersonalInfo(p => ({ ...p, isPwd: e.target.checked }))} className="accent-brand-green" />
                       PWD?
                     </label>
@@ -960,12 +1270,15 @@ export default function ApplyScholarship({
                   </div>
                   {personalInfo.religion === 'OTHERS' && (
                     <div>
-                      <label className={labelClass}>Specify Religion</label>
+                      <label className={labelClass}>Specify Religion <Req /></label>
                       <input
                         className={fieldClass('specifyReligion')}
                         value={personalInfo.specifyReligion}
                         onChange={e => { setPersonalInfo(p => ({ ...p, specifyReligion: e.target.value })); clearFieldError('specifyReligion'); }}
+                        onBlur={e => validateOnBlur('specifyReligion', e.target.value, 'text')}
+                        aria-invalid={!!fieldError('specifyReligion')}
                       />
+                      <FieldError message={fieldError('specifyReligion')} />
                     </div>
                   )}
                 </div>
@@ -979,37 +1292,49 @@ export default function ApplyScholarship({
               <div>
                 <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Home Address</h3>
                 <div>
-                  <label className={labelClass}>No. / Street / Subdivision / Barangay *</label>
+                  <label className={labelClass}>No. / Street / Subdivision / Barangay <Req /></label>
                   <input
                     className={fieldClass('streetAddress')}
                     value={contactSchool.streetAddress}
                     onChange={e => { setContactSchool(c => ({ ...c, streetAddress: e.target.value })); clearFieldError('streetAddress'); }}
+                    onBlur={e => validateOnBlur('streetAddress', e.target.value, 'text')}
+                    aria-invalid={!!fieldError('streetAddress')}
                   />
+                  <FieldError message={fieldError('streetAddress')} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
                   <div>
-                    <label className={labelClass}>Municipality / City *</label>
+                    <label className={labelClass}>Municipality / City <Req /></label>
                     <input
                       className={fieldClass('municipality')}
                       value={contactSchool.municipality}
                       onChange={e => { setContactSchool(c => ({ ...c, municipality: e.target.value })); clearFieldError('municipality'); }}
+                      onBlur={e => validateOnBlur('municipality', e.target.value, 'text')}
+                      aria-invalid={!!fieldError('municipality')}
                     />
+                    <FieldError message={fieldError('municipality')} />
                   </div>
                   <div>
-                    <label className={labelClass}>Province *</label>
+                    <label className={labelClass}>Province <Req /></label>
                     <input
                       className={fieldClass('province')}
                       value={contactSchool.province}
                       onChange={e => { setContactSchool(c => ({ ...c, province: e.target.value })); clearFieldError('province'); }}
+                      onBlur={e => validateOnBlur('province', e.target.value, 'text')}
+                      aria-invalid={!!fieldError('province')}
                     />
+                    <FieldError message={fieldError('province')} />
                   </div>
                   <div>
-                    <label className={labelClass}>Country *</label>
+                    <label className={labelClass}>Country <Req /></label>
                     <input
                       className={fieldClass('country')}
                       value={contactSchool.country}
                       onChange={e => { setContactSchool(c => ({ ...c, country: e.target.value })); clearFieldError('country'); }}
+                      onBlur={e => validateOnBlur('country', e.target.value, 'text')}
+                      aria-invalid={!!fieldError('country')}
                     />
+                    <FieldError message={fieldError('country')} />
                   </div>
                 </div>
               </div>
@@ -1018,25 +1343,34 @@ export default function ApplyScholarship({
                 <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Contact Details</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className={labelClass}>Mobile No. *</label>
+                    <label className={labelClass}>Mobile No. <Req /></label>
                     <input
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="09171234567"
                       className={fieldClass('mobileNo')}
                       value={contactSchool.mobileNo}
                       onChange={e => { setContactSchool(c => ({ ...c, mobileNo: e.target.value })); clearFieldError('mobileNo'); }}
+                      onBlur={e => validateOnBlur('mobileNo', e.target.value, 'phone')}
+                      aria-invalid={!!fieldError('mobileNo')}
                     />
+                    <FieldError message={fieldError('mobileNo')} />
                   </div>
                   <div>
                     <label className={labelClass}>Landline No.</label>
                     <input className={inputClass} value={contactSchool.landlineNo} onChange={e => setContactSchool(c => ({ ...c, landlineNo: e.target.value }))} />
                   </div>
                   <div>
-                    <label className={labelClass}>Email Address *</label>
+                    <label className={labelClass}>Email Address <Req /></label>
                     <input
                       type="email"
                       className={fieldClass('email')}
                       value={contactSchool.email}
                       onChange={e => { setContactSchool(c => ({ ...c, email: e.target.value })); clearFieldError('email'); }}
+                      onBlur={e => validateOnBlur('email', e.target.value, 'email')}
+                      aria-invalid={!!fieldError('email')}
                     />
+                    <FieldError message={fieldError('email')} />
                   </div>
                 </div>
               </div>
@@ -1044,21 +1378,27 @@ export default function ApplyScholarship({
               <div className="border-t border-slate-100 pt-6">
                 <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Secondary School</h3>
                 <div>
-                  <label className={labelClass}>Secondary School Attended *</label>
+                  <label className={labelClass}>Secondary School Attended <Req /></label>
                   <input
                     className={fieldClass('secondarySchool')}
                     value={contactSchool.secondarySchool}
                     onChange={e => { setContactSchool(c => ({ ...c, secondarySchool: e.target.value })); clearFieldError('secondarySchool'); }}
+                    onBlur={e => validateOnBlur('secondarySchool', e.target.value, 'text')}
+                    aria-invalid={!!fieldError('secondarySchool')}
                   />
+                  <FieldError message={fieldError('secondarySchool')} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4">
                   <div className="sm:col-span-3">
-                    <label className={labelClass}>School Address *</label>
+                    <label className={labelClass}>School Address <Req /></label>
                     <input
                       className={fieldClass('schoolAddress')}
                       value={contactSchool.schoolAddress}
                       onChange={e => { setContactSchool(c => ({ ...c, schoolAddress: e.target.value })); clearFieldError('schoolAddress'); }}
+                      onBlur={e => validateOnBlur('schoolAddress', e.target.value, 'text')}
+                      aria-invalid={!!fieldError('schoolAddress')}
                     />
+                    <FieldError message={fieldError('schoolAddress')} />
                   </div>
                   <div>
                     <label className={labelClass}>Type</label>
@@ -1079,14 +1419,11 @@ export default function ApplyScholarship({
                 {(['father', 'mother'] as const).map(parentKey => {
                   const parent = parentsGuardian[parentKey];
                   const otherKey = parentKey === 'father' ? 'mother' : 'father';
-                  // This block is disabled (auto-N/A) when the OTHER parent
-                  // has been marked as the solo parent - only one parent
-                  // can be the solo parent at a time.
                   const isDisabled = parentsGuardian[otherKey].isSoloParent;
                   const setParent = (updates: Partial<typeof parent>) =>
                     setParentsGuardian(pg => ({ ...pg, [parentKey]: { ...pg[parentKey], ...updates } }));
-                  const fullNameKey = `${parentKey}.fullName`;
                   const disabledInputClass = `${inputClass} bg-slate-50/40 text-slate-400 cursor-not-allowed`;
+                  const fk = (name: string) => `${parentKey}.${name}`;
 
                   const handleSoloToggle = (checked: boolean) => {
                     setParentsGuardian(pg => {
@@ -1104,8 +1441,6 @@ export default function ApplyScholarship({
                           }
                         };
                       }
-                      // Unchecking: re-open the other parent's fields for
-                      // input by clearing any auto-filled "N/A" values.
                       return {
                         ...pg,
                         [parentKey]: { ...pg[parentKey], isSoloParent: false },
@@ -1118,8 +1453,10 @@ export default function ApplyScholarship({
                         }
                       };
                     });
-                    clearFieldError(fullNameKey);
-                    clearFieldError(`${otherKey}.fullName`);
+                    ['fullName', 'occupation', 'company', 'companyTel'].forEach(f => {
+                      clearFieldError(`${parentKey}.${f}`);
+                      clearFieldError(`${otherKey}.${f}`);
+                    });
                   };
 
                   return (
@@ -1134,40 +1471,52 @@ export default function ApplyScholarship({
                       </div>
                       <div className="p-4 space-y-3">
                         <div>
-                          <label className={labelClass}>Full Name *</label>
+                          <label className={labelClass}>Full Name {!isDisabled && <Req />}</label>
                           <input
-                            className={isDisabled ? disabledInputClass : fieldClass(fullNameKey)}
+                            className={isDisabled ? disabledInputClass : fieldClass(fk('fullName'))}
                             value={parent.fullName}
                             disabled={isDisabled}
-                            onChange={e => { setParent({ fullName: e.target.value }); clearFieldError(fullNameKey); }}
+                            onChange={e => { setParent({ fullName: e.target.value }); clearFieldError(fk('fullName')); }}
+                            onBlur={e => !isDisabled && validateOnBlur(fk('fullName'), e.target.value, 'text')}
+                            aria-invalid={!!fieldError(fk('fullName'))}
                           />
+                          <FieldError message={fieldError(fk('fullName'))} />
                         </div>
                         <div>
-                          <label className={labelClass}>Occupation *</label>
+                          <label className={labelClass}>Occupation {!isDisabled && <Req />}</label>
                           <input
-                            className={isDisabled ? disabledInputClass : inputClass}
+                            className={isDisabled ? disabledInputClass : fieldClass(fk('occupation'))}
                             value={parent.occupation}
                             disabled={isDisabled}
-                            onChange={e => setParent({ occupation: e.target.value })}
+                            onChange={e => { setParent({ occupation: e.target.value }); clearFieldError(fk('occupation')); }}
+                            onBlur={e => !isDisabled && validateOnBlur(fk('occupation'), e.target.value, 'text')}
+                            aria-invalid={!!fieldError(fk('occupation'))}
                           />
+                          <FieldError message={fieldError(fk('occupation'))} />
                         </div>
                         <div>
-                          <label className={labelClass}>Company *</label>
+                          <label className={labelClass}>Company {!isDisabled && <Req />}</label>
                           <input
-                            className={isDisabled ? disabledInputClass : inputClass}
+                            className={isDisabled ? disabledInputClass : fieldClass(fk('company'))}
                             value={parent.company}
                             disabled={isDisabled}
-                            onChange={e => setParent({ company: e.target.value })}
+                            onChange={e => { setParent({ company: e.target.value }); clearFieldError(fk('company')); }}
+                            onBlur={e => !isDisabled && validateOnBlur(fk('company'), e.target.value, 'text')}
+                            aria-invalid={!!fieldError(fk('company'))}
                           />
+                          <FieldError message={fieldError(fk('company'))} />
                         </div>
                         <div>
-                          <label className={labelClass}>Company Tel. *</label>
+                          <label className={labelClass}>Company Tel. {!isDisabled && <Req />}</label>
                           <input
-                            className={isDisabled ? disabledInputClass : inputClass}
+                            className={isDisabled ? disabledInputClass : fieldClass(fk('companyTel'))}
                             value={parent.companyTel}
                             disabled={isDisabled}
-                            onChange={e => setParent({ companyTel: e.target.value })}
+                            onChange={e => { setParent({ companyTel: e.target.value }); clearFieldError(fk('companyTel')); }}
+                            onBlur={e => !isDisabled && validateOnBlur(fk('companyTel'), e.target.value, 'text')}
+                            aria-invalid={!!fieldError(fk('companyTel'))}
                           />
+                          <FieldError message={fieldError(fk('companyTel'))} />
                         </div>
                         <div>
                           <label className={labelClass}>Monthly Income</label>
@@ -1199,6 +1548,7 @@ export default function ApplyScholarship({
 
               <div className="border-t border-slate-100 pt-6">
                 <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Guardian's Information</h3>
+                <p className="text-[11px] text-slate-400 mb-3">Optional — only fill this out if a guardian assists with your support.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={labelClass}>Full Name</label>
@@ -1230,7 +1580,10 @@ export default function ApplyScholarship({
           {/* --- Tab 4: Siblings --- */}
           {wizardStep === 4 && (
             <div className="space-y-6">
-              <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider">Brothers & Sisters</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider">Brothers & Sisters</h3>
+                <span className="text-[11px] text-slate-400">Optional — add one row per sibling, if any.</span>
+              </div>
 
               {siblings.length > 0 && (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -1250,7 +1603,7 @@ export default function ApplyScholarship({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {siblings.map(sib => (
-                        <tr key={sib.id}>
+                        <tr key={sib.id} className="hover:bg-slate-50/60 transition-colors">
                           <td className="p-3 font-semibold text-slate-800">{sib.fullName}</td>
                           <td className="p-3 text-slate-600">{sib.socialStatus}</td>
                           <td className="p-3 text-slate-600">{sib.civilStatus}</td>
@@ -1273,15 +1626,32 @@ export default function ApplyScholarship({
 
               <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4 space-y-3">
                 <p className="text-xs font-bold text-brand-green-dark uppercase tracking-wider">+ Add a Sibling</p>
+                {siblingDraftError && (
+                  <div className="p-2.5 bg-rose-50 text-rose-700 rounded-lg border border-rose-100 text-[11px] font-bold flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{siblingDraftError}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <input placeholder="Last name, First name" className={inputClass} value={siblingDraft.fullName} onChange={e => setSiblingDraft(d => ({ ...d, fullName: e.target.value }))} />
+                  <input
+                    placeholder="Last name, First name"
+                    className={siblingDraftError && isBlank(siblingDraft.fullName) ? errorInputClass : inputClass}
+                    value={siblingDraft.fullName}
+                    onChange={e => { setSiblingDraft(d => ({ ...d, fullName: e.target.value })); setSiblingDraftError(''); }}
+                  />
                   <select className={inputClass} value={siblingDraft.socialStatus} onChange={e => setSiblingDraft(d => ({ ...d, socialStatus: e.target.value }))}>
                     {SIBLING_SOCIAL_STATUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                   <select className={inputClass} value={siblingDraft.civilStatus} onChange={e => setSiblingDraft(d => ({ ...d, civilStatus: e.target.value }))}>
                     {CIVIL_STATUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
-                  <input placeholder="Age" className={inputClass} value={siblingDraft.age} onChange={e => setSiblingDraft(d => ({ ...d, age: e.target.value }))} />
+                  <input
+                    placeholder="Age"
+                    inputMode="numeric"
+                    className={siblingDraftError && !isBlank(siblingDraft.age) && !isValidAge(siblingDraft.age) ? errorInputClass : inputClass}
+                    value={siblingDraft.age}
+                    onChange={e => { setSiblingDraft(d => ({ ...d, age: e.target.value })); setSiblingDraftError(''); }}
+                  />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-center">
                   <input placeholder="Name of school or employer" className={inputClass} value={siblingDraft.schoolOrCompany} onChange={e => setSiblingDraft(d => ({ ...d, schoolOrCompany: e.target.value }))} />
@@ -1312,7 +1682,7 @@ export default function ApplyScholarship({
           {wizardStep === 5 && (
             <div className="space-y-6">
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-2.5">
-                <AlertCircle className="w-4.5 h-4.5 text-blue-600 shrink-0 mt-0.5" />
+                <Info className="w-4.5 h-4.5 text-blue-600 shrink-0 mt-0.5" />
                 <p className="text-xs text-blue-800">
                   Assets and Expenses fields apply to <strong>Student Financial Aid Grant</strong> applicants only.
                 </p>
@@ -1339,8 +1709,15 @@ export default function ApplyScholarship({
               <div className="border-t border-slate-100 pt-6">
                 <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Income Sources</h3>
                 <div>
-                  <label className={labelClass}>Income Sources *</label>
-                  <input className={inputClass} value={assetsExpenses.incomeSources} onChange={e => setAssetsExpenses(a => ({ ...a, incomeSources: e.target.value }))} />
+                  <label className={labelClass}>Income Sources <Req /></label>
+                  <input
+                    className={fieldClass('incomeSources')}
+                    value={assetsExpenses.incomeSources}
+                    onChange={e => { setAssetsExpenses(a => ({ ...a, incomeSources: e.target.value })); clearFieldError('incomeSources'); }}
+                    onBlur={e => validateOnBlur('incomeSources', e.target.value, 'text')}
+                    aria-invalid={!!fieldError('incomeSources')}
+                  />
+                  <FieldError message={fieldError('incomeSources')} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                   <div>
@@ -1414,18 +1791,18 @@ export default function ApplyScholarship({
                 </button>
 
                 <div className={`border rounded-xl p-4 space-y-3 ${
-                  missingFields.has('certifyConsulted') || missingFields.has('certifyAccuracy')
+                  fieldError('certifyConsulted') || fieldError('certifyAccuracy')
                     ? 'border-rose-400 bg-rose-50/60'
                     : 'border-amber-300 bg-amber-50/50'
                 }`}>
                   <label className={`flex items-start gap-2.5 text-xs leading-relaxed cursor-pointer rounded-lg p-1 -m-1 ${
-                    missingFields.has('certifyConsulted') ? 'text-rose-700' : 'text-slate-700'
+                    fieldError('certifyConsulted') ? 'text-rose-700' : 'text-slate-700'
                   }`}>
                     <input
                       type="checkbox"
                       checked={agreement.certifyConsulted}
                       onChange={e => { setAgreement(a => ({ ...a, certifyConsulted: e.target.checked })); clearFieldError('certifyConsulted'); }}
-                      className={`mt-0.5 shrink-0 ${missingFields.has('certifyConsulted') ? 'accent-rose-500' : 'accent-brand-green'}`}
+                      className={`mt-0.5 shrink-0 ${fieldError('certifyConsulted') ? 'accent-rose-500' : 'accent-brand-green'}`}
                     />
                     <span>
                       I hereby certify that I have consulted family members with regard to the statements and other information.
@@ -1435,13 +1812,13 @@ export default function ApplyScholarship({
                     </span>
                   </label>
                   <label className={`flex items-start gap-2.5 text-xs leading-relaxed cursor-pointer rounded-lg p-1 -m-1 ${
-                    missingFields.has('certifyAccuracy') ? 'text-rose-700' : 'text-slate-700'
+                    fieldError('certifyAccuracy') ? 'text-rose-700' : 'text-slate-700'
                   }`}>
                     <input
                       type="checkbox"
                       checked={agreement.certifyAccuracy}
                       onChange={e => { setAgreement(a => ({ ...a, certifyAccuracy: e.target.checked })); clearFieldError('certifyAccuracy'); }}
-                      className={`mt-0.5 shrink-0 ${missingFields.has('certifyAccuracy') ? 'accent-rose-500' : 'accent-brand-green'}`}
+                      className={`mt-0.5 shrink-0 ${fieldError('certifyAccuracy') ? 'accent-rose-500' : 'accent-brand-green'}`}
                     />
                     <span>
                       This is to certify the veracity and completeness of all information written on this form. I understand
@@ -1465,7 +1842,15 @@ export default function ApplyScholarship({
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>{SFAG_TABS[wizardStep - 2].label}</span>
               </button>
-            ) : <div />}
+            ) : (
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden"
+              >
+                Discard draft and start over
+              </button>
+            )}
 
             {wizardStep < 5 ? (
               <button

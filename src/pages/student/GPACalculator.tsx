@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calculator, Plus, Trash2, RotateCcw, Info } from 'lucide-react';
+import { StudentProfile } from '../../types';
 
 interface CourseEntry {
   id: string;
@@ -17,12 +18,78 @@ function makeEmptyCourse(): CourseEntry {
   };
 }
 
+// --- Draft persistence (survives refresh, scoped per logged-in student) ---
+// Keyed by student number so switching accounts never shows someone
+// else's course list — mirrors the same pattern used for scholarship
+// application drafts.
+
+const GPA_DRAFT_PREFIX = 'aniskolar_gpa_calculator_draft_';
+
+function getGpaDraftKey(studentNumber: string) {
+  return `${GPA_DRAFT_PREFIX}${studentNumber}`;
+}
+
+interface GpaDraft {
+  courses: CourseEntry[];
+  computedGpa: number | null;
+}
+
+function loadGpaDraft(studentNumber: string): GpaDraft | null {
+  try {
+    const raw = localStorage.getItem(getGpaDraftKey(studentNumber));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.courses) || parsed.courses.length === 0) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearGpaDraft(studentNumber: string) {
+  try {
+    localStorage.removeItem(getGpaDraftKey(studentNumber));
+  } catch {
+    // ignore
+  }
+}
+
 const inputClass =
   'w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all';
 
-export default function GPACalculator({ id }: { id?: string }) {
-  const [courses, setCourses] = useState<CourseEntry[]>([makeEmptyCourse()]);
-  const [computedGpa, setComputedGpa] = useState<number | null>(null);
+interface GPACalculatorProps {
+  student: StudentProfile;
+  id?: string;
+}
+
+export default function GPACalculator({ student, id }: GPACalculatorProps) {
+  // Load any saved draft for THIS student only, once on mount.
+  const savedDraft = React.useMemo(
+    () => loadGpaDraft(student.studentNumber),
+    [student.studentNumber]
+  );
+
+  const [courses, setCourses] = useState<CourseEntry[]>(savedDraft?.courses ?? [makeEmptyCourse()]);
+  const [computedGpa, setComputedGpa] = useState<number | null>(savedDraft?.computedGpa ?? null);
+
+  // Re-load the draft whenever the logged-in student changes (e.g. someone
+  // logs out and a different account logs in without a full page reload).
+  useEffect(() => {
+    const draftForCurrentStudent = loadGpaDraft(student.studentNumber);
+    setCourses(draftForCurrentStudent?.courses ?? [makeEmptyCourse()]);
+    setComputedGpa(draftForCurrentStudent?.computedGpa ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [student.studentNumber]);
+
+  // Auto-save on every change, scoped to the current student's key.
+  useEffect(() => {
+    try {
+      const draft: GpaDraft = { courses, computedGpa };
+      localStorage.setItem(getGpaDraftKey(student.studentNumber), JSON.stringify(draft));
+    } catch {
+      // Storage can fail (private browsing, quota) — calculator still works, just won't persist
+    }
+  }, [courses, computedGpa, student.studentNumber]);
 
   const addCourse = () => {
     setCourses(prev => [...prev, makeEmptyCourse()]);
@@ -42,6 +109,7 @@ export default function GPACalculator({ id }: { id?: string }) {
   const resetAll = () => {
     setCourses([makeEmptyCourse()]);
     setComputedGpa(null);
+    clearGpaDraft(student.studentNumber);
   };
 
   const handleCompute = () => {
@@ -126,7 +194,7 @@ export default function GPACalculator({ id }: { id?: string }) {
                   type="number"
                   min="0"
                   max="4"
-                  step="0.5"
+                  step="0.25"
                   placeholder="4.0"
                   value={course.grade}
                   onChange={e => updateCourse(course.id, { grade: e.target.value })}

@@ -66,19 +66,25 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
-              <button
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
                 onClick={onExploreClick}
-                className="w-full sm:w-auto sm:min-w-60 font-display font-bold uppercase text-xs tracking-wider text-white bg-[#00703C]/80 hover:bg-[#005c30] px-8 py-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg shadow-white/10"
+                className="w-full sm:w-auto sm:min-w-60 font-display font-bold uppercase text-xs tracking-wider text-white bg-[#00703C]/80 hover:bg-[#005c30] px-8 py-4 rounded-xl transition-colors duration-200 flex items-center justify-center space-x-2 shadow-lg shadow-white/10"
               >
                 <span>Explore Scholarships</span>
                 <ArrowRight className="w-4 h-4" />
-              </button>
-              <button
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
                 onClick={onLoginClick}
-                className="w-full sm:w-auto sm:min-w-60 font-display font-bold uppercase text-xs tracking-wider text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 px-8 py-4 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2"
+                className="w-full sm:w-auto sm:min-w-60 font-display font-bold uppercase text-xs tracking-wider text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 px-8 py-4 rounded-xl transition-colors duration-200 flex items-center justify-center space-x-2"
               >
                 <span>Login to Access More</span>
-              </button>
+              </motion.button>
             </div>
           </div>
         </div>
@@ -139,13 +145,14 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               <h2 className="font-display font-black text-3xl text-slate-950 tracking-tight">Available Scholarships</h2>
               <p className="text-sm text-slate-500 mt-2">Explore active grants. Log in to start your online application.</p>
             </div>
-            <button
+            <motion.button
+              whileTap={{ scale: 0.95 }}
               onClick={onExploreClick}
               className="font-display font-bold text-xs uppercase tracking-wider text-brand-green hover:text-brand-green-dark flex items-center space-x-1.5 shrink-0"
             >
               <span>View All Scholarships</span>
               <ArrowRight className="w-4 h-4" />
-            </button>
+            </motion.button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -210,13 +217,14 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
                 </div>
                 <h3 className="font-display font-bold text-base text-slate-900 mb-2">{ann.title}</h3>
                 <p className="text-xs text-slate-500 line-clamp-3 mb-4 leading-relaxed">{ann.description}</p>
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
                   onClick={onLoginClick}
                   className="text-xs font-semibold text-brand-green hover:text-brand-green-dark flex items-center space-x-1.5 focus:outline-hidden"
                 >
                   <span>Read details</span>
                   <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+                </motion.button>
               </div>
             ))}
           </div>

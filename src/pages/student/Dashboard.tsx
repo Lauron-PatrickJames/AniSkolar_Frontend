@@ -2,7 +2,7 @@ import React from 'react';
 import { Scholarship, Announcement, Application, StudentProfile } from '../../types';
 import DashboardCard from '../../components/DashboardCard';
 import AnnouncementCard from '../../components/AnnouncementCard';
-import { Award, Compass, FileText, AlertCircle, ArrowRight, UserCheck, Calendar, Bell } from 'lucide-react';
+import { Award, Compass, FileText, AlertCircle, ArrowRight, UserCheck, Calendar, Bell, Calculator } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface DashboardProps {
@@ -160,6 +160,17 @@ export default function Dashboard({
                 <span className="flex items-center space-x-2.5">
                   <Compass className="w-4 h-4 text-brand-green" />
                   <span>Browse Available Scholarships</span>
+                </span>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+
+              <button
+                onClick={() => onNavigate('gpa-calculator')}
+                className="w-full flex items-center justify-between p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
+              >
+                <span className="flex items-center space-x-2.5">
+                  <Calculator className="w-4 h-4 text-brand-green" />
+                  <span>GPA Calculator</span>
                 </span>
                 <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
               </button>

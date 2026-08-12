@@ -1,31 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bell, User, LogOut, Settings, Shield, ChevronDown, Menu } from 'lucide-react';
-import { StudentProfile } from '../types';
+import { StudentProfile, Application } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { buildNotifications, markAllRead, clearAll, NotificationItem } from '../utils/notifications';
 
 interface NavbarProps {
   pageTitle: string;
   student: StudentProfile;
+  applications: Application[];
   onLogout: () => void;
   onNavigateToProfile: () => void;
   onToggleSidebar: () => void;
   id?: string;
 }
 
-interface NotificationItem {
-  id: string;
-  text: string;
-  time: string;
-  isRead: boolean;
-}
-
 // Shared spring-like ease for dropdown open/close — gives a soft, deliberate
 // motion instead of Framer's very fast default transition.
-const dropdownTransition = { duration: 0.22, ease: [0.16, 1, 0.3, 1] };
+const dropdownTransition = { duration: 0.22, ease: [0.16, 1, 0.3, 1] as const };
 
 export default function Navbar({
   pageTitle,
   student,
+  applications,
   onLogout,
   onNavigateToProfile,
   onToggleSidebar,
@@ -33,19 +29,26 @@ export default function Navbar({
 }: NavbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: 'n1', text: 'Your application for the Br. President Grant is under review.', time: '2 hours ago', isRead: false },
-    { id: 'n2', text: 'Academic Scholarship application deadline is approaching soon.', time: '1 day ago', isRead: false },
-    { id: 'n3', text: 'Welcome to the new AniSkolar Student Portal!', time: '3 days ago', isRead: true }
-  ]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() =>
+    buildNotifications(student, applications)
+  );
+
+  // Recompute whenever the student or their applications change (e.g. right
+  // after a new submission, or an application status update from the office).
+  useEffect(() => {
+    setNotifications(buildNotifications(student, applications));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [student.studentNumber, applications]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+    markAllRead(student.studentNumber, notifications.map(n => n.id));
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
   };
 
   const clearNotifications = () => {
+    clearAll(student.studentNumber, notifications.map(n => n.id));
     setNotifications([]);
   };
 

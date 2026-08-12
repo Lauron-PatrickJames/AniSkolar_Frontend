@@ -53,10 +53,16 @@ export default function Footer() {
               </li>
               
               <li>
-                <a href="#" className="hover:text-brand-green transition-colors text-slate-400">Schoolbook</a>
+                <a href="https://www.dlsud.edu.ph/aboutSchoolbook.htm" target="_blank" rel="noopener noreferrer" className="hover:text-brand-green transition-colors flex items-center space-x-1 text-slate-400">
+                  <span>Schoolbook</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
               </li>
               <li>
-                <a href="#" className="hover:text-brand-green transition-colors text-slate-400">University Registrar</a>
+                <a href="https://www.dlsud.edu.ph/registrar/" target="_blank" rel="noopener noreferrer" className="hover:text-brand-green transition-colors flex items-center space-x-1 text-slate-400">
+                  <span>Office of the University Registrar</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
               </li>
             </ul>
           </div>
@@ -67,15 +73,15 @@ export default function Footer() {
             <ul className="space-y-3 text-sm text-slate-400">
               <li className="flex items-start space-x-3">
                 <MapPin className="w-4 h-4 text-brand-green shrink-0 mt-1" />
-                <span>Scholarship & Financial Assistance Office, Ground Floor, Admin Building, DLSU-D, Dasmariñas, Cavite, PH</span>
+                <span>Ayuntamiento de Gonzalez Bldg. <br />De La Salle University-Dasmarinas <br />City of Dasmarinas, 4114, Philippines</span>
               </li>
               <li className="flex items-center space-x-3">
                 <Phone className="w-4 h-4 text-brand-green shrink-0" />
-                <span>+63 (46) 481-1900 ext. 4015</span>
+                <span>+63 46 4811900 or +63 02 87795180 local 3126</span>
               </li>
               <li className="flex items-center space-x-3">
                 <Mail className="w-4 h-4 text-brand-green shrink-0" />
-                <span>lso@dlsud.edu.ph</span>
+                <span>scholarship@dlsud.edu.ph</span>
               </li>
             </ul>
           </div>
@@ -86,8 +92,8 @@ export default function Footer() {
             © {new Date().getFullYear()} De La Salle University–Dasmariñas. All Rights Reserved.
           </p>
           <p className="mt-2 sm:mt-0 flex items-center justify-center space-x-1">
-            <span>Designed for Capstone</span>
-            <span className="text-brand-green font-semibold">Animo La Salle!</span>
+            <span>Designed by </span>
+            <span className="text-brand-green font-semibold">CloudCore</span>
           </p>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '@clerk/react'; // match whatever package App.tsx imports useAuth from
 import {
   Scholarship,
   StudentProfile,
@@ -33,8 +34,11 @@ interface UploadedFile {
   file: File; // kept so we can actually send the bytes to the backend on submit
 }
 
-// Change this to wherever the Express API is mounted (e.g. via a proxy or env var).
-const API_BASE_URL = 'http://localhost:5000/api';
+// Matches App.tsx's convention: read from Vite env at build time, fall back
+// to localhost for local dev. No trailing /api here — each fetch call
+// appends its own path (e.g. `${API_BASE_URL}/api/applications`), consistent
+// with how App.tsx calls /api/students/me and /api/applications/student/:id.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 // --- Shared option lists --------------------------------------------------
 const INCOME_BRACKETS = [
@@ -73,6 +77,19 @@ const SIBLING_SOCIAL_STATUS_OPTIONS = [
   'N/A'
 ];
 
+function mapCivilStatus(status?: string): string {
+  if (!status) return 'SINGLE';
+  const upper = status.toUpperCase();
+  return CIVIL_STATUS_OPTIONS.includes(upper) ? upper : 'SINGLE';
+}
+
+function toDateInputValue(value?: string | null): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
+}
+
 function calculateAge(dateOfBirth: string): string {
   if (!dateOfBirth) return '';
   const dob = new Date(dateOfBirth);
@@ -88,6 +105,7 @@ function calculateAge(dateOfBirth: string): string {
 
 function emptyPersonalInfo(student: StudentProfile): SfagPersonalInfo {
   const nameParts = student.name.split(' ');
+  const dateOfBirth = toDateInputValue(student.dateOfBirth);
   return {
     lastName: nameParts.length > 1 ? nameParts[nameParts.length - 1] : '',
     firstName: nameParts.slice(0, -1).join(' ') || student.name,
@@ -96,12 +114,12 @@ function emptyPersonalInfo(student: StudentProfile): SfagPersonalInfo {
     studentNumber: student.studentNumber,
     course: student.course,
     yearLevel: student.yearLevel,
-    placeOfBirth: '',
-    dateOfBirth: '',
-    age: '',
-    civilStatus: 'SINGLE',
+    placeOfBirth: student.placeOfBirth || '',
+    dateOfBirth,
+    age: calculateAge(dateOfBirth),
+    civilStatus: mapCivilStatus(student.civilStatus),
     gender: '',
-    nationality: 'FILIPINO',
+    nationality: student.nationality || 'FILIPINO',
     isPwd: false,
     religion: 'CATHOLIC',
     specifyReligion: ''
@@ -110,12 +128,12 @@ function emptyPersonalInfo(student: StudentProfile): SfagPersonalInfo {
 
 function emptyContactSchool(student: StudentProfile): SfagContactSchool {
   return {
-    streetAddress: '',
-    municipality: '',
-    province: '',
-    country: 'PHILIPPINES',
-    mobileNo: '',
-    landlineNo: '',
+    streetAddress: student.homeAddress || '',
+    municipality: student.cityMunicipality || '',
+    province: student.province || '',
+    country: student.country || 'PHILIPPINES',
+    mobileNo: student.mobileNumber || '',
+    landlineNo: student.telephoneNumber || '',
     email: student.email,
     secondarySchool: '',
     schoolAddress: '',
@@ -123,11 +141,26 @@ function emptyContactSchool(student: StudentProfile): SfagContactSchool {
   };
 }
 
-function emptyParentsGuardian(): SfagParentsGuardian {
+function normalizePersonalInfo(personalInfo: SfagPersonalInfo): SfagPersonalInfo {
+  const dateOfBirth = toDateInputValue(personalInfo.dateOfBirth);
   return {
-    father: { fullName: '', occupation: '', company: '', companyTel: '', monthlyIncome: INCOME_BRACKETS[0], isSoloParent: false },
-    mother: { fullName: '', occupation: '', company: '', companyTel: '', monthlyIncome: INCOME_BRACKETS[0], isSoloParent: false },
-    guardian: { fullName: '', occupation: '', monthlyIncome: INCOME_BRACKETS[0], relationship: '', contactNo: '' }
+    ...personalInfo,
+    dateOfBirth,
+    age: calculateAge(dateOfBirth)
+  };
+}
+
+function emptyParentsGuardian(student: StudentProfile): SfagParentsGuardian {
+  return {
+    father: { fullName: student.fatherName || '', occupation: '', company: '', companyTel: '', monthlyIncome: INCOME_BRACKETS[0], isSoloParent: false },
+    mother: { fullName: student.motherName || '', occupation: '', company: '', companyTel: '', monthlyIncome: INCOME_BRACKETS[0], isSoloParent: false },
+    guardian: {
+      fullName: student.guardianName || '',
+      occupation: '',
+      monthlyIncome: INCOME_BRACKETS[0],
+      relationship: student.guardianRelationship || '',
+      contactNo: student.guardianContactNo || ''
+    }
   };
 }
 
@@ -292,6 +325,7 @@ export default function ApplyScholarship({
   onSubmitApplication,
   id
 }: ApplyScholarshipProps) {
+  const { getToken } = useAuth();
   const isSfag = scholarship.applicationFormType === 'sfag';
 
   // Load any in-progress draft for this exact scholarship + student combo.
@@ -303,10 +337,9 @@ export default function ApplyScholarship({
 
   // --- SFAG multi-step wizard state ---------------------------------------
   const [wizardStep, setWizardStep] = useState<number>(savedDraft?.wizardStep ?? 1);
-  const [personalInfo, setPersonalInfo] = useState<SfagPersonalInfo>(() => savedDraft?.personalInfo ?? emptyPersonalInfo(student));
+  const [personalInfo, setPersonalInfo] = useState<SfagPersonalInfo>(() => normalizePersonalInfo(savedDraft?.personalInfo ?? emptyPersonalInfo(student)));
   const [contactSchool, setContactSchool] = useState<SfagContactSchool>(() => savedDraft?.contactSchool ?? emptyContactSchool(student));
-  const [parentsGuardian, setParentsGuardian] = useState<SfagParentsGuardian>(savedDraft?.parentsGuardian ?? emptyParentsGuardian());
-  const [siblings, setSiblings] = useState<SfagSibling[]>(savedDraft?.siblings ?? []);
+  const [parentsGuardian, setParentsGuardian] = useState<SfagParentsGuardian>(savedDraft?.parentsGuardian ?? emptyParentsGuardian(student));  const [siblings, setSiblings] = useState<SfagSibling[]>(savedDraft?.siblings ?? []);
   const [assetsExpenses, setAssetsExpenses] = useState<SfagAssetsExpenses>(savedDraft?.assetsExpenses ?? emptyAssetsExpenses());
   const [agreement, setAgreement] = useState<SfagAgreement>(savedDraft?.agreement ?? { certifyConsulted: false, certifyAccuracy: false });
   const [sfagFormError, setSfagFormError] = useState('');
@@ -349,8 +382,7 @@ export default function ApplyScholarship({
   const [firstName, setFirstName] = useState(savedDraft?.firstName ?? (student.name.split(' ')[0] || ''));
   const [lastName, setLastName] = useState(savedDraft?.lastName ?? (student.name.split(' ').slice(1).join(' ') || ''));
   const [email, setEmail] = useState(savedDraft?.email ?? student.email);
-  const [phone, setPhone] = useState(savedDraft?.phone ?? '+63 917 123 4567');
-  const [studentNumber, setStudentNumber] = useState(student.studentNumber);
+  const [phone, setPhone] = useState(savedDraft?.phone ?? (student.mobileNumber || ''));  const [studentNumber, setStudentNumber] = useState(student.studentNumber);
   const [program, setProgram] = useState(savedDraft?.program ?? student.course);
   const [yearLevel, setYearLevel] = useState(savedDraft?.yearLevel ?? student.yearLevel);
   const [gpa, setGpa] = useState(savedDraft?.gpa ?? student.gpa);
@@ -604,6 +636,8 @@ export default function ApplyScholarship({
   // Matches your real backend contract: POST /api/applications, multipart/form-data,
   // one "documents" file per requirement (in order), a parallel "documentLabels"
   // JSON array naming each one, plus the form-section payloads as JSON strings.
+  // Requires a Clerk bearer token — the Express CSRF middleware in server.js
+  // rejects any non-GET request without a valid session (401 otherwise).
   // Returns the saved Mongo document (with _id and referenceCode) on success.
   const submitToServer = async (sfagDetails?: SfagApplicationDetails): Promise<{ _id: string; referenceCode: string }> => {
     const formData = new FormData();
@@ -634,8 +668,10 @@ export default function ApplyScholarship({
       formData.append('standardInfo', JSON.stringify({ firstName, lastName, email, phone, studentNumber, program, yearLevel, gpa }));
     }
 
-    const response = await fetch(`${API_BASE_URL}/applications`, {
+    const token = await getToken();
+    const response = await fetch(`${API_BASE_URL}/api/applications`, {
       method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       body: formData
     });
 
@@ -735,11 +771,11 @@ export default function ApplyScholarship({
           <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: {referenceCode}</p>
         </div>
         <p className="text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
-          Your application for the <strong>{scholarship.name}</strong> has been received by the Scholarship and Financial Assistance Office (SFAO).
+          Your application for the <strong>{scholarship.name}</strong> has been received by the Linkages and Scholarship Office (LSO).
         </p>
         <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-left text-xs text-slate-500 space-y-2">
           <p><strong>What happens next?</strong></p>
-          <p>1. SFAO Officers will verify your uploaded grades and certifications.</p>
+          <p>1. LSO Officers will verify your uploaded grades and certifications.</p>
           <p>2. Keep an eye on your email and the Portal notifications tab for updates.</p>
           <p>3. Do not re-submit unless requested by the coordinators.</p>
         </div>
@@ -857,7 +893,7 @@ export default function ApplyScholarship({
         <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-2.5">
           <ShieldAlert className="w-4.5 h-4.5 text-slate-400 shrink-0 mt-0.5" />
           <div className="text-[10px] text-slate-500 leading-relaxed">
-            <span className="font-bold">Privacy Certification:</span> SFAO complies with the Philippine Data Privacy Act of 2012. Information submitted is kept confidential and utilized solely for scholarship scoring.
+            <span className="font-bold">Privacy Certification:</span> Linkages and Scholarship Office (LSO) complies with the Philippine Data Privacy Act of 2012. Information submitted is kept confidential and utilized solely for scholarship scoring.
           </div>
         </div>
       </div>

@@ -1,18 +1,19 @@
-import React, { useState } from 'react';
-import { ShieldCheck, Mail, Lock, ArrowLeft, Eye, EyeOff, KeyRound } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ShieldCheck, Mail, Lock, ArrowLeft, Eye, EyeOff, KeyRound, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { StudentProfile } from '../types';
+import { useSignIn } from '@clerk/react';
+import logo from '../assets/logo.png';
 
 interface LoginPageProps {
-  onLoginSuccess: (student: StudentProfile) => void;
   onBackToLanding: () => void;
   id?: string;
 }
 
 type LoginMode = 'student' | 'admin';
 
-// Change this when you deploy the backend somewhere other than localhost
-const API_BASE_URL = 'http://localhost:5000';
+// Once Clerk's session is activated, App.tsx's own useUser()/useAuth()
+// effect takes over routing — this page doesn't navigate anywhere itself.
+const noopNavigate = () => {};
 
 // Editable SVG logo of AniSkolar (overlapping shield and graduation cap with center A)
 export function AniSkolarLogo({ className = "w-12 h-12" }: { className?: string }) {
@@ -29,38 +30,79 @@ export function AniSkolarLogo({ className = "w-12 h-12" }: { className?: string 
   );
 }
 
-export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: LoginPageProps) {
-  const [loginMode, setLoginMode] = useState<LoginMode>('student');
-  const [email, setEmail] = useState('test@dlsud.edu.ph');
-  const [password, setPassword] = useState('testpass123');
-  const [rememberMe, setRememberMe] = useState(true);
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  invalid_domain: 'Please sign in with your official DLSU-D email address (@dlsud.edu.ph). Other email accounts are not allowed.',
+};
+
+export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
+  const { signIn, errors, fetchStatus } = useSignIn();
+
+  const [loginMode, setLoginMode] = useState<LoginMode>(
+    () => (new URLSearchParams(window.location.search).get('mode') === 'admin' ? 'admin' : 'student')
+  );
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
 
-  // Shared login logic used by both the admin form and the (currently
-  // mocked) Microsoft SSO button — avoids duplicating the fetch/error/
-  // storage logic in two places.
-  const performLogin = async (loginEmail: string, loginPassword: string) => {
-    const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: loginEmail, password: loginPassword }),
-    });
+  // Surfaces the reason when SsoCallbackPage bounces someone back here
+  // (e.g. ?error=invalid_domain for a non-DLSU-D email). Read once on
+  // mount, then strip the param so a page refresh doesn't re-show it.
+  const [authError, setAuthError] = useState('');
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Login failed. Please try again.');
-
-    if (rememberMe) {
-      localStorage.setItem('aniskolar_token', data.token);
-    } else {
-      sessionStorage.setItem('aniskolar_token', data.token);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const errorCode = params.get('error');
+    if (errorCode && AUTH_ERROR_MESSAGES[errorCode]) {
+      setAuthError(AUTH_ERROR_MESSAGES[errorCode]);
+      params.delete('error');
+      const newSearch = params.toString();
+      const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}${window.location.hash}`;
+      window.history.replaceState({}, '', newUrl);
     }
-    localStorage.setItem('aniskolar_student', JSON.stringify(data.student));
+  }, []);
 
-    return data.student as StudentProfile;
+  const isLoading = fetchStatus === 'fetching';
+
+  // Students authenticate exclusively through Microsoft — there's no
+  // password form for this path at all. Clerk's own allowlist (configured
+  // in the Dashboard for dlsud.edu.ph) is what actually restricts which
+  // Microsoft accounts can complete this.
+  const handleMicrosoftLogin = async () => {
+    setError('');
+    console.log('[SSO DEBUG] handleMicrosoftLogin fired, fetchStatus:', fetchStatus);
+    try {
+      // Clear any pending attempt left over from a different strategy first
+      // (e.g. a failed admin password submit for this same identifier can
+      // leave the SignIn sitting at 'needs_first_factor'). reset() clears
+      // local state back to null with no API call, so sso() below always
+      // starts a genuinely fresh attempt instead of resolving against a
+      // stuck one and silently not redirecting.
+      await signIn.reset();
+
+      const { error: ssoError } = await signIn.sso({
+        strategy: 'oauth_microsoft',
+        redirectCallbackUrl: `${window.location.origin}/sso-callback`,
+        redirectUrl: `${window.location.origin}/`,
+      });
+      console.log('[SSO DEBUG] signIn.sso() resolved:', { ssoError, signInStatus: signIn.status });
+      if (ssoError) {
+        setError(ssoError.message || 'Unable to start Microsoft sign-in. Please try again.');
+      }
+    } catch (err) {
+      console.error('[SSO DEBUG] signIn.sso() threw:', err);
+      setError('Unable to start Microsoft sign-in. Please try again.');
+    }
+    // On success this redirects the whole page to Microsoft — nothing left
+    // to do here; /sso-callback (see SsoCallback.tsx, rendered directly by
+    // App.tsx for that path) picks the flow back up after the redirect.
   };
 
+  // Admin sign-in is plain email + password, and deliberately has no
+  // sign-up fallback: admin accounts are provisioned manually (Clerk
+  // Dashboard or a seed script), never self-registered here. A student
+  // account — which only ever has a Microsoft credential, no password —
+  // simply has nothing for signIn.password() to match against.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -69,59 +111,52 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
       setError('Please fill in all fields.');
       return;
     }
-    if (!email.endsWith('@dlsud.edu.ph')) {
-      setError('Please use your official university email (e.g., username@dlsud.edu.ph).');
+
+    const { error: signInError } = await signIn.password({ emailAddress: email, password });
+
+    if (signInError) {
+      setError(signInError.message || 'Invalid email or password.');
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const student = await performLogin(email, password);
-      onLoginSuccess(student); // pass the FULL student object
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to reach the server. Please try again.');
-    } finally {
-      setIsLoading(false);
+    if (signIn.status === 'complete') {
+      await signIn.finalize({ navigate: noopNavigate });
+    } else {
+      setError('This account needs additional verification that isn\u2019t supported here yet.');
     }
   };
 
-  // No real Azure AD integration yet — this button authenticates against
-  // the same /api/auth/login endpoint as the admin form, using whatever
-  // email/password is currently filled in. Swap in real MSAL later
-  // without touching anything else in this component.
-  const handleMicrosoftLogin = async () => {
-    setError('');
-    setIsLoading(true);
-    try {
-      const student = await performLogin(email, password);
-      onLoginSuccess(student); // fixed: pass the full student object, not just the email
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to reach the server. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Admin (password) and student (Microsoft SSO) both drive the same shared
+  // `signIn` resource from useSignIn(). A failed attempt in one mode (e.g. a
+  // dlsud.edu.ph email — which has no password, only SSO — submitted through
+  // the admin form) can leave that shared resource in a state a different
+  // strategy can't cleanly recover from afterward, which is why the Microsoft
+  // button can silently stop responding until a real sign-in + sign-out fully
+  // resets Clerk's client-side session state. Switching modes is rare and
+  // cheap to hard-reload, so force a full reload instead of trusting the
+  // shared signIn resource to reset itself.
   const switchToAdmin = () => {
-    setError('');
-    setLoginMode('admin');
+    const url = new URL(window.location.href);
+    url.searchParams.set('mode', 'admin');
+    window.location.href = url.toString();
   };
 
   const switchToStudent = () => {
-    setError('');
-    setLoginMode('student');
+    const url = new URL(window.location.href);
+    url.searchParams.delete('mode');
+    window.location.href = url.toString();
   };
 
   return (
     <div id={id} className="min-h-screen bg-[#f1f5f9] flex items-center justify-center p-4 sm:p-6 md:p-10 lg:p-12">
       <div className="w-full max-w-5xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col lg:flex-row min-h-160 border border-slate-100">
-        
+
         {/* Left Side: Solid DLSU Green Branding Sidebar */}
         <div className="lg:w-[45%] bg-brand-green text-white p-8 sm:p-12 flex flex-col justify-between relative overflow-hidden">
           <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#ffffff_1px,transparent_1px)] bg-size-[16px_16px]"></div>
           <div className="absolute -top-24 -right-24 w-72 h-72 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
           <div className="absolute -bottom-32 -left-16 w-72 h-72 bg-black/10 rounded-full blur-3xl pointer-events-none"></div>
-          
+
           <button
             onClick={onBackToLanding}
             className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white rounded-full px-4.5 py-2 text-xs font-semibold tracking-wide transition-all self-start z-10 backdrop-blur-sm"
@@ -132,22 +167,21 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
 
           <div className="my-10 space-y-6 z-10">
             <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-lg ring-4 ring-white/10 overflow-hidden">
-              <img 
-                src="src\assets\logo.png" 
-                alt="AniSkolar logo" 
+              <img
+                src={logo}
+                alt="AniSkolar logo"
                 className="w-4/5 h-4/5 object-contain"
               />
             </div>
             <div className="space-y-3">
               <h1 className="text-3xl sm:text-4xl font-display font-extrabold tracking-tight">AniSkolar Portal</h1>
               <p className="text-emerald-100/80 text-sm leading-relaxed max-w-xs">
-                Sign in to track your scholarship renewal and access your scholar portal.
+                Sign in to access variety of scholarship programs and supportive services.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 text-[10px] text-emerald-100/40 font-bold uppercase tracking-widest mt-auto z-10">
-            <span className="w-1 h-1 rounded-full bg-emerald-100/40" />
             De La Salle University - Dasmariñas
           </div>
         </div>
@@ -172,7 +206,7 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                     <p className="text-slate-400 text-xs sm:text-sm mt-2 leading-relaxed">
                       {loginMode === 'admin'
                         ? 'Restricted access for scholarship office staff.'
-                        : 'Sign in to track your scholarship renewal and access your scholar portal.'}
+                        : 'Sign in to access variety of scholarship programs and supportive services.'}
                     </p>
                   </div>
                   {loginMode === 'admin' && (
@@ -183,7 +217,23 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                 </div>
 
                 <AnimatePresence>
-                  {error && (
+                  {authError && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="p-3 flex items-start gap-2 bg-rose-50 text-rose-800 rounded-lg border border-rose-100 text-xs font-semibold">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>{authError}</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <AnimatePresence>
+                  {(error || errors.fields?.identifier || errors.fields?.password) && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
@@ -191,7 +241,7 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                       className="overflow-hidden"
                     >
                       <div className="p-3 bg-rose-50 text-rose-800 rounded-lg border border-rose-100 text-xs font-semibold">
-                        {error}
+                        {error || errors.fields?.identifier?.message || errors.fields?.password?.message}
                       </div>
                     </motion.div>
                   )}
@@ -214,7 +264,7 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="e.g. scholar@dlsud.edu.ph"
+                            placeholder="e.g. staff@dlsud.edu.ph"
                             className="block w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all"
                           />
                         </div>
@@ -251,19 +301,6 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                           </button>
                         </div>
                       </div>
-
-                      <label htmlFor="remember-me" className="flex items-center gap-2.5 cursor-pointer select-none group">
-                        <input
-                          id="remember-me"
-                          type="checkbox"
-                          checked={rememberMe}
-                          onChange={(e) => setRememberMe(e.target.checked)}
-                          className="h-4 w-4 rounded border-slate-300 text-brand-green focus:ring-brand-green/15 accent-brand-green cursor-pointer"
-                        />
-                        <span className="text-xs font-medium text-slate-500 group-hover:text-slate-600 transition-colors">
-                          Remember my session on this device
-                        </span>
-                      </label>
 
                       <button
                         type="submit"
@@ -309,7 +346,7 @@ export default function LoginPage({ onLoginSuccess, onBackToLanding, id }: Login
                           <path d="M12 12H23V23H12V12Z" fill="#FFB900"/>
                         </svg>
                       )}
-                      <span>{isLoading ? 'Signing in...' : 'Sign in with Microsoft'}</span>
+                      <span>{isLoading ? 'Redirecting...' : 'Sign in with Microsoft'}</span>
                     </button>
 
                     <div className="relative py-1">

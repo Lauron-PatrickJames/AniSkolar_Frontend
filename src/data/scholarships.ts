@@ -4,6 +4,10 @@ export const mockScholarships: Scholarship[] = [
   {
     id: 's1',
     name: 'Student Financial Aid (SFA) Grant',
+    eligibilityCriteria: {
+      minGpa: undefined, // varies: 85% for freshmen vs 2.50 GPA for upperclassmen — handle in filter below
+      applicantType: 'any'
+    },
     category: 'Financial',
     description: 'This guideline serves as the basis for approving the student financial aid grant application for new students entering the first semester of A.Y. 2026-2027.',
     benefits: [
@@ -37,6 +41,10 @@ export const mockScholarships: Scholarship[] = [
   {
     id: 's2',
     name: 'Entrance Scholarship',
+    eligibilityCriteria: {
+      yearLevels: ['1st Year'], // Grade 7 / Grade 11 don't apply to college portal anyway
+      applicantType: 'incoming'
+    },
     category: 'Academic',
     description: 'This scholarship offers financial aid to deserving Grade 7, Grade 11, and Freshman students who rank at the top of their graduating batch.',
     benefits: [

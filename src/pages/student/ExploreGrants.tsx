@@ -1,11 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Scholarship, Application } from '../../types';
+import { getAvailableScholarships } from '../../utils/eligibility';
+import { Scholarship, Application, StudentProfile } from '../../types';
 import ScholarshipCard from '../../components/ScholarshipCard';
 import { Search, SlidersHorizontal, Info, BookmarkCheck } from 'lucide-react';
+
 
 interface ExploreGrantsProps {
   scholarships: Scholarship[];
   applications: Application[];
+  student: StudentProfile;   // add this
   onViewDetails: (id: string) => void;
   onApply: (id: string) => void;
   id?: string;
@@ -16,6 +19,7 @@ type CategoryFilter = 'All' | 'Academic' | 'Financial' | 'Athletic' | 'Leadershi
 export default function ExploreGrants({
   scholarships,
   applications,
+  student,   // add this
   onViewDetails,
   onApply,
   id
@@ -32,14 +36,19 @@ export default function ExploreGrants({
   }, [applications]);
 
   // Filter & Search Logic
+  const eligibleScholarships = useMemo(
+    () => getAvailableScholarships(scholarships, student),
+    [scholarships, student]
+  );
+
   const filteredScholarships = useMemo(() => {
-    return scholarships.filter(scholarship => {
+    return eligibleScholarships.filter(scholarship => {
       const matchesCategory = activeCategory === 'All' || scholarship.category === activeCategory;
       const matchesSearch = scholarship.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             scholarship.description.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [scholarships, activeCategory, searchQuery]);
+  }, [eligibleScholarships, activeCategory, searchQuery]);
 
   return (
     <div id={id} className="space-y-6">

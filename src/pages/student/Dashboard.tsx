@@ -3,6 +3,7 @@ import { Scholarship, Announcement, Application, StudentProfile } from '../../ty
 import DashboardCard from '../../components/DashboardCard';
 import AnnouncementCard from '../../components/AnnouncementCard';
 import { Award, Compass, FileText, AlertCircle, ArrowRight, UserCheck, Calendar, Bell, Calculator } from 'lucide-react';
+import { getAvailableScholarships } from '../../utils/eligibility';
 import { motion } from 'motion/react';
 
 interface DashboardProps {
@@ -24,14 +25,16 @@ export default function Dashboard({
   onViewScholarship,
   id
 }: DashboardProps) {
+  const eligibleScholarships = getAvailableScholarships(scholarships, student);
+
   // Compute metrics dynamically from data
-  const totalScholarships = scholarships.length;
+  const totalScholarships = eligibleScholarships.length;
   const activeApplications = applications.length;
-  const closingSoonCount = scholarships.filter(s => s.status === 'Closing Soon').length;
+  const closingSoonCount = eligibleScholarships.filter(s => s.status === 'Closing Soon').length;
   const totalAnnouncements = announcements.length;
 
   // Grab upcoming scholarship deadlines
-  const upcomingDeadlines = scholarships
+  const upcomingDeadlines = eligibleScholarships
     .filter(s => s.status !== 'Closed')
     .slice(0, 3);
 

@@ -4,7 +4,13 @@ export interface Scholarship {
   category: 'Academic' | 'Financial' | 'Athletic' | 'Leadership' | 'Others';
   description: string;
   benefits: string[];
-  eligibility: string[];
+  eligibility: string[]; // keep as-is for display
+  eligibilityCriteria?: {
+    yearLevels?: string[];       // e.g. ['1st Year'] — omit if open to all
+    minGpa?: number;             // lower number = better GPA in your scale
+    maxGpa?: number;
+    applicantType?: 'incoming' | 'continuing' | 'any';
+  };
   requirements: string[];
   process: string[];
   deadline: string;
@@ -162,4 +168,29 @@ export interface StudentProfile {
   email: string;
   gpa: string;
   avatarUrl?: string;
+
+  // Personal Details
+  programCode?: string;
+  section?: string;
+  dateOfBirth?: string;
+  nationality?: string;
+  placeOfBirth?: string;
+  civilStatus?: string;
+
+  // Contact Information
+  homeAddress?: string;
+  cityMunicipality?: string;
+  province?: string;
+  zipCode?: string;
+  country?: string;
+  telephoneNumber?: string;
+  mobileNumber?: string;
+
+  // Parents / Guardian Information
+  fatherName?: string;
+  motherName?: string;
+  guardianName?: string;
+  guardianRelationship?: string;
+  guardianAddress?: string;
+  guardianContactNo?: string;
 }

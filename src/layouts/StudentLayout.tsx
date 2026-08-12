@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { StudentProfile } from '../types';
+import { StudentProfile, Application } from '../types';
 import { motion } from 'motion/react';
 
 interface StudentLayoutProps {
@@ -9,6 +9,7 @@ interface StudentLayoutProps {
   currentPage: string;
   onNavigate: (page: string) => void;
   student: StudentProfile;
+  applications: Application[];
   onLogout: () => void;
   pageTitle: string;
   id?: string;
@@ -19,6 +20,7 @@ export default function StudentLayout({
   currentPage,
   onNavigate,
   student,
+  applications,
   onLogout,
   pageTitle,
   id
@@ -34,8 +36,7 @@ export default function StudentLayout({
   };
 
   return (
-    <div id={id} className="min-h-screen bg-slate-50 flex flex-row overflow-hidden">
-      {/* Sidebar Navigation */}
+    <div id={id} className="h-screen bg-slate-50 flex flex-row overflow-hidden">
       <Sidebar
         currentPage={currentPage}
         onNavigate={onNavigate}
@@ -45,18 +46,16 @@ export default function StudentLayout({
         onLogout={onLogout}
       />
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen relative">
-        {/* Top Navbar */}
         <Navbar
           pageTitle={pageTitle}
           student={student}
+          applications={applications}
           onLogout={onLogout}
           onNavigateToProfile={() => onNavigate('profile')}
           onToggleSidebar={toggleSidebar}
         />
 
-        {/* Content Body */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           <motion.div
             key={currentPage}

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { mockScholarships } from '../data/scholarships';
 import { mockAnnouncements } from '../data/announcements';
 import ScholarshipCard from '../components/ScholarshipCard';
-import { ArrowRight, BookOpen, ShieldCheck, HelpCircle, ChevronDown, ChevronUp, Star, Users, DollarSign, Calendar, Info } from 'lucide-react';
+import { ArrowRight, BookOpen, ShieldCheck, HelpCircle, ChevronDown, ChevronUp, Star, Users, DollarSign, Calendar, Info, AlertCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Use the DLSUD background image for the hero section
@@ -14,9 +14,30 @@ interface LandingPageProps {
   onViewScholarship: (id: string) => void;
 }
 
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  invalid_domain: 'Please sign in with your official DLSU-D email address (@dlsud.edu.ph). Other email accounts are not allowed.',
+};
+
 export default function LandingPage({ onLoginClick, onExploreClick, onViewScholarship }: LandingPageProps) {
   // Local state for Accordion FAQs
   const [openFaqIdx, setOpenFaqIdx] = useState<number | null>(0);
+
+  // Surfaces the reason when SsoCallbackPage bounces someone back here
+  // (e.g. ?error=invalid_domain for a non-DLSU-D email). Read once on
+  // mount, then strip the param so a page refresh doesn't re-show it.
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const errorCode = params.get('error');
+    if (errorCode && AUTH_ERROR_MESSAGES[errorCode]) {
+      setAuthError(AUTH_ERROR_MESSAGES[errorCode]);
+      params.delete('error');
+      const newSearch = params.toString();
+      const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}${window.location.hash}`;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, []);
 
   const faqs = [
     {
@@ -45,6 +66,33 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
 
   return (
     <div className="bg-slate-50">
+      {/* Auth error banner (e.g. non-DLSU-D email rejected during Microsoft sign-in) */}
+      <AnimatePresence>
+        {authError && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden bg-rose-50 border-b border-rose-100"
+          >
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 text-rose-800">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <p className="text-xs sm:text-sm font-semibold">{authError}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuthError(null)}
+                className="shrink-0 text-rose-400 hover:text-rose-600 focus:outline-hidden"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 1. Hero Section */}
       <section
         id="hero"

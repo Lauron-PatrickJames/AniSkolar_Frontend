@@ -174,17 +174,24 @@ export default function GPACalculator({ student, id }: GPACalculatorProps) {
     if (includedCount === 0) return null;
     if (hasBelowHonorsThreshold) {
       return {
-        label: 'Grade Below Honors Threshold',
+        label: 'Not on the Honors List',
         tone: 'amber' as const,
         note: 'The Honors List requires no grade lower than 2.50 in any academic subject — at least one entry here is below that.'
       };
     }
+    const verifyNote = 'Still confirm your unit load (\u226575% of your curriculum) and that NSTP/SEP are passed \u2014 this calculator can\u2019t check either.';
+    if (gpa >= 3.5) {
+      return { label: 'First Honors', tone: 'emerald' as const, note: `GPA is 3.50 or higher with no grade below 2.50. ${verifyNote}` };
+    }
+    if (gpa >= 3.0) {
+      return { label: 'Second Honors', tone: 'emerald' as const, note: `GPA is 3.00\u20133.49 with no grade below 2.50. ${verifyNote}` };
+    }
     return {
-      label: 'Meets Grade Requirement',
-      tone: 'emerald' as const,
-      note: 'All entered grades are 2.50 or higher. Still confirm your unit load (≥75% of your curriculum) and that NSTP/SEP are passed — this calculator can\u2019t check either.'
+      label: 'Not on the Honors List',
+      tone: 'amber' as const,
+      note: 'GPA is below 3.00, the minimum for Second Honors.'
     };
-  }, [includedCount, hasBelowHonorsThreshold]);
+  }, [includedCount, hasBelowHonorsThreshold, gpa]);
 
   const handleCopySummary = async () => {
     const lines = courses
@@ -206,7 +213,7 @@ export default function GPACalculator({ student, id }: GPACalculatorProps) {
   };
 
   return (
-    <div id={id} className="space-y-6 max-w-4xl">
+    <div id={id} className="space-y-6">
       {/* Header */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
         <div className="flex items-center gap-3 mb-2">
@@ -277,7 +284,7 @@ export default function GPACalculator({ student, id }: GPACalculatorProps) {
           <div className="col-span-1"></div>
         </div>
 
-        <div className="divide-y divide-slate-100 max-h-[28rem] overflow-y-auto">
+        <div className="divide-y divide-slate-100 max-h-112 overflow-y-auto">
           {courses.map((course, idx) => {
             const unitsValid = isValidUnits(course.units);
             const gradeValid = isValidGrade(course.grade);
@@ -323,7 +330,7 @@ export default function GPACalculator({ student, id }: GPACalculatorProps) {
                   />
                   {!gradeValid && <p className="mt-1 text-[10px] font-semibold text-rose-500">0.0–4.0 only</p>}
                 </div>
-                <div className="sm:col-span-1 flex justify-end items-center gap-1 h-[38px]">
+                <div className="sm:col-span-1 flex justify-end items-center gap-1 h-9.5">
                   <button
                     type="button"
                     onClick={() => duplicateCourse(course)}
@@ -378,7 +385,7 @@ export default function GPACalculator({ student, id }: GPACalculatorProps) {
       <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2.5">
         <Info className="w-4.5 h-4.5 text-blue-600 shrink-0 mt-0.5" />
         <p className="text-xs text-blue-800 leading-relaxed">
-          This calculator uses DLSU-D's standard 4.0 grading scale for personal planning only. Your official GPA is always the one recorded by the University Registrar. Per the DLSU-D Honors List policy, a student qualifies by meeting all three of: (1) an academic load of at least 75% of the units prescribed in the curriculum for the semester, (2) no grade lower than 2.50 in any academic subject, and (3) passing NSTP and SEP. This tool can only check criterion 2 against what you've entered — it has no way to know your full curriculum load or your NSTP/SEP results, so confirm those separately with the Office of the University Registrar.
+          This calculator uses DLSU-D's standard 4.0 grading scale for personal planning only. Your official GPA is always the one recorded by the University Registrar. Per the DLSU-D Honors List policy, a student qualifies by meeting all three of: (1) an academic load of at least 75% of the units prescribed in the curriculum for the semester, (2) no grade lower than 2.50 in any academic subject, and (3) passing NSTP and SEP — with First Honors at a GPA of 3.50 or higher and Second Honors at 3.00–3.49. This tool can only check the GPA and the 2.50 grade floor against what you've entered — it has no way to know your full curriculum load or your NSTP/SEP results, so confirm those separately with the Office of the University Registrar.
         </p>
       </div>
     </div>

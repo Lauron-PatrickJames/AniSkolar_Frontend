@@ -103,6 +103,7 @@ interface SfagAgreement { certifyConsulted: boolean; certifyAccuracy: boolean; }
 interface AdminApplication {
   _id: string;
   studentNumber: string;
+  avatarUrl?: string;
   scholarshipId: string;
   scholarshipName: string;
   applicationFormType: 'standard' | 'sfag';
@@ -234,8 +235,21 @@ function StatusBadge({ status }: { status: AppStatus }) {
 
 // Same treatment as the profile avatar in Navbar: brand-green circle,
 // soft inner shadow, subtle emerald ring.
-function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' | 'lg' }) {
+function Avatar({ name, avatarUrl, size = 'md' }: { name: string; avatarUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
+  const [failed, setFailed] = useState(false);
   const dims = size === 'lg' ? 'w-14 h-14 sm:w-16 sm:h-16 text-base sm:text-lg' : size === 'sm' ? 'w-8 h-8 text-[10px]' : 'w-9 h-9 sm:w-10 sm:h-10 text-[11px] sm:text-xs';
+
+  if (avatarUrl && !failed) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        onError={() => setFailed(true)}
+        className={`${dims} rounded-full object-cover shrink-0 shadow-inner border border-emerald-100`}
+      />
+    );
+  }
+
   return (
     <div className={`${dims} rounded-full bg-brand-green text-white font-display font-bold flex items-center justify-center shrink-0 shadow-inner border border-emerald-100`}>
       {initials(name)}
@@ -607,7 +621,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       // Normalize: the API returns Mongo's _id, keep the same shape the
       // list view uses so the merge below actually matches.
       const updated: AdminApplication = { ...body.application, _id: body.application._id?.toString?.() ?? body.application._id };
-      setApplications(prev => prev.map(a => (a._id === appId ? updated : a)));
+      // PATCH /:id/status doesn't run the avatarUrl $lookup that GET / does,
+      // so `updated` won't have one — fall back to whatever avatarUrl was
+      // already in state for this application rather than letting it get
+      // wiped out and the avatar silently revert to initials.
+      setApplications(prev => prev.map(a => (a._id === appId ? { ...updated, avatarUrl: updated.avatarUrl ?? a.avatarUrl } : a)));
       // Reflect whatever the server actually stored (updated.reviewNote)
       // rather than blanking the field — it should keep showing the note
       // that's now on file, same as reopening the application would.
@@ -649,7 +667,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       }
       const body = await response.json();
       const updated: AdminApplication = { ...body.application, _id: body.application._id?.toString?.() ?? body.application._id };
-      setApplications(prev => prev.map(a => (a._id === selected._id ? updated : a)));
+      // Same avatarUrl fallback as updateStatus above.
+      setApplications(prev => prev.map(a => (a._id === selected._id ? { ...updated, avatarUrl: updated.avatarUrl ?? a.avatarUrl } : a)));
       setReviewNote('');
       setNoteJustSaved(true);
     } catch (err) {
@@ -707,7 +726,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           <div className="bg-white rounded-xl border border-slate-100 p-5 sm:p-6 md:p-8 card-shadow">
             <div className="flex flex-col sm:flex-row sm:items-center gap-5">
               <div className="flex items-center gap-4 sm:contents">
-                <Avatar name={name} size="lg" />
+                <Avatar name={name} avatarUrl={selected.avatarUrl} size="lg" />
                 <div className="flex-1 min-w-0 sm:hidden">
                   <h2 className="font-display font-black text-lg text-slate-900 tracking-tight truncate">{name}</h2>
                   <StatusBadge status={selected.status} />
@@ -1397,7 +1416,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         onClick={() => openApplication(app)}
                         className="w-full flex items-center gap-3 sm:gap-4 p-3.5 sm:p-4 md:p-5 hover:bg-slate-50/60 transition-colors text-left group"
                       >
-                        <Avatar name={name} size="sm" />
+                        <Avatar name={name} avatarUrl={app.avatarUrl} size="sm" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-bold text-slate-800 truncate">{name}</p>

@@ -20,6 +20,7 @@ interface HistoryEntry {
 interface AdminApplication {
   _id: string;
   studentNumber: string;
+  avatarUrl?: string;
   scholarshipId: string;
   scholarshipName: string;
   applicationFormType: 'standard' | 'sfag';
@@ -31,7 +32,6 @@ interface AdminApplication {
   personalInfo?: { firstName: string; lastName: string; course: string; yearLevel: string };
   contactSchool?: { email: string; mobileNo: string };
 }
-
 interface AdminScholarsProps {
   applications: AdminApplication[];
   isLoading?: boolean;
@@ -119,6 +119,7 @@ function academicYearOf(iso: string): string {
 interface ScholarSummary {
   studentNumber: string;
   name: string;
+  avatarUrl?: string;
   email: string;
   phone: string;
   program: string;
@@ -151,6 +152,7 @@ function buildScholarSummaries(applications: AdminApplication[]): ScholarSummary
     return {
       studentNumber,
       name: applicantName(latest),
+      avatarUrl: latest.avatarUrl,
       email: applicantEmail(latest),
       phone: applicantPhone(latest),
       program: applicantProgram(latest),
@@ -163,10 +165,6 @@ function buildScholarSummaries(applications: AdminApplication[]): ScholarSummary
       latestApplication: latest,
       latestStatus: latest.status,
       firstSubmission: oldest.createdAt,
-      // "Renewing" = engaged with the scholarship program more than once,
-      // regardless of whether it was the same specific award each time —
-      // that's the meaningful longitudinal signal for a scholarship office,
-      // not strict same-scholarship-ID repetition.
       isRenewing: apps.length > 1
     };
   }).sort((a, b) => new Date(b.latestApplication.createdAt).getTime() - new Date(a.latestApplication.createdAt).getTime());
@@ -202,8 +200,21 @@ function buildMergedHistory(applications: AdminApplication[]): MergedHistoryEntr
 
 // --- Presentational pieces ---------------------------------------------
 
-function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' | 'lg' }) {
+function Avatar({ name, avatarUrl, size = 'md' }: { name: string; avatarUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
+  const [failed, setFailed] = useState(false);
   const dims = size === 'lg' ? 'w-14 h-14 sm:w-16 sm:h-16 text-base sm:text-lg' : size === 'sm' ? 'w-8 h-8 text-[10px]' : 'w-9 h-9 sm:w-10 sm:h-10 text-[11px] sm:text-xs';
+
+  if (avatarUrl && !failed) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        onError={() => setFailed(true)}
+        className={`${dims} rounded-full object-cover shrink-0 shadow-inner border border-emerald-100`}
+      />
+    );
+  }
+
   return (
     <div className={`${dims} rounded-full bg-brand-green text-white font-display font-bold flex items-center justify-center shrink-0 shadow-inner border border-emerald-100`}>
       {initials(name)}
@@ -331,7 +342,7 @@ export default function AdminScholars({ applications, isLoading }: AdminScholars
         <div className="bg-white rounded-xl border border-slate-100 p-5 sm:p-6 md:p-8 card-shadow">
           <div className="flex flex-col sm:flex-row sm:items-center gap-5">
             <div className="flex items-center gap-4 sm:contents">
-              <Avatar name={selected.name} size="lg" />
+              <Avatar name={selected.name} avatarUrl={selected.avatarUrl} size="lg" />
               <div className="flex-1 min-w-0 sm:hidden">
                 <h2 className="font-display font-black text-lg text-slate-900 tracking-tight truncate">{selected.name}</h2>
                 {selected.isRenewing && (
@@ -488,7 +499,7 @@ export default function AdminScholars({ applications, isLoading }: AdminScholars
                 onClick={() => setSelectedStudentNumber(scholar.studentNumber)}
                 className="w-full flex items-center gap-3 sm:gap-4 p-3.5 sm:p-4 md:p-5 hover:bg-slate-50/60 transition-colors text-left group"
               >
-                <Avatar name={scholar.name} size="sm" />
+                <Avatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="sm" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-bold text-slate-800 truncate">{scholar.name}</p>

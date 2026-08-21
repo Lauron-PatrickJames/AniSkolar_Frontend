@@ -3,16 +3,16 @@ import { Mail, Phone, MapPin, ExternalLink, ShieldCheck } from 'lucide-react';
 
 export default function Footer() {
   return (
-    <footer id="main-footer" className="bg-slate-900 text-slate-300 pt-16 pb-8 border-t border-slate-800">
+    <footer id="main-footer" className="bg-slate-900 text-slate-300 pt-12 sm:pt-16 pb-8 border-t border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 sm:gap-10 mb-10 sm:mb-12">
           {/* Logo & Description */}
-          <div className="md:col-span-1" id="footer-brand">
+          <div className="sm:col-span-2 md:col-span-1" id="footer-brand">
             <div className="flex items-center space-x-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-brand-green flex items-center justify-center font-display font-bold text-white text-lg shadow-md">
+              <div className="w-10 h-10 rounded-full bg-brand-green flex items-center justify-center font-display font-bold text-white text-lg shadow-md shrink-0">
                 AS
               </div>
-              <div>
+              <div className="min-w-0">
                 <span className="font-display font-bold text-xl text-white tracking-tight">AniSkolar</span>
                 <p className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">DLSU-D Portal</p>
               </div>
@@ -48,20 +48,20 @@ export default function Footer() {
               <li>
                 <a href="https://www.dlsud.edu.ph" target="_blank" rel="noopener noreferrer" className="hover:text-brand-green transition-colors flex items-center space-x-1 text-slate-400">
                   <span>Official DLSU-D Website</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                 </a>
               </li>
-              
+
               <li>
                 <a href="https://www.dlsud.edu.ph/aboutSchoolbook.htm" target="_blank" rel="noopener noreferrer" className="hover:text-brand-green transition-colors flex items-center space-x-1 text-slate-400">
                   <span>Schoolbook</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                 </a>
               </li>
               <li>
                 <a href="https://www.dlsud.edu.ph/registrar/" target="_blank" rel="noopener noreferrer" className="hover:text-brand-green transition-colors flex items-center space-x-1 text-slate-400">
                   <span>Office of the University Registrar</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                 </a>
               </li>
             </ul>
@@ -75,23 +75,23 @@ export default function Footer() {
                 <MapPin className="w-4 h-4 text-brand-green shrink-0 mt-1" />
                 <span>Ayuntamiento de Gonzalez Bldg. <br />De La Salle University-Dasmarinas <br />City of Dasmarinas, 4114, Philippines</span>
               </li>
-              <li className="flex items-center space-x-3">
-                <Phone className="w-4 h-4 text-brand-green shrink-0" />
+              <li className="flex items-start space-x-3">
+                <Phone className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />
                 <span>+63 46 4811900 or +63 02 87795180 local 3126</span>
               </li>
-              <li className="flex items-center space-x-3">
-                <Mail className="w-4 h-4 text-brand-green shrink-0" />
-                <span>scholarship@dlsud.edu.ph</span>
+              <li className="flex items-start space-x-3">
+                <Mail className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />
+                <span className="break-all">scholarship@dlsud.edu.ph</span>
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="pt-8 border-t border-slate-800 text-center flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500">
+        <div className="pt-8 border-t border-slate-800 text-center flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-slate-500">
           <p id="copyright">
             © {new Date().getFullYear()} De La Salle University–Dasmariñas. All Rights Reserved.
           </p>
-          <p className="mt-2 sm:mt-0 flex items-center justify-center space-x-1">
+          <p className="flex items-center justify-center space-x-1">
             <span>Designed by </span>
             <span className="text-brand-green font-semibold">CloudCore</span>
           </p>

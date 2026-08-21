@@ -24,6 +24,8 @@ interface ApplyScholarshipProps {
   student: StudentProfile;
   onBack: () => void;
   onSubmitApplication: (application: Application) => void;
+  onResubmitApplication?: (application: Application) => void;
+  existingApplication?: Application;
   id?: string;
 }
 
@@ -246,8 +248,8 @@ function messageForField(value: string, kind: FieldKind): string | undefined {
 
 const DRAFT_STORAGE_PREFIX = 'aniskolar_draft_';
 
-function getDraftKey(scholarshipId: string, studentNumber: string) {
-  return `${DRAFT_STORAGE_PREFIX}${scholarshipId}_${studentNumber}`;
+function getDraftKey(scholarshipId: string, studentNumber: string, clerkId?: string) {
+  return `${DRAFT_STORAGE_PREFIX}${scholarshipId}_${studentNumber}_${clerkId || '_'}`;
 }
 
 interface DraftData {
@@ -268,9 +270,9 @@ interface DraftData {
   previouslyUploadedDocNames: string[];
 }
 
-function loadDraft(scholarshipId: string, studentNumber: string): Partial<DraftData> | null {
+function loadDraft(scholarshipId: string, studentNumber: string, clerkId?: string): Partial<DraftData> | null {
   try {
-    const raw = localStorage.getItem(getDraftKey(scholarshipId, studentNumber));
+    const raw = localStorage.getItem(getDraftKey(scholarshipId, studentNumber, clerkId));
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
@@ -278,9 +280,9 @@ function loadDraft(scholarshipId: string, studentNumber: string): Partial<DraftD
   }
 }
 
-function clearDraft(scholarshipId: string, studentNumber: string) {
+function clearDraft(scholarshipId: string, studentNumber: string, clerkId?: string) {
   try {
-    localStorage.removeItem(getDraftKey(scholarshipId, studentNumber));
+    localStorage.removeItem(getDraftKey(scholarshipId, studentNumber, clerkId));
   } catch {
     // ignore
   }
@@ -323,25 +325,46 @@ export default function ApplyScholarship({
   student,
   onBack,
   onSubmitApplication,
+  onResubmitApplication,
+  existingApplication,
   id
 }: ApplyScholarshipProps) {
   const { getToken } = useAuth();
   const isSfag = scholarship.applicationFormType === 'sfag';
+  const isResubmit = !!existingApplication;
 
   // Load any in-progress draft for this exact scholarship + student combo.
   // Computed once per mount (scholarship/student don't change mid-session).
+  // On a resubmit, we deliberately IGNORE any stray localStorage draft —
+  // the source of truth is the previously-submitted application the LSO
+  // sent back, not a half-finished draft from some earlier session.
   const savedDraft = React.useMemo(
-    () => loadDraft(scholarship.id, student.studentNumber),
-    [scholarship.id, student.studentNumber]
+    () => (isResubmit ? null : loadDraft(scholarship.id, student.studentNumber, student.clerkId)),
+    [scholarship.id, student.studentNumber, student.clerkId, isResubmit]
   );
 
   // --- SFAG multi-step wizard state ---------------------------------------
   const [wizardStep, setWizardStep] = useState<number>(savedDraft?.wizardStep ?? 1);
-  const [personalInfo, setPersonalInfo] = useState<SfagPersonalInfo>(() => normalizePersonalInfo(savedDraft?.personalInfo ?? emptyPersonalInfo(student)));
-  const [contactSchool, setContactSchool] = useState<SfagContactSchool>(() => savedDraft?.contactSchool ?? emptyContactSchool(student));
-  const [parentsGuardian, setParentsGuardian] = useState<SfagParentsGuardian>(savedDraft?.parentsGuardian ?? emptyParentsGuardian(student));  const [siblings, setSiblings] = useState<SfagSibling[]>(savedDraft?.siblings ?? []);
-  const [assetsExpenses, setAssetsExpenses] = useState<SfagAssetsExpenses>(savedDraft?.assetsExpenses ?? emptyAssetsExpenses());
-  const [agreement, setAgreement] = useState<SfagAgreement>(savedDraft?.agreement ?? { certifyConsulted: false, certifyAccuracy: false });
+  const [personalInfo, setPersonalInfo] = useState<SfagPersonalInfo>(() =>
+    normalizePersonalInfo(
+      existingApplication?.sfagDetails?.personalInfo ?? savedDraft?.personalInfo ?? emptyPersonalInfo(student)
+    )
+  );
+  const [contactSchool, setContactSchool] = useState<SfagContactSchool>(() =>
+    existingApplication?.sfagDetails?.contactSchool ?? savedDraft?.contactSchool ?? emptyContactSchool(student)
+  );
+  const [parentsGuardian, setParentsGuardian] = useState<SfagParentsGuardian>(
+    existingApplication?.sfagDetails?.parentsGuardian ?? savedDraft?.parentsGuardian ?? emptyParentsGuardian(student)
+  );
+  const [siblings, setSiblings] = useState<SfagSibling[]>(
+    existingApplication?.sfagDetails?.siblings ?? savedDraft?.siblings ?? []
+  );
+  const [assetsExpenses, setAssetsExpenses] = useState<SfagAssetsExpenses>(
+    existingApplication?.sfagDetails?.assetsExpenses ?? savedDraft?.assetsExpenses ?? emptyAssetsExpenses()
+  );
+  const [agreement, setAgreement] = useState<SfagAgreement>(
+    existingApplication?.sfagDetails?.agreement ?? savedDraft?.agreement ?? { certifyConsulted: false, certifyAccuracy: false }
+  );
   const [sfagFormError, setSfagFormError] = useState('');
 
   // errors: fieldKey -> human readable message. Presence of a key = red highlight.
@@ -379,13 +402,18 @@ export default function ApplyScholarship({
   const [siblingDraftError, setSiblingDraftError] = useState('');
 
   // --- Shared state (both flows) ------------------------------------------
-  const [firstName, setFirstName] = useState(savedDraft?.firstName ?? (student.name.split(' ')[0] || ''));
-  const [lastName, setLastName] = useState(savedDraft?.lastName ?? (student.name.split(' ').slice(1).join(' ') || ''));
-  const [email, setEmail] = useState(savedDraft?.email ?? student.email);
-  const [phone, setPhone] = useState(savedDraft?.phone ?? (student.mobileNumber || ''));  const [studentNumber, setStudentNumber] = useState(student.studentNumber);
-  const [program, setProgram] = useState(savedDraft?.program ?? student.course);
-  const [yearLevel, setYearLevel] = useState(savedDraft?.yearLevel ?? student.yearLevel);
-  const [gpa, setGpa] = useState(savedDraft?.gpa ?? student.gpa);
+  const [firstName, setFirstName] = useState(
+    existingApplication?.personalInfo.firstName ?? savedDraft?.firstName ?? (student.name.split(' ')[0] || '')
+  );
+  const [lastName, setLastName] = useState(
+    existingApplication?.personalInfo.lastName ?? savedDraft?.lastName ?? (student.name.split(' ').slice(1).join(' ') || '')
+  );
+  const [email, setEmail] = useState(existingApplication?.personalInfo.email ?? savedDraft?.email ?? student.email);
+  const [phone, setPhone] = useState(existingApplication?.personalInfo.phone ?? savedDraft?.phone ?? (student.mobileNumber || ''));
+  const [studentNumber, setStudentNumber] = useState(student.studentNumber);
+  const [program, setProgram] = useState(existingApplication?.program ?? savedDraft?.program ?? student.course);
+  const [yearLevel, setYearLevel] = useState(existingApplication?.yearLevel ?? savedDraft?.yearLevel ?? student.yearLevel);
+  const [gpa, setGpa] = useState(existingApplication?.gpa ?? savedDraft?.gpa ?? student.gpa);
 
   const [uploads, setUploads] = useState<Record<string, UploadedFile>>({});
   const [formError, setFormError] = useState('');
@@ -393,10 +421,19 @@ export default function ApplyScholarship({
   const [isSuccess, setIsSuccess] = useState(false);
   const [referenceCode, setReferenceCode] = useState('');
 
+  // Document names already on file from the application being resubmitted —
+  // browsers can't restore actual File bytes, so we still need a fresh
+  // JPG per requirement, but we can tell the student what's already there.
+  const previouslySubmittedDocNames = existingApplication?.documents
+    .filter(d => d.uploaded)
+    .map(d => d.name) ?? [];
+
   // Auto-save the draft to localStorage on every relevant change. File
   // contents are intentionally excluded (see previouslyUploadedDocNames)
   // since browsers can't restore actual File objects after a refresh.
+  // Skipped entirely during a resubmit — see savedDraft comment above.
   useEffect(() => {
+    if (isResubmit) return;
     const draft: DraftData = {
       wizardStep,
       personalInfo,
@@ -416,7 +453,7 @@ export default function ApplyScholarship({
     };
     try {
       localStorage.setItem(
-        getDraftKey(scholarship.id, student.studentNumber),
+        getDraftKey(scholarship.id, student.studentNumber, student.clerkId),
         JSON.stringify(draft)
       );
     } catch {
@@ -425,7 +462,7 @@ export default function ApplyScholarship({
   }, [
     wizardStep, personalInfo, contactSchool, parentsGuardian, siblings,
     assetsExpenses, agreement, firstName, lastName, email, phone, program,
-    yearLevel, gpa, uploads, scholarship.id, student.studentNumber
+    yearLevel, gpa, uploads, scholarship.id, student.studentNumber, student.clerkId, isResubmit
   ]);
 
   const handleFileChange = (docName: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -639,6 +676,12 @@ export default function ApplyScholarship({
   // Requires a Clerk bearer token — the Express CSRF middleware in server.js
   // rejects any non-GET request without a valid session (401 otherwise).
   // Returns the saved Mongo document (with _id and referenceCode) on success.
+  //
+  // NOTE on resubmission: this assumes a matching PATCH /api/applications/:id
+  // endpoint exists (or can be added) that accepts the same multipart shape
+  // and flips status back to 'Under Evaluation' server-side, clearing any
+  // reviewNote. If your backend doesn't have that route yet, this is the
+  // one place that needs the actual endpoint name/contract swapped in.
   const submitToServer = async (sfagDetails?: SfagApplicationDetails): Promise<{ _id: string; referenceCode: string }> => {
     const formData = new FormData();
     const labels: string[] = [];
@@ -669,21 +712,37 @@ export default function ApplyScholarship({
     }
 
     const token = await getToken();
-    const response = await fetch(`${API_BASE_URL}/api/applications`, {
-      method: 'POST',
+
+    const url = isResubmit && existingApplication
+      ? `${API_BASE_URL}/api/applications/${existingApplication.id}`
+      : `${API_BASE_URL}/api/applications`;
+    const method = isResubmit ? 'PATCH' : 'POST';
+
+    if (isResubmit) {
+      // Explicit, in case the backend needs the client to say so rather
+      // than inferring "PATCH means back to review" on its own.
+      formData.append('status', 'Under Evaluation');
+    }
+
+    const response = await fetch(url, {
+      method,
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       body: formData
     });
 
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(body.error || 'Failed to submit application. Please try again.');
+      throw new Error(body.error || `Failed to ${isResubmit ? 'resubmit' : 'submit'} application. Please try again.`);
     }
     return body.application;
   };
 
   const submitFinal = async (sfagDetails?: SfagApplicationDetails) => {
-    const missingDocs = scholarship.requirements.filter(req => !uploads[req]);
+    // On resubmit, a requirement already on file (from the prior submission)
+    // doesn't force a fresh re-upload — only newly-missing ones block.
+    const missingDocs = scholarship.requirements.filter(
+      req => !uploads[req] && !(isResubmit && previouslySubmittedDocNames.includes(req))
+    );
     if (missingDocs.length > 0) {
       setFormError(`Please upload all required files. Missing: ${missingDocs.slice(0, 2).join(', ')}${missingDocs.length > 2 ? ' and others.' : '.'}`);
       return;
@@ -730,15 +789,19 @@ export default function ApplyScholarship({
         ...(sfagDetails ? { sfagDetails } : {})
       };
 
-      // Application is submitted — the in-progress draft is no longer needed
-      clearDraft(scholarship.id, student.studentNumber);
-      setReferenceCode(saved.referenceCode);
+      // in submitFinal, after successful submit:
+      clearDraft(scholarship.id, student.studentNumber, student.clerkId);
+      setReferenceCode(saved.referenceCode || existingApplication?.id.slice(-8).toUpperCase() || '');
       setIsSubmitting(false);
       setIsSuccess(true);
-      onSubmitApplication(newApplication);
+      if (isResubmit && onResubmitApplication) {
+        onResubmitApplication(newApplication);
+      } else {
+        onSubmitApplication(newApplication);
+      }
     } catch (err) {
       setIsSubmitting(false);
-      setFormError(err instanceof Error ? err.message : 'Something went wrong submitting your application. Please try again.');
+      setFormError(err instanceof Error ? err.message : `Something went wrong ${isResubmit ? 'resubmitting' : 'submitting'} your application. Please try again.`);
     }
   };
 
@@ -755,7 +818,7 @@ export default function ApplyScholarship({
   };
 
   const handleDiscardDraft = () => {
-    clearDraft(scholarship.id, student.studentNumber);
+    clearDraft(scholarship.id, student.studentNumber, student.clerkId);
     window.location.reload();
   };
 
@@ -767,11 +830,17 @@ export default function ApplyScholarship({
           <CheckCircle className="w-10 h-10" />
         </div>
         <div className="space-y-2">
-          <h2 className="font-display font-black text-2xl text-slate-900 tracking-tight">Application Submitted Successfully!</h2>
-          <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: {referenceCode}</p>
+          <h2 className="font-display font-black text-2xl text-slate-900 tracking-tight">
+            {isResubmit ? 'Application Resubmitted Successfully!' : 'Application Submitted Successfully!'}
+          </h2>
+          {referenceCode && (
+            <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: {referenceCode}</p>
+          )}
         </div>
         <p className="text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
-          Your application for the <strong>{scholarship.name}</strong> has been received by the Linkages and Scholarship Office (LSO).
+          {isResubmit
+            ? <>Your updated application for the <strong>{scholarship.name}</strong> has been sent back to the Linkages and Scholarship Office (LSO) for another review.</>
+            : <>Your application for the <strong>{scholarship.name}</strong> has been received by the Linkages and Scholarship Office (LSO).</>}
         </p>
         <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-left text-xs text-slate-500 space-y-2">
           <p><strong>What happens next?</strong></p>
@@ -798,7 +867,9 @@ export default function ApplyScholarship({
             Upload Required Documents
           </h3>
           <p className="text-xs text-slate-500 mb-4">
-            Please review the requirements below and upload a JPG scan or photo for each item.
+            {isResubmit
+              ? 'Review the requirements below. Anything already on file is marked — re-upload only what the LSO flagged, or replace any file if you\u2019d like to update it.'
+              : 'Please review the requirements below and upload a JPG scan or photo for each item.'}
           </p>
 
           {savedDraft?.previouslyUploadedDocNames && savedDraft.previouslyUploadedDocNames.length > 0 && Object.keys(uploads).length === 0 && (
@@ -821,9 +892,17 @@ export default function ApplyScholarship({
           <div className="space-y-4">
             {scholarship.requirements.map((req, idx) => {
               const uploadedFile = uploads[req];
+              const alreadyOnFile = isResubmit && !uploadedFile && previouslySubmittedDocNames.includes(req);
               return (
                 <div key={idx} className="p-3 border border-slate-200 rounded-xl space-y-2 bg-slate-50/30">
-                  <p className="text-xs font-bold text-slate-700 leading-snug">{req}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold text-slate-700 leading-snug">{req}</p>
+                    {alreadyOnFile && (
+                      <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                        On file
+                      </span>
+                    )}
+                  </div>
                   {uploadedFile ? (
                     <div className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg border border-emerald-100 text-xs">
                       <div className="flex items-center space-x-2 truncate">
@@ -845,7 +924,7 @@ export default function ApplyScholarship({
                   ) : (
                     <label className="flex items-center justify-center border-2 border-dashed border-slate-200 hover:border-brand-green/40 hover:bg-brand-green/5 rounded-lg p-3 cursor-pointer transition-colors text-xs text-slate-500 font-semibold gap-1.5">
                       <Upload className="w-4 h-4 text-slate-400" />
-                      <span>Select JPG File</span>
+                      <span>{alreadyOnFile ? 'Replace File (optional)' : 'Select JPG File'}</span>
                       <input
                         type="file"
                         accept=".jpg,.jpeg,image/jpeg"
@@ -869,13 +948,15 @@ export default function ApplyScholarship({
             <ArrowLeft className="w-4 h-4" />
             <span>{backLabel}</span>
           </button>
-          <button
-            type="button"
-            onClick={handleDiscardDraft}
-            className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden"
-          >
-            Discard draft and start over
-          </button>
+          {!isResubmit && (
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden"
+            >
+              Discard draft and start over
+            </button>
+          )}
         </div>
       </div>
 
@@ -886,7 +967,7 @@ export default function ApplyScholarship({
             disabled={isSubmitting}
             className="w-full font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-4 rounded-xl transition-all duration-200 shadow-md shadow-emerald-900/10 flex items-center justify-center space-x-1.5 focus:outline-hidden disabled:opacity-50"
           >
-            <span>{isSubmitting ? 'Submitting Application...' : 'Submit Application'}</span>
+            <span>{isSubmitting ? (isResubmit ? 'Resubmitting Application...' : 'Submitting Application...') : (isResubmit ? 'Resubmit Application' : 'Submit Application')}</span>
           </button>
         </div>
 
@@ -907,7 +988,7 @@ export default function ApplyScholarship({
         <div id={id} className="space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
             <h2 className="font-display font-black text-xl md:text-2xl text-slate-900 tracking-tight">
-              Application Form: <span className="text-brand-green">{scholarship.name}</span>
+              {isResubmit ? 'Resubmit Application: ' : 'Application Form: '}<span className="text-brand-green">{scholarship.name}</span>
             </h2>
           </div>
           {renderDocumentUpload(handleStandardSubmit, 'Back to Personal Info', () => setWizardStep(0))}
@@ -927,10 +1008,12 @@ export default function ApplyScholarship({
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
           <h2 className="font-display font-black text-xl md:text-2xl text-slate-900 tracking-tight">
-            Application Form: <span className="text-brand-green">{scholarship.name}</span>
+            {isResubmit ? 'Resubmit Application: ' : 'Application Form: '}<span className="text-brand-green">{scholarship.name}</span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Complete the forms below and upload digital files. Please review your profiles carefully before submission.
+            {isResubmit
+              ? 'Update whatever the LSO flagged, then continue to documents.'
+              : 'Complete the forms below and upload digital files. Please review your profiles carefully before submission.'}
           </p>
         </div>
 
@@ -1061,13 +1144,15 @@ export default function ApplyScholarship({
           </div>
 
           <div className="flex justify-between items-center">
-            <button
-              type="button"
-              onClick={handleDiscardDraft}
-              className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden"
-            >
-              Discard draft and start over
-            </button>
+            {!isResubmit ? (
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden"
+              >
+                Discard draft and start over
+              </button>
+            ) : <span />}
             <button
               type="submit"
               className="inline-flex items-center space-x-1.5 font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-6 py-3.5 rounded-xl transition-all shadow-md shadow-emerald-900/10 focus:outline-hidden"
@@ -1087,7 +1172,7 @@ export default function ApplyScholarship({
       <div id={id} className="space-y-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
           <h2 className="font-display font-black text-xl md:text-2xl text-slate-900 tracking-tight">
-            Application Form: <span className="text-brand-green">{scholarship.name}</span>
+            {isResubmit ? 'Resubmit Application: ' : 'Application Form: '}<span className="text-brand-green">{scholarship.name}</span>
           </h2>
         </div>
         {renderDocumentUpload(handleSfagFinalSubmit, 'Back to Assets, Expenses & Agreement', () => setWizardStep(5))}
@@ -1110,7 +1195,11 @@ export default function ApplyScholarship({
       <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-2.5">
         <AlertCircle className="w-4.5 h-4.5 text-yellow-600 shrink-0 mt-0.5" />
         <p className="text-xs text-yellow-800 leading-relaxed">
-          <strong>Fill out all required fields.</strong> Fields marked <Req /> are mandatory. Use "N/A" where not applicable. Information cannot be changed after submission.
+          {isResubmit ? (
+            <><strong>You're editing a previously submitted application.</strong> Update whatever the LSO flagged, then work back through to Upload Documents to resubmit.</>
+          ) : (
+            <><strong>Fill out all required fields.</strong> Fields marked <Req /> are mandatory. Use "N/A" where not applicable. Information cannot be changed after submission.</>
+          )}
         </p>
       </div>
 
@@ -1878,7 +1967,7 @@ export default function ApplyScholarship({
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>{SFAG_TABS[wizardStep - 2].label}</span>
               </button>
-            ) : (
+            ) : !isResubmit ? (
               <button
                 type="button"
                 onClick={handleDiscardDraft}
@@ -1886,7 +1975,7 @@ export default function ApplyScholarship({
               >
                 Discard draft and start over
               </button>
-            )}
+            ) : <span />}
 
             {wizardStep < 5 ? (
               <button

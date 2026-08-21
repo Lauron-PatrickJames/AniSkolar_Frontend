@@ -32,19 +32,19 @@ export default function DashboardCard({
       whileHover={{ y: -2 }}
       transition={{ duration: 0.15 }}
       onClick={onClick}
-      className={`p-5 rounded-xl border transition-all cursor-pointer ${color} flex flex-col justify-between`}
+      className={`p-3.5 sm:p-5 rounded-xl border transition-all cursor-pointer ${color} flex flex-col justify-between min-w-0`}
     >
-      <div className="flex justify-between items-start mb-3">
-        <div>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{title}</p>
-          <h3 className="text-3xl font-display font-extrabold text-brand-green mt-1.5">{value}</h3>
+      <div className="flex justify-between items-start mb-2.5 sm:mb-3 gap-2">
+        <div className="min-w-0">
+          <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{title}</p>
+          <h3 className="text-2xl sm:text-3xl font-display font-extrabold text-brand-green mt-1 sm:mt-1.5">{value}</h3>
         </div>
-        <div className="p-2.5 bg-slate-50 rounded-lg text-slate-500">
-          <Icon className="w-5 h-5 text-brand-green" />
+        <div className="p-2 sm:p-2.5 bg-slate-50 rounded-lg text-slate-500 shrink-0">
+          <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-brand-green" />
         </div>
       </div>
-      <div>
-        <p className="text-xs text-slate-600 font-medium">{description}</p>
+      <div className="min-w-0">
+        <p className="text-[11px] sm:text-xs text-slate-600 font-medium truncate">{description}</p>
         {trend && (
           <span
             className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${

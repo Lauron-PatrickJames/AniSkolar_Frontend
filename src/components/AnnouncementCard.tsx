@@ -51,25 +51,25 @@ export default function AnnouncementCard({ announcement, id, isInitiallyExpanded
         isExpanded ? 'border-brand-green/30 ring-1 ring-brand-green/5' : ''
       }`}
     >
-      <div className="p-5">
+      <div className="p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <div className="flex items-center space-x-2">
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${getCategoryBadgeColor(announcement.category)}`}>
+          <div className="flex items-center space-x-2 min-w-0">
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border shrink-0 ${getCategoryBadgeColor(announcement.category)}`}>
               {getCategoryIcon(announcement.category)}
               {announcement.category}
             </span>
           </div>
-          <div className="flex items-center text-slate-400 text-xs gap-1">
+          <div className="flex items-center text-slate-400 text-xs gap-1 shrink-0">
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
             <span>{announcement.date}</span>
           </div>
         </div>
 
-        <h3 className="text-base font-display font-bold text-slate-900 leading-snug mb-2 hover:text-brand-green transition-colors cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+        <h3 className="text-sm sm:text-base font-display font-bold text-slate-900 leading-snug mb-2 hover:text-brand-green transition-colors cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
           {announcement.title}
         </h3>
 
-        <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed mb-4">
+        <p className="text-xs sm:text-sm text-slate-600 line-clamp-2 leading-relaxed mb-4">
           {announcement.description}
         </p>
 
@@ -92,8 +92,8 @@ export default function AnnouncementCard({ announcement, id, isInitiallyExpanded
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.25, ease: 'easeInOut' }}
           >
-            <div className="px-5 pb-6 pt-2 border-t border-slate-100 bg-slate-50/50">
-              <div className="prose prose-slate max-w-none text-sm text-slate-700 whitespace-pre-line leading-relaxed font-normal">
+            <div className="px-4 sm:px-5 pb-6 pt-2 border-t border-slate-100 bg-slate-50/50">
+              <div className="prose prose-slate max-w-none text-sm text-slate-700 whitespace-pre-line leading-relaxed font-normal break-words">
                 {announcement.content}
               </div>
             </div>

@@ -5,6 +5,10 @@ export interface NotificationItem {
   text: string;
   time: string;
   isRead: boolean;
+  // Which scholarship this notification is about, if any — lets the UI
+  // navigate straight to the relevant scholarship when clicked. Absent for
+  // notifications that aren't tied to a specific scholarship (e.g. welcome).
+  scholarshipId?: string;
 }
 
 const READ_PREFIX = 'aniskolar_notif_read_';
@@ -55,15 +59,20 @@ export function buildNotifications(student: StudentProfile, applications: Applic
     });
   }
 
-  // One notification per application, reflecting its current status
+  // One notification per application *status* — not just per application.
+  // The id embeds the current status, so when an admin changes an
+  // application from e.g. "Under Evaluation" (already read) to "Rejected",
+  // that's a distinct id the student hasn't read yet, instead of silently
+  // inheriting the read state of the old status under the same app id.
   applications.forEach(app => {
-    const id = `app-${app.id}`;
+    const id = `app-${app.id}-${app.status}`;
     if (cleared.has(id)) return;
     items.push({
       id,
       text: statusMessage(app.scholarshipName, app.status),
       time: app.submittedAt,
-      isRead: read.has(id)
+      isRead: read.has(id),
+      scholarshipId: app.scholarshipId
     });
   });
 
@@ -73,6 +82,14 @@ export function buildNotifications(student: StudentProfile, applications: Applic
 export function markAllRead(studentNumber: string, ids: string[]) {
   const read = getIds(READ_PREFIX, studentNumber);
   ids.forEach(id => read.add(id));
+  saveIds(READ_PREFIX, studentNumber, read);
+}
+
+// Marks a single notification read — used when the person clicks an
+// individual item, as opposed to the "Mark all read" bulk action.
+export function markRead(studentNumber: string, id: string) {
+  const read = getIds(READ_PREFIX, studentNumber);
+  read.add(id);
   saveIds(READ_PREFIX, studentNumber, read);
 }
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Scholarship, Application } from '../../types';
-import { ArrowLeft, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface ScholarshipDetailsProps {
@@ -8,17 +8,77 @@ interface ScholarshipDetailsProps {
   applications: Application[];
   onBack: () => void;
   onApply: (id: string) => void;
+  onResubmit?: (applicationId: string) => void;
   id?: string;
 }
+
+// Same four statuses AdminDashboard writes via PATCH /:id/status. Kept in
+// sync with that enum (also mirrored server-side in models/Application.js).
+type AppStatus = 'Under Evaluation' | 'Approved' | 'Rejected' | 'Needs Revision';
+
+const STATUS_META: Record<AppStatus, {
+  label: string;
+  description: string;
+  badgeClass: string;
+  cardClass: string;
+  iconWrapClass: string;
+  icon: React.ElementType;
+}> = {
+  'Under Evaluation': {
+    label: 'Application Submitted',
+    description: 'Your application is in the queue and awaiting review by the LSO.',
+    badgeClass: 'bg-slate-100 text-slate-500 border border-slate-200',
+    cardClass: 'bg-slate-50 border-slate-200',
+    iconWrapClass: 'bg-slate-100 text-slate-500',
+    icon: Clock
+  },
+  'Approved': {
+    label: 'Application Approved',
+    description: 'Congratulations — your application has been approved by the LSO.',
+    badgeClass: 'bg-emerald-50 text-brand-green border border-emerald-200',
+    cardClass: 'bg-emerald-50 border-emerald-200',
+    iconWrapClass: 'bg-emerald-100 text-brand-green',
+    icon: CheckCircle
+  },
+  'Rejected': {
+    label: 'Application Rejected',
+    description: 'Your application was not approved this cycle. See the note below for details.',
+    badgeClass: 'bg-rose-50 text-rose-600 border border-rose-200',
+    cardClass: 'bg-rose-50 border-rose-200',
+    iconWrapClass: 'bg-rose-100 text-rose-600',
+    icon: XCircle
+  },
+  'Needs Revision': {
+    label: 'Revision Needed',
+    description: 'The LSO has requested changes before this application can move forward.',
+    badgeClass: 'bg-sky-50 text-sky-700 border border-sky-200',
+    cardClass: 'bg-sky-50 border-sky-200',
+    iconWrapClass: 'bg-sky-100 text-sky-700',
+    icon: AlertTriangle
+  }
+};
 
 export default function ScholarshipDetails({
   scholarship,
   applications,
   onBack,
   onApply,
+  onResubmit,
   id
 }: ScholarshipDetailsProps) {
-  const isApplied = applications.some(app => app.scholarshipId === scholarship.id);
+  // Look up the actual application (not just whether one exists) so the
+  // button/badge can reflect its real review status. If a student somehow
+  // has more than one application on file for this scholarship, prefer the
+  // most recently submitted one.
+  const existingApplication = applications
+    .filter(app => app.scholarshipId === scholarship.id)
+    .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())[0];
+
+  const isApplied = !!existingApplication;
+  const status = (existingApplication?.status as AppStatus) ?? 'Under Evaluation';
+  const meta = STATUS_META[status] ?? STATUS_META['Under Evaluation'];
+  const StatusIcon = meta.icon;
+  const hasNote = !!existingApplication?.reviewNote && (status === 'Rejected' || status === 'Needs Revision');
 
   return (
     <div id={id} className="space-y-6">
@@ -54,19 +114,67 @@ export default function ScholarshipDetails({
           </div>
         </div>
 
-        {/* Apply Action */}
-        <button
-          onClick={() => onApply(scholarship.id)}
-          disabled={isApplied || scholarship.status === 'Closed'}
-          className={`w-full md:w-auto font-display font-bold uppercase text-xs tracking-wider px-8 py-3.5 rounded-xl transition-all shadow-sm focus:outline-hidden text-center shrink-0 ${
-            isApplied
-              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-              : 'bg-brand-green text-white hover:bg-brand-green-dark hover:shadow-md'
-          }`}
-        >
-          {isApplied ? 'Application Submitted' : 'Apply For This Scholarship'}
-        </button>
+        {/* Apply Action — once applied, this becomes a disabled status button
+            (label reflects current review state); the status card below
+            carries the detail, note, and any resubmit action. */}
+        <div className="w-full md:w-auto shrink-0">
+          <button
+            onClick={() => onApply(scholarship.id)}
+            disabled={isApplied || scholarship.status === 'Closed'}
+            className={`w-full md:w-auto font-display font-bold uppercase text-xs tracking-wider px-8 py-3.5 rounded-xl transition-all shadow-sm focus:outline-hidden text-center inline-flex items-center justify-center gap-2 ${
+              isApplied
+                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                : 'bg-brand-green text-white hover:bg-brand-green-dark hover:shadow-md'
+            }`}
+          >
+            {isApplied && <StatusIcon className="w-4 h-4" />}
+            {isApplied ? meta.label : 'Apply For This Scholarship'}
+          </button>
+        </div>
       </div>
+
+      {/* Status Card — replaces the old inline badge once an application exists.
+          Shows the current review state, a one-line explainer, and (for
+          Rejected / Needs Revision) the LSO's note plus a resubmit action. */}
+      {isApplied && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          className={`rounded-2xl border p-5 md:p-6 shadow-xs ${meta.cardClass}`}
+        >
+          <div className="flex items-start gap-4">
+            <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${meta.iconWrapClass}`}>
+              <StatusIcon className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0 space-y-1">
+              <h4 className="font-display font-extrabold text-sm text-slate-900">
+                {meta.label}
+              </h4>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {meta.description}
+              </p>
+
+              {hasNote && (
+                <div className="mt-3 p-3 rounded-lg bg-white/70 border border-white text-xs text-slate-600 leading-relaxed">
+                  <span className="font-bold text-slate-700">Note from LSO: </span>
+                  {existingApplication?.reviewNote}
+                </div>
+              )}
+
+              {status === 'Needs Revision' && onResubmit && existingApplication && (
+                <button
+                  onClick={() => onResubmit(existingApplication.id)}
+                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-sky-700 text-white hover:bg-sky-800 transition-colors shadow-sm focus:outline-hidden"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Resubmit Documents
+                </button>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Details Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

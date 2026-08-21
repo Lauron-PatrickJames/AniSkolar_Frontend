@@ -8,6 +8,9 @@ interface StudentLayoutProps {
   children: React.ReactNode;
   currentPage: string;
   onNavigate: (page: string) => void;
+  // Lets a clicked notification (e.g. "Your application for X was approved")
+  // jump straight to that scholarship's details page.
+  onViewScholarship: (scholarshipId: string) => void;
   student: StudentProfile;
   applications: Application[];
   onLogout: () => void;
@@ -19,6 +22,7 @@ export default function StudentLayout({
   children,
   currentPage,
   onNavigate,
+  onViewScholarship,
   student,
   applications,
   onLogout,
@@ -54,6 +58,8 @@ export default function StudentLayout({
           onLogout={onLogout}
           onNavigateToProfile={() => onNavigate('profile')}
           onToggleSidebar={toggleSidebar}
+          onViewScholarship={onViewScholarship}
+          onNavigate={onNavigate}
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">

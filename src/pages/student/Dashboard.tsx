@@ -39,24 +39,24 @@ export default function Dashboard({
     .slice(0, 3);
 
   return (
-    <div id={id} className="space-y-8">
+    <div id={id} className="space-y-6 sm:space-y-8">
       {/* Welcome Banner */}
-      <div className="hero-placeholder h-50 rounded-2xl flex flex-col justify-center px-8 sm:px-10 text-white card-shadow shrink-0 relative overflow-hidden">
+      <div className="hero-placeholder min-h-[13rem] sm:h-50 sm:min-h-0 rounded-2xl flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-0 md:px-10 text-white card-shadow shrink-0 relative overflow-hidden">
         <div className="relative z-10 max-w-2xl space-y-2">
-          <h2 className="text-2xl sm:text-3xl font-display font-extrabold tracking-tight leading-tight">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-extrabold tracking-tight leading-tight">
             Welcome back, <span className="text-emerald-300">{student.name.split(' ')[0]}</span>!
           </h2>
           <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed font-normal">
             Explore and manage your educational journey with AniSkolar's integrated scholarship portal. Check your eligibility status, active grants, and upcoming deadlines.
           </p>
-          <div className="pt-2 flex flex-wrap items-center gap-3">
-            <span className="text-[11px] font-semibold bg-white/10 px-3 py-1 rounded-full text-white border border-white/10">
+          <div className="pt-2 flex flex-wrap items-center gap-2 sm:gap-3">
+            <span className="text-[10px] sm:text-[11px] font-semibold bg-white/10 px-2.5 sm:px-3 py-1 rounded-full text-white border border-white/10">
               ID: {student.studentNumber}
             </span>
-            <span className="text-[11px] font-semibold bg-white/10 px-3 py-1 rounded-full text-white border border-white/10">
+            <span className="text-[10px] sm:text-[11px] font-semibold bg-white/10 px-2.5 sm:px-3 py-1 rounded-full text-white border border-white/10">
               GPA: {student.gpa}
             </span>
-            <span className="text-[11px] font-semibold bg-white/10 px-3 py-1 rounded-full text-white border border-white/10">
+            <span className="text-[10px] sm:text-[11px] font-semibold bg-white/10 px-2.5 sm:px-3 py-1 rounded-full text-white border border-white/10 truncate max-w-[60vw] sm:max-w-none">
               {student.course}
             </span>
           </div>
@@ -64,7 +64,7 @@ export default function Dashboard({
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         <DashboardCard
           title="Total Grants Available"
           value={totalScholarships}
@@ -98,14 +98,14 @@ export default function Dashboard({
       </div>
 
       {/* Main Dual Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
         {/* Left Column: Recent Announcements */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="font-display font-bold text-lg text-slate-900">Recent LSO Announcements</h3>
+        <div className="lg:col-span-2 space-y-5 sm:space-y-6 min-w-0">
+          <div className="flex justify-between items-center gap-2">
+            <h3 className="font-display font-bold text-base sm:text-lg text-slate-900">Recent LSO Announcements</h3>
             <button
               onClick={() => onNavigate('announcements')}
-              className="text-xs font-semibold text-brand-green hover:text-brand-green-dark flex items-center space-x-1 focus:outline-hidden"
+              className="text-xs font-semibold text-brand-green hover:text-brand-green-dark flex items-center space-x-1 focus:outline-hidden shrink-0"
             >
               <span>View All</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -120,19 +120,22 @@ export default function Dashboard({
         </div>
 
         {/* Right Column: Deadlines & Quick Actions */}
-        <div className="space-y-6">
+        <div className="space-y-5 sm:space-y-6 min-w-0">
           {/* Upcoming Deadlines */}
           <div>
-            <h3 className="font-display font-bold text-lg text-slate-900 mb-4">Upcoming Deadlines</h3>
+            <h3 className="font-display font-bold text-base sm:text-lg text-slate-900 mb-3 sm:mb-4">Upcoming Deadlines</h3>
             <div className="bg-white rounded-xl border border-slate-200 shadow-xs divide-y divide-slate-100 overflow-hidden">
+              {upcomingDeadlines.length === 0 && (
+                <div className="p-5 text-center text-xs text-slate-400 font-medium">No upcoming deadlines right now.</div>
+              )}
               {upcomingDeadlines.map(s => (
                 <div
                   key={s.id}
                   onClick={() => onViewScholarship(s.id)}
-                  className="p-4 hover:bg-slate-50 transition-colors cursor-pointer group"
+                  className="p-3.5 sm:p-4 hover:bg-slate-50 transition-colors cursor-pointer group"
                 >
                   <div className="flex justify-between items-start gap-2">
-                    <span className="font-semibold text-xs text-slate-700 group-hover:text-brand-green transition-colors line-clamp-1">
+                    <span className="font-semibold text-xs text-slate-700 group-hover:text-brand-green transition-colors line-clamp-1 min-w-0">
                       {s.name}
                     </span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 uppercase tracking-wide ${
@@ -144,8 +147,8 @@ export default function Dashboard({
                     </span>
                   </div>
                   <div className="flex items-center text-slate-400 text-[11px] mt-2 gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="font-medium text-slate-500">Deadline: {s.deadline}</span>
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="font-medium text-slate-500 truncate">Deadline: {s.deadline}</span>
                   </div>
                 </div>
               ))}
@@ -154,39 +157,39 @@ export default function Dashboard({
 
           {/* Quick Action Hub */}
           <div>
-            <h3 className="font-display font-bold text-lg text-slate-900 mb-4">Quick Actions</h3>
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs space-y-3">
+            <h3 className="font-display font-bold text-base sm:text-lg text-slate-900 mb-3 sm:mb-4">Quick Actions</h3>
+            <div className="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 shadow-xs space-y-2.5 sm:space-y-3">
               <button
                 onClick={() => onNavigate('explore')}
-                className="w-full flex items-center justify-between p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
+                className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
               >
-                <span className="flex items-center space-x-2.5">
-                  <Compass className="w-4 h-4 text-brand-green" />
-                  <span>Browse Available Scholarships</span>
+                <span className="flex items-center space-x-2.5 min-w-0">
+                  <Compass className="w-4 h-4 text-brand-green shrink-0" />
+                  <span className="truncate">Browse Available Scholarships</span>
                 </span>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               </button>
 
               <button
                 onClick={() => onNavigate('gpa-calculator')}
-                className="w-full flex items-center justify-between p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
+                className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
               >
-                <span className="flex items-center space-x-2.5">
-                  <Calculator className="w-4 h-4 text-brand-green" />
-                  <span>GPA Calculator</span>
+                <span className="flex items-center space-x-2.5 min-w-0">
+                  <Calculator className="w-4 h-4 text-brand-green shrink-0" />
+                  <span className="truncate">GPA Calculator</span>
                 </span>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               </button>
-              
+
               <button
                 onClick={() => onNavigate('profile')}
-                className="w-full flex items-center justify-between p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
+                className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
               >
-                <span className="flex items-center space-x-2.5">
-                  <UserCheck className="w-4 h-4 text-brand-green" />
-                  <span>Update Profile</span>
+                <span className="flex items-center space-x-2.5 min-w-0">
+                  <UserCheck className="w-4 h-4 text-brand-green shrink-0" />
+                  <span className="truncate">Update Profile</span>
                 </span>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               </button>
             </div>
           </div>

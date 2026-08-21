@@ -43,30 +43,31 @@ export default function Sidebar({
       {/* Sidebar Container */}
       <aside
         id={id}
-        className={`fixed md:sticky top-0 left-0 h-screen w-64 bg-white border-r border-slate-200 text-slate-700 flex flex-col z-50 transition-transform duration-300 md:transform-none ${
+        className={`fixed md:sticky top-0 left-0 h-screen w-[78vw] max-w-64 sm:w-64 bg-white border-r border-slate-200 text-slate-700 flex flex-col z-50 transition-transform duration-300 md:transform-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
         {/* Sidebar Header with University Branding */}
-        <div className="p-6 flex items-center justify-between border-b border-slate-50 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md border-2 border-white overflow-hidden">
-                <img 
-                  src={logo} 
-                  alt="AniSkolar logo" 
+        <div className="p-4 sm:p-6 flex items-center justify-between border-b border-slate-50 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center shadow-md border-2 border-white overflow-hidden shrink-0">
+                <img
+                  src={logo}
+                  alt="AniSkolar logo"
                   className="w-4/5 h-4/5 object-contain"
                 />
               </div>
-            <div>
-              <h1 className="text-lg font-bold leading-none text-brand-green uppercase tracking-tight">AniSkolar</h1>
-              <p className="text-[10px] text-slate-400 font-semibold mt-1">DLSU-DASMARIÑAS</p>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold leading-none text-brand-green uppercase tracking-tight truncate">AniSkolar</h1>
+              <p className="text-[10px] text-slate-400 font-semibold mt-1 truncate">DLSU-DASMARIÑAS</p>
             </div>
           </div>
 
           {/* Close Sidebar button (Mobile only) */}
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 md:hidden focus:outline-hidden"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 md:hidden focus:outline-hidden shrink-0"
+            aria-label="Close sidebar"
           >
             <X className="w-5 h-5" />
           </button>
@@ -84,26 +85,26 @@ export default function Sidebar({
                   onNavigate(item.id);
                   onClose();
                 }}
-                className={`w-full flex items-center px-6 py-3 text-sm font-medium transition-colors duration-200 focus:outline-hidden group ${
+                className={`w-full flex items-center px-5 sm:px-6 py-3 text-sm font-medium transition-colors duration-200 focus:outline-hidden group ${
                   isActive
                     ? 'sidebar-item-active'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >
-                <Icon className={`w-5 h-5 mr-3 transition-colors ${isActive ? 'text-brand-green' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                <span>{item.name}</span>
+                <Icon className={`w-5 h-5 mr-3 shrink-0 transition-colors ${isActive ? 'text-brand-green' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                <span className="truncate">{item.name}</span>
               </button>
             );
           })}
         </nav>
 
         {/* Sidebar Footer with Logout & University Slogan */}
-        <div className="p-6 border-t border-slate-100 shrink-0">
+        <div className="p-4 sm:p-6 border-t border-slate-100 shrink-0">
           <button
             onClick={onLogout}
             className="flex items-center w-full px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors focus:outline-hidden"
           >
-            <LogOut className="w-5 h-5 mr-3" />
+            <LogOut className="w-5 h-5 mr-3 shrink-0" />
             Sign Out
           </button>
         </div>

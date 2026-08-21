@@ -38,17 +38,17 @@ function DetailRow({ icon: Icon, label, value, accent, missing }: {
   icon: React.ElementType; label: string; value: React.ReactNode; accent?: boolean; missing?: boolean;
 }) {
   return (
-    <div className="flex items-center space-x-4">
-      <div className={`p-2.5 rounded-xl border shrink-0 ${
+    <div className="flex items-center space-x-3 sm:space-x-4">
+      <div className={`p-2 sm:p-2.5 rounded-xl border shrink-0 ${
         missing ? 'bg-slate-50 border-dashed border-slate-200 text-slate-300'
           : accent ? 'bg-emerald-50 border-emerald-100 text-brand-green'
           : 'bg-slate-50 border-slate-100 text-slate-500'
       }`}>
-        <Icon className="w-5 h-5" />
+        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider leading-none">{label}</p>
-        <p className={`text-sm font-semibold mt-1 truncate ${
+        <p className={`text-sm font-semibold mt-1 break-words sm:truncate ${
           missing ? 'text-slate-300 italic font-medium' : accent ? 'text-brand-green' : 'text-slate-800'
         }`}>
           {value}
@@ -67,9 +67,16 @@ const EDIT_TABS: { key: EditTab; label: string; icon: React.ElementType }[] = [
   { key: 'family', label: 'Parents / Guardian', icon: Users },
 ];
 
+// How long the Save Changes button stays disabled right after landing on
+// the Family tab — guards against a fast accidental double-click on Next
+// (which sits in the exact same spot Save Changes then occupies) from
+// submitting the form before the student ever sees the tab.
+const SUBMIT_GUARD_MS = 400;
+
 export default function Profile({ student, onUpdateProfile, id }: ProfileProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<EditTab>('academic');
+  const [justSwitched, setJustSwitched] = useState(false);
 
   // Academic
   const [course, setCourse] = useState(student.course);
@@ -84,6 +91,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
   const [nationality, setNationality] = useState(student.nationality || '');
   const [placeOfBirth, setPlaceOfBirth] = useState(student.placeOfBirth || '');
   const [civilStatus, setCivilStatus] = useState(student.civilStatus || '');
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   // Contact Information
   const [homeAddress, setHomeAddress] = useState(student.homeAddress || '');
@@ -109,8 +117,24 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
     setIsEditing(true);
   };
 
+  const goToTab = (tab: EditTab) => {
+    setActiveTab(tab);
+    // Only the transition into the final (Family) tab needs the guard —
+    // that's the only spot where Next's position gets reused by Save Changes.
+    if (tab === 'family') {
+      setJustSwitched(true);
+      setTimeout(() => setJustSwitched(false), SUBMIT_GUARD_MS);
+    }
+  };
+
+  const goToNextTab = () => {
+    const nextTab = EDIT_TABS[EDIT_TABS.findIndex(t => t.key === activeTab) + 1].key;
+    goToTab(nextTab);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (justSwitched) return; // extra safety net alongside the disabled attribute
 
     const updatedProfile: StudentProfile = {
       ...student,
@@ -128,7 +152,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
   };
 
   return (
-    <div id={id} className="space-y-6">
+    <div id={id} className="space-y-4 sm:space-y-6">
       {/* Toast Notification */}
       <AnimatePresence>
         {showToast && (
@@ -136,9 +160,9 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
             initial={{ opacity: 0, y: -20, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-3.5 rounded-xl shadow-xl flex items-center space-x-3 border border-slate-800"
+            className="fixed top-4 sm:top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-xl shadow-xl flex items-center space-x-3 border border-slate-800 w-[calc(100%-2rem)] sm:w-auto justify-center"
           >
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
             <span className="text-xs font-semibold">Profile updated successfully!</span>
           </motion.div>
         )}
@@ -146,7 +170,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
 
       {/* Main Profile Info Banner */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-        <div className="h-32 bg-linear-to-r from-brand-green/80 to-slate-900/90 relative overflow-hidden">
+        <div className="h-24 sm:h-32 bg-linear-to-r from-brand-green/80 to-slate-900/90 relative overflow-hidden">
           <div
             className="absolute inset-0 opacity-[0.07]"
             style={{
@@ -156,15 +180,24 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
           />
         </div>
 
-        <div className="px-6 pb-8 relative">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between -mt-16 mb-6 gap-4">
-            <div className="w-28 h-28 rounded-2xl bg-brand-green text-white flex items-center justify-center font-display font-black text-4xl shadow-lg border-4 border-white">
-              {student.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-            </div>
+        <div className="px-4 sm:px-6 pb-6 sm:pb-8 relative">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between -mt-12 sm:-mt-16 mb-4 sm:mb-6 gap-4">
+            {student.avatarUrl && !avatarFailed ? (
+              <img
+                src={student.avatarUrl}
+                alt={student.name}
+                onError={() => setAvatarFailed(true)}
+                className="w-20 h-20 sm:w-28 sm:h-28 rounded-2xl object-cover shadow-lg border-2 border-white shrink-0"
+              />
+            ) : (
+              <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-2xl bg-brand-green text-white flex items-center justify-center font-display font-black text-2xl sm:text-4xl shadow-lg border-4 border-white shrink-0">
+                {student.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+              </div>
+            )}
 
             <button
               onClick={() => openEditor('academic')}
-              className="inline-flex items-center space-x-1.5 self-start text-xs font-bold uppercase tracking-wider text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-5 py-3 rounded-lg transition-colors focus:outline-hidden"
+              className="inline-flex items-center justify-center space-x-1.5 self-start sm:self-auto text-xs font-bold uppercase tracking-wider text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-4 sm:px-5 py-2.5 sm:py-3 rounded-lg transition-colors focus:outline-hidden w-full sm:w-auto"
             >
               <Edit3 className="w-4 h-4 text-slate-500" />
               <span>Edit Profile</span>
@@ -172,23 +205,23 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
           </div>
 
           <div className="space-y-1">
-            <h2 className="font-display font-black text-2xl text-slate-900 tracking-tight">{student.name}</h2>
+            <h2 className="font-display font-black text-xl sm:text-2xl text-slate-900 tracking-tight break-words">{student.name}</h2>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">{student.studentNumber}</p>
           </div>
         </div>
       </div>
 
       {/* Grid of Profile Details */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Academic Status */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="font-display font-extrabold text-base text-slate-900">Academic Status</h3>
-            <button onClick={() => openEditor('academic')} className="text-slate-300 hover:text-brand-green transition-colors">
+            <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900">Academic Status</h3>
+            <button onClick={() => openEditor('academic')} className="text-slate-300 hover:text-brand-green transition-colors p-1 -m-1">
               <Edit3 className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             <DetailRow icon={GraduationCap} label="Course / Program" value={show(student.course)} missing={!student.course} />
             <DetailRow icon={School} label="College Department" value={show(student.college)} missing={!student.college} />
             <DetailRow icon={Layers} label="Year Level / Section" value={`${show(student.yearLevel)}${student.section ? ` — ${student.section}` : ''}`} missing={!student.yearLevel} />
@@ -197,14 +230,14 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
         </div>
 
         {/* Personal Details */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="font-display font-extrabold text-base text-slate-900">Personal Details</h3>
-            <button onClick={() => openEditor('personal')} className="text-slate-300 hover:text-brand-green transition-colors">
+            <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900">Personal Details</h3>
+            <button onClick={() => openEditor('personal')} className="text-slate-300 hover:text-brand-green transition-colors p-1 -m-1">
               <Edit3 className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             <DetailRow icon={Cake} label="Date of Birth" value={formatDateDisplay(student.dateOfBirth)} missing={!student.dateOfBirth} />
             <DetailRow icon={Flag} label="Nationality" value={show(student.nationality)} missing={!student.nationality} />
             <DetailRow icon={MapPinned} label="Place of Birth" value={show(student.placeOfBirth)} missing={!student.placeOfBirth} />
@@ -213,14 +246,14 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
         </div>
 
         {/* Contact Information */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="font-display font-extrabold text-base text-slate-900">Contact Information</h3>
-            <button onClick={() => openEditor('contact')} className="text-slate-300 hover:text-brand-green transition-colors">
+            <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900">Contact Information</h3>
+            <button onClick={() => openEditor('contact')} className="text-slate-300 hover:text-brand-green transition-colors p-1 -m-1">
               <Edit3 className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             <DetailRow icon={Mail} label="University Email" value={student.email} />
             <DetailRow
               icon={MapPin}
@@ -238,14 +271,14 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
         </div>
 
         {/* Parents / Guardian Information */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="font-display font-extrabold text-base text-slate-900">Parents / Guardian Information</h3>
-            <button onClick={() => openEditor('family')} className="text-slate-300 hover:text-brand-green transition-colors">
+            <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900">Parents / Guardian Information</h3>
+            <button onClick={() => openEditor('family')} className="text-slate-300 hover:text-brand-green transition-colors p-1 -m-1">
               <Edit3 className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             <DetailRow icon={User} label="Father" value={show(student.fatherName)} missing={!student.fatherName} />
             <DetailRow icon={User} label="Mother" value={show(student.motherName)} missing={!student.motherName} />
             <DetailRow
@@ -262,22 +295,30 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
       {/* Edit Profile Modal */}
       <AnimatePresence>
         {isEditing && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-0 sm:p-4">
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
+              initial={{ scale: 0.98, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden"
+              exit={{ scale: 0.98, opacity: 0 }}
+              className="bg-white sm:rounded-2xl border-0 sm:border border-slate-200 shadow-2xl max-w-3xl w-full h-full sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden"
             >
-              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                <span className="font-display font-bold text-base text-slate-800">Edit Portal Profile</span>
+              <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                <span className="font-display font-bold text-sm sm:text-base text-slate-800">Edit Portal Profile</span>
                 <button onClick={() => setIsEditing(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="flex-1 flex min-h-0">
-                {/* Tab rail */}
+              <form
+                onSubmit={handleSubmit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && activeTab !== 'family') {
+                    e.preventDefault();
+                  }
+                }}
+                className="flex-1 flex min-h-0 relative"
+              >
+                {/* Tab rail (desktop) */}
                 <div className="w-44 shrink-0 border-r border-slate-100 bg-slate-50/50 py-3 hidden sm:block">
                   {EDIT_TABS.map(tab => {
                     const Icon = tab.icon;
@@ -286,7 +327,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                       <button
                         key={tab.key}
                         type="button"
-                        onClick={() => setActiveTab(tab.key)}
+                        onClick={() => goToTab(tab.key)}
                         className={`w-full flex items-center gap-2 px-4 py-3 text-xs font-bold text-left transition-colors border-l-2 ${
                           isActive
                             ? 'border-brand-green text-brand-green bg-white'
@@ -301,13 +342,13 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                 </div>
 
                 {/* Mobile tab select */}
-                <div className="sm:hidden absolute top-[57px] left-0 right-0 border-b border-slate-100 bg-white z-10 px-3 py-2 flex gap-1 overflow-x-auto">
+                <div className="sm:hidden absolute top-0 left-0 right-0 border-b border-slate-100 bg-white z-10 px-2 py-2 flex gap-1 overflow-x-auto">
                   {EDIT_TABS.map(tab => (
                     <button
                       key={tab.key}
                       type="button"
-                      onClick={() => setActiveTab(tab.key)}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${
+                      onClick={() => goToTab(tab.key)}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors shrink-0 ${
                         activeTab === tab.key ? 'bg-brand-green text-white' : 'bg-slate-100 text-slate-500'
                       }`}
                     >
@@ -318,14 +359,14 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
 
                 {/* Tab content */}
                 <div className="flex-1 min-w-0 flex flex-col">
-                  <div className="flex-1 overflow-y-auto p-6 space-y-5 sm:mt-0 mt-11">
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 mt-11 sm:mt-0">
                     {activeTab === 'academic' && (
                       <div className="space-y-4">
-                        <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-500 flex items-center gap-2">
-                          <Mail className="w-3.5 h-3.5 shrink-0" />
-                          <span>Signed in as <span className="font-semibold text-slate-700">{student.email}</span> — name and email are managed by your account, not this form.</span>
+                        <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-500 flex items-start sm:items-center gap-2">
+                          <Mail className="w-3.5 h-3.5 shrink-0 mt-0.5 sm:mt-0" />
+                          <span>Signed in as <span className="font-semibold text-slate-700 break-all">{student.email}</span> — name and email are managed by your account, not this form.</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className={labelClass}>Course</label>
                             <input type="text" value={course} onChange={(e) => setCourse(e.target.value)} className={inputClass} />
@@ -335,7 +376,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                             <input type="text" value={college} onChange={(e) => setCollege(e.target.value)} className={inputClass} />
                           </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div>
                             <label className={labelClass}>Program Code</label>
                             <input type="text" placeholder="e.g. BSIT" value={programCode} onChange={(e) => setProgramCode(e.target.value)} className={inputClass} />
@@ -364,7 +405,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
 
                     {activeTab === 'personal' && (
                       <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className={labelClass}>Date of Birth</label>
                             <input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className={inputClass} />
@@ -379,7 +420,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                             </select>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className={labelClass}>Nationality</label>
                             <input type="text" value={nationality} onChange={(e) => setNationality(e.target.value)} className={inputClass} />
@@ -398,7 +439,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                           <label className={labelClass}>Complete Home Address</label>
                           <input type="text" value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} className={inputClass} />
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div>
                             <label className={labelClass}>City / Municipality</label>
                             <input type="text" value={cityMunicipality} onChange={(e) => setCityMunicipality(e.target.value)} className={inputClass} />
@@ -416,7 +457,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                           <label className={labelClass}>Country</label>
                           <input type="text" value={country} onChange={(e) => setCountry(e.target.value)} className={inputClass} />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className={labelClass}>Telephone Number</label>
                             <input type="tel" value={telephoneNumber} onChange={(e) => setTelephoneNumber(e.target.value)} className={inputClass} />
@@ -431,7 +472,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
 
                     {activeTab === 'family' && (
                       <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className={labelClass}>Father</label>
                             <input type="text" value={fatherName} onChange={(e) => setFatherName(e.target.value)} className={inputClass} />
@@ -441,7 +482,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                             <input type="text" value={motherName} onChange={(e) => setMotherName(e.target.value)} className={inputClass} />
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className={labelClass}>Guardian</label>
                             <input type="text" value={guardianName} onChange={(e) => setGuardianName(e.target.value)} className={inputClass} />
@@ -464,14 +505,14 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                   </div>
 
                   {/* Footer: tab progress + actions */}
-                  <div className="border-t border-slate-100 px-6 py-4 flex items-center justify-between shrink-0 bg-white">
+                  <div className="border-t border-slate-100 px-4 sm:px-6 py-3 sm:py-4 flex flex-col-reverse sm:flex-row items-center justify-between gap-3 shrink-0 bg-white">
                     <div className="hidden sm:flex items-center gap-1.5">
                       {EDIT_TABS.map((tab, idx) => (
                         <React.Fragment key={tab.key}>
                           {idx > 0 && <div className="w-3 h-px bg-slate-200" />}
                           <button
                             type="button"
-                            onClick={() => setActiveTab(tab.key)}
+                            onClick={() => goToTab(tab.key)}
                             className={`w-2 h-2 rounded-full transition-colors ${
                               activeTab === tab.key ? 'bg-brand-green' : 'bg-slate-200 hover:bg-slate-300'
                             }`}
@@ -480,19 +521,19 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                         </React.Fragment>
                       ))}
                     </div>
-                    <div className="flex gap-3 ml-auto">
+                    <div className="flex gap-3 w-full sm:w-auto sm:ml-auto">
                       <button
                         type="button"
                         onClick={() => setIsEditing(false)}
-                        className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-100 rounded-lg transition-colors focus:outline-hidden"
+                        className="flex-1 sm:flex-none px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-100 rounded-lg transition-colors focus:outline-hidden"
                       >
                         Cancel
                       </button>
                       {activeTab !== 'family' ? (
                         <button
                           type="button"
-                          onClick={() => setActiveTab(EDIT_TABS[EDIT_TABS.findIndex(t => t.key === activeTab) + 1].key)}
-                          className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark rounded-lg transition-colors shadow-sm focus:outline-hidden"
+                          onClick={goToNextTab}
+                          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark rounded-lg transition-colors shadow-sm focus:outline-hidden"
                         >
                           <span>Next</span>
                           <ArrowRight className="w-3.5 h-3.5" />
@@ -500,7 +541,8 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                       ) : (
                         <button
                           type="submit"
-                          className="px-5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark rounded-lg transition-colors shadow-sm focus:outline-hidden"
+                          disabled={justSwitched}
+                          className="flex-1 sm:flex-none px-5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark rounded-lg transition-colors shadow-sm focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Save Changes
                         </button>

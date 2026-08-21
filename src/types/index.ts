@@ -151,7 +151,8 @@ export interface Application {
   yearLevel: string;
   gpa: string;
   documents: { name: string; uploaded: boolean; fileName?: string }[];
-  status: 'Pending' | 'Approved' | 'Rejected' | 'Under Evaluation';
+  status: 'Under Evaluation' | 'Approved' | 'Rejected' | 'Needs Revision';
+  reviewNote?: string;
   submittedAt: string;
   // Present only for applications submitted through the detailed SFA
   // Grant form (applicationFormType === 'sfag'). Holds the full 5-tab
@@ -161,6 +162,13 @@ export interface Application {
 
 export interface StudentProfile {
   studentNumber: string;
+  // The Clerk user id this profile is linked to (models/Student.js's
+  // clerkId field). Used to scope browser-local state (e.g. the
+  // in-progress application draft in ApplyScholarship.tsx) per account,
+  // so switching Clerk accounts on the same browser/device can never
+  // inherit another account's localStorage data even without an
+  // intervening logout.
+  clerkId?: string;
   name: string;
   course: string;
   college: string;

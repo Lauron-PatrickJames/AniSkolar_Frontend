@@ -41,7 +41,7 @@ export default function Dashboard({
   return (
     <div id={id} className="space-y-6 sm:space-y-8">
       {/* Welcome Banner */}
-      <div className="hero-placeholder min-h-[13rem] sm:h-50 sm:min-h-0 rounded-2xl flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-0 md:px-10 text-white card-shadow shrink-0 relative overflow-hidden">
+      <div className="hero-placeholder min-h-52 sm:h-50 sm:min-h-0 rounded-2xl flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-0 md:px-10 text-white card-shadow shrink-0 relative overflow-hidden">
         <div className="relative z-10 max-w-2xl space-y-2">
           <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-extrabold tracking-tight leading-tight">
             Welcome back, <span className="text-emerald-300">{student.name.split(' ')[0]}</span>!

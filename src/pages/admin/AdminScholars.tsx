@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Search, ChevronDown, ArrowLeft, Users, Repeat, Award, Clock,
   CheckCircle, XCircle, AlertCircle, FileText, RefreshCw, GraduationCap,
-  Mail, Phone, History
+  Mail, Phone, History, Download, Printer, ChevronDown as ChevronDownIcon
 } from 'lucide-react';
 
 // --- Types (mirror AdminDashboard.tsx) -------------------------------------
@@ -32,9 +32,12 @@ interface AdminApplication {
   personalInfo?: { firstName: string; lastName: string; course: string; yearLevel: string };
   contactSchool?: { email: string; mobileNo: string };
 }
+
 interface AdminScholarsProps {
   applications: AdminApplication[];
   isLoading?: boolean;
+  getToken: () => Promise<string | null>;
+  apiBaseUrl: string;
 }
 
 const STATUS_STYLES: Record<AppStatus, { badge: string; dot: string }> = {
@@ -114,7 +117,8 @@ function academicYearOf(iso: string): string {
   return `AY ${startYear}\u2013${startYear + 1}`;
 }
 
-// --- Scholar aggregation -----------------------------------------------
+// --- Scholar aggregation (client-side, used for LIST/DETAIL rendering and
+// for the Print/PDF export, which stays client-side) ----------------------
 
 interface ScholarSummary {
   studentNumber: string;
@@ -196,6 +200,208 @@ function buildMergedHistory(applications: AdminApplication[]): MergedHistoryEntr
     });
   });
   return entries.sort((a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime());
+}
+
+// --- Export column registry -----------------------------------------------
+
+// Shared by both CSV export (sent to the backend as ?columns=) and the
+// Print/PDF table (rendered client-side). Keys MUST match the backend's
+// COLUMN_REGISTRY in routes/applications.js exactly, since CSV export
+// passes these keys straight through as a query param. `getValue` is what
+// the Print view uses to read a cell for a given ScholarSummary; the CSV
+// export doesn't need getValue since the server computes values itself —
+// it only needs the key.
+const EXPORT_COLUMNS: { key: string; label: string; getValue: (s: ScholarSummary) => string | number }[] = [
+  { key: 'studentNumber', label: 'Student Number', getValue: s => s.studentNumber },
+  { key: 'name', label: 'Name', getValue: s => s.name },
+  { key: 'email', label: 'Email', getValue: s => s.email || '—' },
+  { key: 'phone', label: 'Phone', getValue: s => s.phone || '—' },
+  { key: 'program', label: 'Program', getValue: s => s.program || '—' },
+  { key: 'yearLevel', label: 'Year Level', getValue: s => s.yearLevel || '—' },
+  { key: 'totalApplications', label: 'Total Applications', getValue: s => s.totalApplications },
+  { key: 'approvedCount', label: 'Approved', getValue: s => s.approvedCount },
+  { key: 'rejectedCount', label: 'Rejected', getValue: s => s.rejectedCount },
+  {
+    key: 'approvalRate', label: 'Approval Rate', getValue: s => {
+      const decided = s.approvedCount + s.rejectedCount;
+      return decided > 0 ? `${((s.approvedCount / decided) * 100).toFixed(0)}%` : '—';
+    }
+  },
+  { key: 'latestStatus', label: 'Current Status', getValue: s => s.latestStatus },
+  { key: 'isRenewing', label: 'Renewing', getValue: s => (s.isRenewing ? 'Yes' : 'No') },
+  { key: 'firstSubmission', label: 'First Submission', getValue: s => formatDate(s.firstSubmission) },
+];
+const DEFAULT_EXPORT_COLUMNS = [
+  'studentNumber', 'name', 'email', 'phone', 'program', 'yearLevel',
+  'totalApplications', 'approvedCount', 'rejectedCount', 'latestStatus',
+  'isRenewing', 'firstSubmission',
+];
+
+// --- Export helpers ------------------------------------------------------
+
+function escapeHtml(value: string): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Server-backed CSV export — hits GET /api/applications/export/scholars
+// with the current search/renewal/sort state AND the chosen column list,
+// so the export always reflects both the active filters and exactly which
+// fields the admin picked, without pulling the entire dataset into the
+// browser first. Downloads via Blob since the endpoint needs a Bearer
+// token (Clerk auth isn't cookie-based here), so a plain <a href> link
+// can't be used directly.
+async function exportScholarsToCSV(params: {
+  getToken: () => Promise<string | null>;
+  apiBaseUrl: string;
+  search: string;
+  renewalFilter: 'all' | 'renewing' | 'first_time';
+  sort: SortOption;
+  columns: string[];
+}): Promise<{ error?: string }> {
+  try {
+    const token = await params.getToken();
+    const qs = new URLSearchParams({
+      search: params.search,
+      renewal: params.renewalFilter,
+      sort: params.sort,
+      columns: params.columns.join(','),
+    });
+    const response = await fetch(`${params.apiBaseUrl}/api/applications/export/scholars?${qs.toString()}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      return { error: body.error || 'Failed to export scholars.' };
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    a.download = match ? match[1] : `scholars-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to export scholars.' };
+  }
+}
+
+// Client-side CSV export for a SINGLE scholar's own applications (detail
+// view) — this one stays client-side since the data is already fully
+// loaded in the browser once you're on their detail page. Not affected by
+// the column picker; always exports the full per-application breakdown.
+function csvField(value: string | number): string {
+  const str = String(value ?? '');
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
+function downloadBlob(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function exportScholarApplicationsToCSV(scholar: ScholarSummary) {
+  const headers = ['Scholarship', 'Cycle', 'Type', 'Submitted', 'Status', 'Review Note'];
+  const rows = scholar.applications.map(app => [
+    csvField(app.scholarshipName),
+    csvField(academicYearOf(app.createdAt)),
+    csvField(app.applicationFormType),
+    csvField(formatDate(app.createdAt)),
+    csvField(app.status),
+    csvField(app.reviewNote ?? '')
+  ].join(','));
+
+  const csv = '\uFEFF' + [headers.map(csvField).join(','), ...rows].join('\r\n');
+  const stamp = new Date().toISOString().slice(0, 10);
+  const safeName = scholar.studentNumber.replace(/[^a-z0-9-]/gi, '');
+  downloadBlob(csv, `scholar-${safeName}-applications-${stamp}.csv`, 'text/csv;charset=utf-8;');
+}
+
+// Opens a formatted, print-ready window built from the CHOSEN columns
+// (same EXPORT_COLUMNS registry as the CSV picker), so Print/PDF output
+// matches whatever fields the admin selected. Calling window.print() in
+// that window lets the admin either print physically or choose "Save as
+// PDF" from their browser's print dialog. Stays entirely client-side and
+// operates on the currently-loaded/filtered `scholars` list — this is
+// meant for "print what I'm looking at right now", which is naturally
+// bounded, unlike the full-dataset CSV export above.
+function printScholars(scholars: ScholarSummary[], subtitle: string, columnKeys: string[]) {
+  const activeColumns = EXPORT_COLUMNS.filter(c => columnKeys.includes(c.key));
+  const columnsToUse = activeColumns.length > 0 ? activeColumns : EXPORT_COLUMNS;
+
+  const headerCells = columnsToUse.map(c => {
+    const isNumeric = ['totalApplications', 'approvedCount', 'rejectedCount'].includes(c.key);
+    return `<th${isNumeric ? ' class="num"' : ''}>${escapeHtml(c.label)}</th>`;
+  }).join('');
+
+  const rows = scholars.map(s => {
+    const cells = columnsToUse.map(c => {
+      const isNumeric = ['totalApplications', 'approvedCount', 'rejectedCount'].includes(c.key);
+      return `<td${isNumeric ? ' class="num"' : ''}>${escapeHtml(String(c.getValue(s)))}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Scholar Lifecycle Report</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; padding: 32px; color: #0f172a; }
+  h1 { font-size: 18px; margin: 0 0 4px 0; }
+  p.meta { font-size: 11px; color: #64748b; margin: 0 0 20px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th, td { border: 1px solid #e2e8f0; padding: 7px 10px; text-align: left; }
+  th { background: #f1f5f9; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; color: #475569; }
+  td.num, th.num { text-align: right; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  @media print {
+    body { padding: 12px; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+  <h1>Scholar Lifecycle Report</h1>
+  <p class="meta">${escapeHtml(subtitle)} &middot; Generated ${new Date().toLocaleString()} &middot; ${scholars.length} scholar${scholars.length !== 1 ? 's' : ''}</p>
+  <table>
+    <thead><tr>${headerCells}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`;
+
+  const printWindow = window.open('', '_blank', 'width=1000,height=800');
+  if (!printWindow) {
+    // Popup blocked — nothing else we can do without a library; the admin
+    // will need to allow popups for this site.
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.onload = () => {
+    printWindow.print();
+  };
 }
 
 // --- Presentational pieces ---------------------------------------------
@@ -293,13 +499,141 @@ function MergedTimeline({ entries }: { entries: MergedHistoryEntry[] }) {
   );
 }
 
-type SortOption = 'recent' | 'most_applications' | 'name';
+// Column-picker modal, shared by both the CSV and Print/PDF export paths.
+// `actionLabel` customizes the confirm button text so it reads correctly
+// for whichever export the admin triggered ("Export (8)" vs "Print (8)").
+function ColumnPickerModal({
+  selected, onToggle, onSelectAll, onSelectNone, onConfirm, onCancel, actionLabel
+}: {
+  selected: Set<string>;
+  onToggle: (key: string) => void;
+  onSelectAll: () => void;
+  onSelectNone: () => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  actionLabel: string;
+}) {
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4" onClick={onCancel}>
+      <div
+        className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full max-h-[85vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <span className="font-display font-bold text-sm text-slate-800">Choose Columns</span>
+          <div className="flex gap-3 text-[11px] font-bold">
+            <button type="button" onClick={onSelectAll} className="text-brand-green hover:text-brand-green-dark">All</button>
+            <button type="button" onClick={onSelectNone} className="text-slate-400 hover:text-slate-600">None</button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-1">
+          {EXPORT_COLUMNS.map(col => (
+            <label
+              key={col.key}
+              className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer text-sm text-slate-700 font-medium"
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(col.key)}
+                onChange={() => onToggle(col.key)}
+                className="w-4 h-4 rounded border-slate-300 text-brand-green focus:ring-brand-green/30"
+              />
+              {col.label}
+            </label>
+          ))}
+        </div>
+        <div className="px-5 py-3.5 border-t border-slate-100 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={selected.size === 0}
+            onClick={onConfirm}
+            className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {actionLabel} ({selected.size})
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-export default function AdminScholars({ applications, isLoading }: AdminScholarsProps) {
+// Small reusable "Export" dropdown — CSV + Print/PDF options, both of
+// which now open the shared column picker rather than exporting directly.
+function ExportMenu({ onPickCsv, onPickPrint, disabled, isExporting }: {
+  onPickCsv: () => void;
+  onPickPrint: () => void;
+  disabled?: boolean;
+  isExporting?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div
+      className="relative"
+      tabIndex={-1}
+      onBlur={e => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1.5 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isExporting ? (
+          <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+        ) : (
+          <Download className="w-3.5 h-3.5" />
+        )}
+        <span>{isExporting ? 'Exporting...' : 'Export'}</span>
+        <ChevronDownIcon className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1.5 w-48 bg-white rounded-xl border border-slate-100 shadow-lg z-10 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => { onPickCsv(); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left"
+          >
+            <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            Export as CSV (Excel)
+          </button>
+          <button
+            type="button"
+            onClick={() => { onPickPrint(); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            Print / Save as PDF
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type SortOption = 'recent' | 'most_applications' | 'name';
+type PendingExportAction = 'csv' | 'print' | null;
+
+export default function AdminScholars({ applications, isLoading, getToken, apiBaseUrl }: AdminScholarsProps) {
   const [search, setSearch] = useState('');
   const [renewalFilter, setRenewalFilter] = useState<'all' | 'renewing' | 'first_time'>('all');
   const [sort, setSort] = useState<SortOption>('recent');
   const [selectedStudentNumber, setSelectedStudentNumber] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set(DEFAULT_EXPORT_COLUMNS));
+  // Which export the column picker is currently open for — determines
+  // both the confirm button's label and what happens when confirmed.
+  const [pendingAction, setPendingAction] = useState<PendingExportAction>(null);
 
   const scholars = useMemo(() => buildScholarSummaries(applications), [applications]);
 
@@ -327,17 +661,82 @@ export default function AdminScholars({ applications, isLoading }: AdminScholars
   const selected = selectedStudentNumber ? scholars.find(s => s.studentNumber === selectedStudentNumber) ?? null : null;
   const mergedHistory = useMemo(() => (selected ? buildMergedHistory(selected.applications) : []), [selected]);
 
+  // Human-readable description of the current filter state, embedded into
+  // exports so the file is self-describing (e.g. someone opens the CSV a
+  // month later and can tell what it was scoped to).
+  const filterSubtitle = useMemo(() => {
+    const parts: string[] = [];
+    parts.push(renewalFilter === 'renewing' ? 'Returning only' : renewalFilter === 'first_time' ? 'First-time only' : 'All scholars');
+    if (search.trim()) parts.push(`search: "${search.trim()}"`);
+    const sortLabel = sort === 'most_applications' ? 'sorted by most applications' : sort === 'name' ? 'sorted by name' : 'sorted by recent activity';
+    parts.push(sortLabel);
+    return parts.join(' · ');
+  }, [renewalFilter, search, sort]);
+
+  const toggleColumn = (key: string) => {
+    setSelectedColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  // Column order for actually building the export always follows
+  // EXPORT_COLUMNS' fixed order, regardless of the order checkboxes were
+  // toggled in — keeps output predictable.
+  const orderedSelectedColumnKeys = () => EXPORT_COLUMNS.map(c => c.key).filter(k => selectedColumns.has(k));
+
+  const handleConfirmExport = async () => {
+    const columns = orderedSelectedColumnKeys();
+    const action = pendingAction;
+    setPendingAction(null);
+
+    if (action === 'print') {
+      printScholars(filtered, filterSubtitle, columns);
+      return;
+    }
+    if (action === 'csv') {
+      setIsExporting(true);
+      setExportError('');
+      const { error } = await exportScholarsToCSV({ getToken, apiBaseUrl, search, renewalFilter, sort, columns });
+      if (error) setExportError(error);
+      setIsExporting(false);
+    }
+  };
+
   // === Detail view: one scholar's full longitudinal record ================
   if (selected) {
     return (
       <div className="space-y-5 sm:space-y-6">
-        <button
-          onClick={() => setSelectedStudentNumber(null)}
-          className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Scholars</span>
-        </button>
+        <div className="flex items-center justify-between gap-3">
+          <button
+            onClick={() => setSelectedStudentNumber(null)}
+            className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Scholars</span>
+          </button>
+          {/* Detail view keeps a simple non-customized export — always
+              the full per-application breakdown for this one scholar. */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => exportScholarApplicationsToCSV(selected)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-slate-50 transition-all"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => printScholars([selected], `${selected.name} · Student No. ${selected.studentNumber}`, DEFAULT_EXPORT_COLUMNS)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-slate-50 transition-all"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              Print
+            </button>
+          </div>
+        </div>
 
         <div className="bg-white rounded-xl border border-slate-100 p-5 sm:p-6 md:p-8 card-shadow">
           <div className="flex flex-col sm:flex-row sm:items-center gap-5">
@@ -433,10 +832,25 @@ export default function AdminScholars({ applications, isLoading }: AdminScholars
   // === List view: all scholars ============================================
   return (
     <div className="space-y-5 sm:space-y-6">
-      <div>
-        <h2 className="font-display font-black text-lg sm:text-xl md:text-2xl text-slate-900 tracking-tight">Scholar Lifecycle</h2>
-        <p className="text-xs sm:text-sm text-slate-500 mt-1">Track each student's applications and outcomes across every cycle.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display font-black text-lg sm:text-xl md:text-2xl text-slate-900 tracking-tight">Scholar Lifecycle</h2>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">Track each student's applications and outcomes across every cycle.</p>
+        </div>
+        <ExportMenu
+          onPickCsv={() => setPendingAction('csv')}
+          onPickPrint={() => setPendingAction('print')}
+          disabled={isLoading || isExporting}
+          isExporting={isExporting}
+        />
       </div>
+
+      {exportError && (
+        <div className="p-3 bg-rose-50 text-rose-700 rounded-lg border border-rose-100 text-xs font-bold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{exportError}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
         <StatTile label="Total Scholars" value={scholars.length} icon={Users} accent="bg-slate-50 text-slate-500" />
@@ -526,6 +940,18 @@ export default function AdminScholars({ applications, isLoading }: AdminScholars
           </div>
         )}
       </div>
+
+      {pendingAction && (
+        <ColumnPickerModal
+          selected={selectedColumns}
+          onToggle={toggleColumn}
+          onSelectAll={() => setSelectedColumns(new Set(EXPORT_COLUMNS.map(c => c.key)))}
+          onSelectNone={() => setSelectedColumns(new Set())}
+          onConfirm={handleConfirmExport}
+          onCancel={() => setPendingAction(null)}
+          actionLabel={pendingAction === 'print' ? 'Print' : 'Export'}
+        />
+      )}
     </div>
   );
 }

@@ -227,7 +227,7 @@ function AnnouncementEditor({
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
             </div>
-            <label className="flex items-center gap-2 cursor-pointer h-[42px]">
+            <label className="flex items-center gap-2 cursor-pointer h-10.5">
               <input
                 type="checkbox"
                 checked={form.isPinned}
@@ -320,7 +320,7 @@ function DeleteConfirm({ announcement, onCancel, onConfirm, isDeleting }: { anno
           </div>
           <div className="min-w-0">
             <p className="text-sm font-bold text-slate-800">Delete announcement?</p>
-            <p className="text-xs text-slate-500 mt-1 break-words">"{announcement.title}" will be permanently removed for everyone.</p>
+            <p className="text-xs text-slate-500 mt-1 wrap-break-word">"{announcement.title}" will be permanently removed for everyone.</p>
             {announcement.facebookStatus === 'posted' && (
               <p className="text-[11px] text-amber-600 font-semibold mt-2 flex items-start gap-1.5">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
@@ -657,7 +657,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
                       </span>
                       <FacebookStatusPill status={a.facebookStatus} />
                     </div>
-                    <p className="text-xs text-slate-500 line-clamp-2 break-words">{a.description}</p>
+                    <p className="text-xs text-slate-500 line-clamp-2 wrap-break-word">{a.description}</p>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-slate-400 font-semibold">
                       <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {a.status === 'published' ? `Published ${formatDateTime(a.publishedAt)}` : `Updated ${formatDateTime(a.updatedAt)}`}</span>
                       {a.facebookStatus === 'posted' && a.facebookPostUrl && (
@@ -671,7 +671,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
                         </a>
                       )}
                       {a.facebookStatus === 'failed' && a.facebookError && (
-                        <span className="flex items-center gap-1 text-rose-500 break-words">
+                        <span className="flex items-center gap-1 text-rose-500 wrap-break-word">
                           <AlertCircle className="w-3 h-3 shrink-0" /> {a.facebookError}
                         </span>
                       )}

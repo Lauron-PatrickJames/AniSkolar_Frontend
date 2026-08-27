@@ -130,7 +130,7 @@ export default function Navbar({
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 20 }}
-                className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 ring-2 ring-white text-white text-[10px] font-bold leading-none flex items-center justify-center"
+                className="absolute -top-1 -right-1 min-w-4.5 h-4.5 px-1 rounded-full bg-rose-500 ring-2 ring-white text-white text-[10px] font-bold leading-none flex items-center justify-center"
               >
                 {badgeLabel}
               </motion.span>
@@ -184,7 +184,7 @@ export default function Navbar({
                           >
                             <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${!item.isRead ? 'bg-brand-green' : 'bg-transparent'}`} />
                             <div className="min-w-0">
-                              <p className="text-xs text-slate-700 leading-normal break-words">{item.text}</p>
+                              <p className="text-xs text-slate-700 leading-normal wrap-break-word">{item.text}</p>
                               <span className="text-[10px] text-slate-400 block mt-1">{item.time}</span>
                             </div>
                           </motion.button>
@@ -232,7 +232,7 @@ export default function Navbar({
               </div>
             )}
             <div className="hidden md:block min-w-0">
-              <p className="text-xs font-bold text-slate-700 leading-none truncate max-w-[140px]">{student.name}</p>
+              <p className="text-xs font-bold text-slate-700 leading-none truncate max-w-35">{student.name}</p>
               <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">{student.studentNumber}</p>
             </div>
             <motion.div

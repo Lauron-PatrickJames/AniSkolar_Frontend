@@ -2,14 +2,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@clerk/react';
 import {
   Search, FileText, CheckCircle, XCircle, Clock, Eye, Download,
-  AlertCircle, ChevronDown, ShieldCheck, LogOut, ArrowLeft, User,
+  AlertCircle, ChevronDown, ArrowLeft, User, Menu,
   MapPin, Users, PiggyBank, ClipboardCheck, Phone, Mail, GraduationCap,
-  RefreshCw, BarChart3, LayoutList, Megaphone, History
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AdminAnalytics from './AdminAnalytics';
 import AdminAnnouncements from './AdminAnnouncements';
 import AdminScholars from './AdminScholars';
+import AdminSidebar from './AdminSidebar';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -261,7 +262,7 @@ function Field({ label, value }: { label: string; value?: React.ReactNode }) {
   return (
     <div className="min-w-0">
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>
-      <p className="text-sm text-slate-700 font-semibold break-words">{value || value === 0 ? value : <span className="text-slate-300 font-normal">—</span>}</p>
+      <p className="text-sm text-slate-700 font-semibold wrap-break-word">{value || value === 0 ? value : <span className="text-slate-300 font-normal">—</span>}</p>
     </div>
   );
 }
@@ -313,7 +314,7 @@ function ApplicationTimeline({ history }: { history?: HistoryEntry[] }) {
 
   return (
     <div className="relative pl-6">
-      <div className="absolute left-[7px] top-1.5 bottom-1.5 w-px bg-slate-200" />
+      <div className="absolute left-1.75 top-1.5 bottom-1.5 w-px bg-slate-200" />
       <div className="space-y-6">
         {entries.map((entry, idx) => {
           const style = TIMELINE_STYLES[entry.status] ?? TIMELINE_STYLES['Under Evaluation'];
@@ -333,7 +334,7 @@ function ApplicationTimeline({ history }: { history?: HistoryEntry[] }) {
                   </p>
                 )}
                 {entry.note && (
-                  <p className="text-xs text-slate-600 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 leading-relaxed break-words">
+                  <p className="text-xs text-slate-600 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 leading-relaxed wrap-break-word">
                     {entry.note}
                   </p>
                 )}
@@ -430,7 +431,7 @@ function DocumentPreviewModal({ doc, onClose }: { doc: AdminDocument; onClose: (
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto bg-slate-100 flex items-center justify-center min-h-[240px] sm:min-h-[300px]">
+        <div className="flex-1 overflow-auto bg-slate-100 flex items-center justify-center min-h-60 sm:min-h-75">
           {isImage ? (
             <img
               src={documentUrl(doc.fileId)}
@@ -494,6 +495,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [loadError, setLoadError] = useState('');
 
   const [mainView, setMainView] = useState<MainView>('applications');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<AppStatus | 'All'>('All');
@@ -678,28 +680,41 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     }
   };
 
-  // Same frosted sticky bar as the student portal's Navbar (glass-header),
-  // rather than a plain white border-bottom header.
-  const Header = (
-    <header className="h-16 glass-header px-4 sm:px-6 lg:px-10 flex items-center justify-between sticky top-0 z-20">
-      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white flex items-center justify-center shadow-md border-2 border-white shrink-0">
-          <ShieldCheck className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-brand-green" />
-        </div>
-        <div className="min-w-0">
-          <span className="font-display font-bold text-slate-900 text-sm sm:text-base leading-none truncate block">AniSkolar Admin</span>
-          <span className="text-[10px] text-slate-400 font-semibold tracking-widest uppercase hidden sm:block">DLSU-D Portal</span>
-        </div>
+  // Page title shown in the top bar — mirrors the student portal's Navbar,
+  // which shows only a hamburger (mobile) + the current page title. Logout
+  // now lives in the sidebar footer instead of up here, same as the
+  // student side, so this bar stays minimal.
+  const pageTitle = selectedId
+    ? 'Application Review'
+    : mainView === 'analytics' ? 'Statistics & Trends'
+    : mainView === 'lifecycle' ? 'Scholar Lifecycle'
+    : mainView === 'announcements' ? 'Announcements'
+    : 'Scholarship Applications';
+
+  const TopBar = (
+    <header className="h-16 glass-header px-3 sm:px-4 md:px-6 lg:px-10 flex items-center justify-between sticky top-0 z-20">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setIsSidebarOpen(true)}
+          className="p-2 -ml-1 sm:-ml-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 md:hidden focus:outline-hidden shrink-0"
+          aria-label="Toggle sidebar"
+        >
+          <Menu className="w-5 h-5" />
+        </motion.button>
+        <h1 className="font-display font-bold text-base sm:text-lg md:text-xl text-slate-800 tracking-tight truncate">{pageTitle}</h1>
       </div>
-      <motion.button
-        whileTap={{ scale: 0.97 }}
-        onClick={onLogout}
-        className="inline-flex items-center gap-1.5 sm:gap-2 text-xs font-bold text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-lg transition-colors shrink-0"
-      >
-        <LogOut className="w-3.5 h-3.5" />
-        <span className="hidden xs:inline">Log out</span>
-      </motion.button>
     </header>
+  );
+
+  const Sidebar = (
+    <AdminSidebar
+      currentView={mainView}
+      onNavigate={view => { setMainView(view); setSelectedId(null); }}
+      isOpen={isSidebarOpen}
+      onClose={() => setIsSidebarOpen(false)}
+      onLogout={onLogout}
+    />
   );
 
   // === Detail / review view ================================================
@@ -711,9 +726,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       : REVIEW_TABS.filter(t => t.key === 'personal' || t.key === 'documents');
 
     return (
-      <div className="min-h-screen bg-[#f1f5f9] flex flex-col">
-        {Header}
-        <main className="flex-1 px-4 sm:px-6 lg:px-10 py-5 sm:py-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full">
+      <div className="min-h-screen bg-[#f1f5f9] flex">
+        {Sidebar}
+        <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        {TopBar}
+        <main className="flex-1 px-4 sm:px-6 lg:px-10 py-5 sm:py-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
           <button
             onClick={() => setSelectedId(null)}
             className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors"
@@ -778,7 +795,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             <div className="lg:col-span-2 space-y-5 sm:space-y-6 min-w-0">
               {/* Tabs */}
               <div className="bg-white rounded-xl border border-slate-100 card-shadow overflow-hidden">
-                <div className="flex overflow-x-auto border-b border-slate-100 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex overflow-x-auto border-b border-slate-100 scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                   {tabs.map(tab => {
                     const isActive = activeTab === tab.key;
                     return (
@@ -912,7 +929,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         <div className="border-t border-slate-100 pt-6">
                           <p className="text-[11px] font-bold text-brand-green uppercase tracking-wider mb-3">Siblings</p>
                           <div className="overflow-x-auto rounded-xl border border-slate-200 -mx-5 sm:mx-0 px-5 sm:px-0">
-                            <table className="w-full text-xs min-w-[720px]">
+                            <table className="w-full text-xs min-w-180">
                               <thead>
                                 <tr className="bg-emerald-50 text-left text-slate-700">
                                   <th className="p-3 font-bold">Name</th>
@@ -1030,7 +1047,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </div>
 
             {/* Sticky decision sidebar */}
-            <div className="space-y-5 sm:space-y-6 lg:sticky lg:top-24 min-w-0">
+            <div className="space-y-5 sm:space-y-6 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto min-w-0">
               <div className="bg-white rounded-xl border border-slate-100 p-5 sm:p-6 card-shadow space-y-4">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider">Review Decision</h3>
@@ -1064,8 +1081,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   />
 
                   {pendingAction === 'note' ? (
-                    <div className="mt-2 flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50/60">
-                      <span className="flex-1 text-[11px] font-bold text-slate-600 pl-1">Save this note?</span>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50/60">
+                      <span className="flex-1 min-w-20t-[11px] font-bold text-slate-600 pl-1">Save this note?</span>
                       <button
                         type="button"
                         disabled={isSavingNote}
@@ -1146,8 +1163,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
                     if (isArmed) {
                       return (
-                        <div key={status} className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50/60">
-                          <span className="flex-1 text-[11px] font-bold text-slate-600 pl-1">
+                        <div key={status} className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50/60">
+                          <span className="flex-1 min-w-20 text-[11px] font-bold text-slate-600 pl-1">
                             Confirm {actionLabelMap[status].toLowerCase()}?
                           </span>
                           <button
@@ -1190,7 +1207,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       Last Note {selected.reviewedBy ? `— ${selected.reviewedBy}` : ''}{selected.reviewedAt ? ` · ${formatDate(selected.reviewedAt)}` : ''}
                     </p>
-                    <p className="text-xs text-slate-600 leading-relaxed break-words">{selected.reviewNote}</p>
+                    <p className="text-xs text-slate-600 leading-relaxed wrap-break-word">{selected.reviewNote}</p>
                   </div>
                 )}
               </div>
@@ -1208,6 +1225,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </div>
           </div>
         </main>
+        </div>
 
         <AnimatePresence>
           {previewDoc && (
@@ -1220,15 +1238,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   // === List / overview view =================================================
   return (
-    <div className="min-h-screen bg-[#f1f5f9] flex flex-col">
-      {Header}
-      <main className="flex-1 px-4 sm:px-6 lg:px-10 py-5 sm:py-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full">
+    <div className="min-h-screen bg-[#f1f5f9] flex">
+      {Sidebar}
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+      {TopBar}
+      <main className="flex-1 px-4 sm:px-6 lg:px-10 py-5 sm:py-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
         {/* Same hero-placeholder treatment as the student portal's welcome
             banner, so the admin's landing view opens with the same signature
-            moment instead of a plain white card. */}
-        <div className="hero-placeholder min-h-[9.5rem] sm:h-40 sm:min-h-0 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5 py-6 sm:px-8 md:px-10 text-white card-shadow shrink-0 relative overflow-hidden">
+            moment instead of a plain white card. Page title now lives in the
+            top bar, so this just carries the descriptive subtitle. */}
+        <div className="hero-placeholder min-h-30 sm:h-auto sm:min-h-0 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5 py-5 sm:px-8 md:px-10 text-white card-shadow shrink-0 relative overflow-hidden">
           <div className="relative z-10 min-w-0">
-            <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-extrabold tracking-tight leading-tight">
+            <h2 className="text-lg sm:text-xl md:text-2xl font-display font-extrabold tracking-tight leading-tight">
               {mainView === 'analytics' ? 'Statistics & Trends' : mainView === 'lifecycle' ? 'Scholar Lifecycle' : mainView === 'announcements' ? 'Announcements' : 'Scholarship Applications'}
             </h2>
             <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed font-normal mt-1.5 max-w-xl">
@@ -1254,53 +1275,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           )}
         </div>
 
-        {/* View switcher — toggles between the applications queue, the
-            analytics dashboard, the scholar lifecycle view, and
-            announcements, all driven by the same `applications` state so
-            switching views never re-fetches. */}
-        <div className="flex gap-1.5 bg-white rounded-xl border border-slate-100 card-shadow p-1.5 w-fit overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          <button
-            type="button"
-            onClick={() => setMainView('applications')}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shrink-0 ${
-              mainView === 'applications' ? 'bg-brand-green text-white' : 'text-slate-500 hover:bg-slate-50'
-            }`}
-          >
-            <LayoutList className="w-3.5 h-3.5" />
-            Applications
-          </button>
-          <button
-            type="button"
-            onClick={() => setMainView('analytics')}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shrink-0 ${
-              mainView === 'analytics' ? 'bg-brand-green text-white' : 'text-slate-500 hover:bg-slate-50'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            Statistics
-          </button>
-          <button
-            type="button"
-            onClick={() => setMainView('lifecycle')}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shrink-0 ${
-              mainView === 'lifecycle' ? 'bg-brand-green text-white' : 'text-slate-500 hover:bg-slate-50'
-            }`}
-          >
-            <History className="w-3.5 h-3.5" />
-            Scholars
-          </button>
-          <button
-            type="button"
-            onClick={() => setMainView('announcements')}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shrink-0 ${
-              mainView === 'announcements' ? 'bg-brand-green text-white' : 'text-slate-500 hover:bg-slate-50'
-            }`}
-          >
-            <Megaphone className="w-3.5 h-3.5" />
-            Announcements
-          </button>
-        </div>
-
         {loadError && (
           <div className="p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-100 text-xs font-bold flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -1311,12 +1285,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         {mainView === 'analytics' ? (
           <AdminAnalytics applications={applications} isLoading={isLoading} />
         ) : mainView === 'lifecycle' ? (
-          <AdminScholars applications={applications} isLoading={isLoading} />
+          <AdminScholars applications={applications} isLoading={isLoading} getToken={getToken} apiBaseUrl={API_BASE_URL} />
         ) : mainView === 'announcements' ? (
           <AdminAnnouncements />
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
               <StatCard
                 label="Total Applications"
                 value={stats.total}
@@ -1371,8 +1345,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     className="w-full pl-10 pr-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all placeholder:text-slate-300"
                   />
                 </div>
-                <div className="flex gap-3">
-                  <div className="relative flex-1 md:flex-none">
+                <div className="flex flex-wrap gap-3">
+                  <div className="relative min-w-35 flex-1 sm:flex-none">
                     <select
                       value={statusFilter}
                       onChange={e => setStatusFilter(e.target.value as AppStatus | 'All')}
@@ -1384,11 +1358,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                   {scholarshipOptions.length > 0 && (
-                    <div className="relative flex-1 md:flex-none">
+                    <div className="relative min-w-35 flex-1 sm:flex-none">
                       <select
                         value={scholarshipFilter}
                         onChange={e => setScholarshipFilter(e.target.value)}
-                        className="w-full appearance-none pl-3.5 pr-9 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all md:max-w-[180px]"
+                        className="w-full appearance-none pl-3.5 pr-9 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all md:max-w-45"
                       >
                         <option value="All">All Scholarships</option>
                         {scholarshipOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
@@ -1414,10 +1388,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       <button
                         key={app._id}
                         onClick={() => openApplication(app)}
-                        className="w-full flex items-center gap-3 sm:gap-4 p-3.5 sm:p-4 md:p-5 hover:bg-slate-50/60 transition-colors text-left group"
+                        className="w-full flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 sm:gap-4 p-3.5 sm:p-4 md:p-5 hover:bg-slate-50/60 transition-colors text-left group"
                       >
                         <Avatar name={name} avatarUrl={app.avatarUrl} size="sm" />
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-35">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-bold text-slate-800 truncate">{name}</p>
                             <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 shrink-0">
@@ -1441,6 +1415,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           </>
         )}
       </main>
+      </div>
     </div>
   );
 }

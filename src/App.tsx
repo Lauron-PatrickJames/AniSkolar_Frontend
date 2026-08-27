@@ -12,7 +12,7 @@ import StudentLayout from './layouts/StudentLayout';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import CompleteProfilePage from './pages/CompleteProfilePage';
-import AdminDashboard from './pages/AdminDashboard';
+import AdminDashboard from './pages/admin/AdminDashboard';
 
 // Student Portal Pages
 import Dashboard from './pages/student/Dashboard';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '@clerk/react';
+import { useAuth, useUser } from '@clerk/react';
 import {
   Search, FileText, CheckCircle, XCircle, Clock, Eye, Download,
   AlertCircle, ChevronDown, ArrowLeft, User, Menu,
@@ -11,6 +11,11 @@ import AdminAnalytics from './AdminAnalytics';
 import AdminAnnouncements from './AdminAnnouncements';
 import AdminScholars from './AdminScholars';
 import AdminSidebar from './AdminSidebar';
+import { ApplicationFormAnswers, EvaluationSheetAnswers } from '../../components/grant-forms/GrantAnswersView';
+import PolcaAdminFieldsCard from '../../components/grant-forms/PolcaAdminFieldsCard';
+import { OFFICE_LABELS, mockScholarships, officeOf } from '../../data/scholarships';
+import { isGrantFormType, toGrantDetails } from '../../utils/grantForms';
+import { PolcaAdminFields } from '../../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -45,6 +50,8 @@ interface HistoryEntry {
 
 interface AdminDocument {
   docType: string;
+  slotKey?: string;
+  variant?: string;
   fileId: string;
   filename: string;
   mimetype: string;
@@ -107,7 +114,8 @@ interface AdminApplication {
   avatarUrl?: string;
   scholarshipId: string;
   scholarshipName: string;
-  applicationFormType: 'standard' | 'sfag';
+  applicationFormType: 'standard' | 'sfag' | 'polca' | 'alumni';
+  office?: string;
   documents: AdminDocument[];
   referenceCode: string;
   status: AppStatus;
@@ -123,6 +131,10 @@ interface AdminApplication {
   siblings?: SfagSibling[];
   assetsExpenses?: SfagAssetsExpenses;
   agreement?: SfagAgreement;
+  // Grant-form (POLCA / Alumni) only — rendered via toGrantDetails.
+  eligibilityAnswers?: Record<string, unknown>;
+  evaluationSheet?: Record<string, unknown>;
+  adminFields?: PolcaAdminFields;
 }
 
 interface AdminDashboardProps {
@@ -131,8 +143,15 @@ interface AdminDashboardProps {
 
 // --- Derived helpers ------------------------------------------------------
 
+// SFAG and the grant forms (POLCA / Alumni) all keep the applicant's name,
+// course and year level on personalInfo and the mobile number on
+// contactSchool; only the standard form uses standardInfo.
+function usesSectionForm(app: AdminApplication): boolean {
+  return app.applicationFormType !== 'standard';
+}
+
 function applicantName(app: AdminApplication): string {
-  if (app.applicationFormType === 'sfag' && app.personalInfo) {
+  if (usesSectionForm(app) && app.personalInfo) {
     return `${app.personalInfo.firstName} ${app.personalInfo.lastName}`;
   }
   if (app.standardInfo) return `${app.standardInfo.firstName} ${app.standardInfo.lastName}`;
@@ -147,19 +166,21 @@ function initials(name: string): string {
 }
 
 function applicantEmail(app: AdminApplication): string {
-  return app.applicationFormType === 'sfag' ? app.contactSchool?.email ?? '' : app.standardInfo?.email ?? '';
+  if (!usesSectionForm(app)) return app.standardInfo?.email ?? '';
+  // Grant forms store the email with the student data.
+  return app.contactSchool?.email || (app.personalInfo as { email?: string } | undefined)?.email || '';
 }
 
 function applicantPhone(app: AdminApplication): string {
-  return app.applicationFormType === 'sfag' ? app.contactSchool?.mobileNo ?? '' : app.standardInfo?.phone ?? '';
+  return usesSectionForm(app) ? app.contactSchool?.mobileNo ?? '' : app.standardInfo?.phone ?? '';
 }
 
 function applicantProgram(app: AdminApplication): string {
-  return app.applicationFormType === 'sfag' ? app.personalInfo?.course ?? '' : app.standardInfo?.program ?? '';
+  return usesSectionForm(app) ? app.personalInfo?.course ?? '' : app.standardInfo?.program ?? '';
 }
 
 function applicantYearLevel(app: AdminApplication): string {
-  return app.applicationFormType === 'sfag' ? app.personalInfo?.yearLevel ?? '' : app.standardInfo?.yearLevel ?? '';
+  return usesSectionForm(app) ? app.personalInfo?.yearLevel ?? '' : app.standardInfo?.yearLevel ?? '';
 }
 
 function formatDate(iso?: string): string {
@@ -477,7 +498,15 @@ const REVIEW_TABS = [
   { key: 'financial', label: 'Assets & Expenses', icon: PiggyBank },
   { key: 'documents', label: 'Documents', icon: ClipboardCheck }
 ] as const;
-type ReviewTabKey = typeof REVIEW_TABS[number]['key'];
+
+// Grant-form applications (POLCA / Alumni) render their answers grouped by
+// the form's own sections instead of the SFAG tabs above.
+const GRANT_REVIEW_TABS = [
+  { key: 'grant-form', label: 'Application Form', icon: User },
+  { key: 'grant-sheet', label: 'Evaluation Sheet', icon: PiggyBank },
+  { key: 'documents', label: 'Documents', icon: ClipboardCheck }
+] as const;
+type ReviewTabKey = typeof REVIEW_TABS[number]['key'] | typeof GRANT_REVIEW_TABS[number]['key'];
 
 // Top-level view: the applications list/review flow, the analytics
 // dashboard, the scholar lifecycle view, or announcements. Kept separate
@@ -489,6 +518,12 @@ type MainView = 'applications' | 'analytics' | 'lifecycle' | 'announcements';
 
 export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const { getToken } = useAuth();
+  const { user } = useUser();
+  // Office-scoped admins (publicMetadata.office, e.g. "POLCA") only get
+  // their office's applications from the API; this just labels the view
+  // and limits the scholarship filter to match. LSO / unset = all offices.
+  const adminOfficeRaw = (user?.publicMetadata as { office?: string } | undefined)?.office?.trim().toUpperCase();
+  const adminOffice = adminOfficeRaw && adminOfficeRaw !== 'LSO' ? adminOfficeRaw : null;
 
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -560,9 +595,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const scholarshipOptions = useMemo(() => {
     const map = new Map<string, string>();
+    // Every scholarship this admin's office handles, even before it has
+    // any applications, plus anything else that shows up in the data.
+    mockScholarships
+      .filter(s => !adminOffice || officeOf(s) === adminOffice)
+      .forEach(s => map.set(s.id, s.name));
     applications.forEach(a => map.set(a.scholarshipId, a.scholarshipName));
     return Array.from(map.entries());
-  }, [applications]);
+  }, [applications, adminOffice]);
 
   const stats = useMemo(() => ({
     total: applications.length,
@@ -593,7 +633,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const openApplication = (app: AdminApplication) => {
     setSelectedId(app._id);
-    setActiveTab('personal');
+    setActiveTab(isGrantFormType(app.applicationFormType) ? 'grant-form' : 'personal');
     setReviewNote('');
     setJustUpdatedStatus(null);
     setNoteJustSaved(false);
@@ -720,8 +760,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   // === Detail / review view ================================================
   if (selected) {
     const isSfag = selected.applicationFormType === 'sfag';
+    const isGrant = isGrantFormType(selected.applicationFormType);
+    const grantScholarship = isGrant ? mockScholarships.find(s => s.id === selected.scholarshipId) : undefined;
+    const grantDetails = grantScholarship ? toGrantDetails(selected, grantScholarship) : null;
     const name = applicantName(selected);
-    const tabs = isSfag
+    const tabs: readonly { key: ReviewTabKey; label: string; icon: React.ElementType }[] = isGrant
+      ? GRANT_REVIEW_TABS.filter(t => t.key !== 'grant-sheet' || !!grantDetails?.evaluationSheet)
+      : isSfag
       ? REVIEW_TABS
       : REVIEW_TABS.filter(t => t.key === 'personal' || t.key === 'documents');
 
@@ -1011,6 +1056,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     </div>
                   )}
 
+                  {/* --- Grant forms (POLCA / Alumni) --- */}
+                  {activeTab === 'grant-form' && (
+                    grantDetails
+                      ? <ApplicationFormAnswers details={grantDetails} scholarship={grantScholarship} />
+                      : <p className="text-xs text-slate-400">This scholarship is no longer in the registry, so its form can't be displayed.</p>
+                  )}
+                  {activeTab === 'grant-sheet' && grantDetails?.evaluationSheet && (
+                    <EvaluationSheetAnswers sheet={grantDetails.evaluationSheet} />
+                  )}
+
                   {/* --- Documents --- */}
                   {activeTab === 'documents' && (
                     <div className="space-y-2">
@@ -1027,6 +1082,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             <DocumentThumb doc={doc} onOpen={() => setPreviewDoc(doc)} />
                             <div className="truncate min-w-0">
                               <p className="text-xs font-semibold text-slate-800 truncate">{doc.docType}</p>
+                              {doc.variant && <p className="text-[10px] font-bold text-brand-green truncate">{doc.variant}</p>}
                               <p className="text-[10px] text-slate-400 truncate">{doc.filename} {doc.size ? `· ${formatBytes(doc.size)}` : ''}</p>
                             </div>
                           </div>
@@ -1048,6 +1104,15 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
             {/* Sticky decision sidebar */}
             <div className="space-y-5 sm:space-y-6 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto min-w-0">
+              {selected.applicationFormType === 'polca' && (
+                <PolcaAdminFieldsCard
+                  applicationId={selected._id}
+                  fields={selected.adminFields}
+                  getToken={() => getToken()}
+                  apiBaseUrl={API_BASE_URL}
+                  onSaved={adminFields => setApplications(prev => prev.map(a => (a._id === selected._id ? { ...a, adminFields } : a)))}
+                />
+              )}
               <div className="bg-white rounded-xl border border-slate-100 p-5 sm:p-6 card-shadow space-y-4">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider">Review Decision</h3>
@@ -1261,6 +1326,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 ? 'Post and manage official updates shown to applicants.'
                 : 'Review submissions, verify documents, and update application status for every applicant.'}
             </p>
+            {adminOffice && (
+              <span className="inline-block mt-2.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/15 border border-white/20">
+                {OFFICE_LABELS[adminOffice as keyof typeof OFFICE_LABELS] ?? adminOffice} view
+              </span>
+            )}
           </div>
           {mainView !== 'announcements' && (
             <motion.button

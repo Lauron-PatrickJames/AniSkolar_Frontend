@@ -18,6 +18,8 @@ import {
   Info
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import GrantApplication from './GrantApplication';
+import { isGrantFormType } from '../../utils/grantForms';
 
 interface ApplyScholarshipProps {
   scholarship: Scholarship;
@@ -320,7 +322,16 @@ function Hint({ children }: { children: React.ReactNode }) {
   return <p className="mt-1 text-[11px] text-slate-400">{children}</p>;
 }
 
-export default function ApplyScholarship({
+// Grant-form scholarships (POLCA, Alumni) use their own multi-section
+// wizard; everything else goes through the standard / SFAG flow below.
+export default function ApplyScholarship(props: ApplyScholarshipProps) {
+  if (isGrantFormType(props.scholarship.applicationFormType)) {
+    return <GrantApplication {...props} />;
+  }
+  return <StandardApplyScholarship {...props} />;
+}
+
+function StandardApplyScholarship({
   scholarship,
   student,
   onBack,

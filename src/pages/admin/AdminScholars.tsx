@@ -23,14 +23,14 @@ interface AdminApplication {
   avatarUrl?: string;
   scholarshipId: string;
   scholarshipName: string;
-  applicationFormType: 'standard' | 'sfag';
+  applicationFormType: 'standard' | 'sfag' | 'polca' | 'alumni';
   status: AppStatus;
   createdAt: string;
   history?: HistoryEntry[];
   reviewNote?: string;
   standardInfo?: { firstName: string; lastName: string; email: string; phone: string; program: string; yearLevel: string; gpa: string };
-  personalInfo?: { firstName: string; lastName: string; course: string; yearLevel: string };
-  contactSchool?: { email: string; mobileNo: string };
+  personalInfo?: { firstName: string; lastName: string; course: string; yearLevel: string; email?: string };
+  contactSchool?: { email?: string; mobileNo: string };
 }
 
 interface AdminScholarsProps {
@@ -58,8 +58,14 @@ const TIMELINE_STYLES: Record<HistoryStatus, { dot: string; icon: React.ElementT
 
 // --- Derived helpers (same shape as AdminDashboard.tsx) --------------------
 
+// SFAG and the grant forms (POLCA / Alumni) keep these on personalInfo /
+// contactSchool; only the standard form uses standardInfo.
+function usesSectionForm(app: AdminApplication): boolean {
+  return app.applicationFormType !== 'standard';
+}
+
 function applicantName(app: AdminApplication): string {
-  if (app.applicationFormType === 'sfag' && app.personalInfo) {
+  if (usesSectionForm(app) && app.personalInfo) {
     return `${app.personalInfo.firstName} ${app.personalInfo.lastName}`;
   }
   if (app.standardInfo) return `${app.standardInfo.firstName} ${app.standardInfo.lastName}`;
@@ -67,19 +73,20 @@ function applicantName(app: AdminApplication): string {
 }
 
 function applicantEmail(app: AdminApplication): string {
-  return app.applicationFormType === 'sfag' ? app.contactSchool?.email ?? '' : app.standardInfo?.email ?? '';
+  if (!usesSectionForm(app)) return app.standardInfo?.email ?? '';
+  return app.contactSchool?.email || app.personalInfo?.email || '';
 }
 
 function applicantPhone(app: AdminApplication): string {
-  return app.applicationFormType === 'sfag' ? app.contactSchool?.mobileNo ?? '' : app.standardInfo?.phone ?? '';
+  return usesSectionForm(app) ? app.contactSchool?.mobileNo ?? '' : app.standardInfo?.phone ?? '';
 }
 
 function applicantProgram(app: AdminApplication): string {
-  return app.applicationFormType === 'sfag' ? app.personalInfo?.course ?? '' : app.standardInfo?.program ?? '';
+  return usesSectionForm(app) ? app.personalInfo?.course ?? '' : app.standardInfo?.program ?? '';
 }
 
 function applicantYearLevel(app: AdminApplication): string {
-  return app.applicationFormType === 'sfag' ? app.personalInfo?.yearLevel ?? '' : app.standardInfo?.yearLevel ?? '';
+  return usesSectionForm(app) ? app.personalInfo?.yearLevel ?? '' : app.standardInfo?.yearLevel ?? '';
 }
 
 function initials(name: string): string {

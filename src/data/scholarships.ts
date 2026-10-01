@@ -3,13 +3,13 @@ import { DocumentSlot, Scholarship, ScholarshipOffice } from '../types';
 // Display names for the offices that review scholarships. Scholarships
 // without an `office` belong to the LSO.
 export const OFFICE_LABELS: Record<ScholarshipOffice, string> = {
-  LSO: 'Admissions and Scholarship Office',
+  LSO: 'Admissions and Scholarship Office (AdSO)',
   POLCA: 'POLCA Office',
   ALUMNI: 'Alumni Office'
 };
 
 export const OFFICE_SHORT_LABELS: Record<ScholarshipOffice, string> = {
-  LSO: 'Scholarship Office',
+  LSO: 'AdSO',
   POLCA: 'POLCA',
   ALUMNI: 'Alumni Office'
 };
@@ -28,7 +28,7 @@ function requirementLabels(slots: DocumentSlot[]): string[] {
 // (dlsud.edu.ph/admissions/scholarship).
 const SCHOLARSHIP_OFFICE_PROVIDER = {
   name: 'De La Salle University-Dasmariñas',
-  office: 'Admissions and Scholarship Office',
+  office: 'Admissions and Scholarship Office (AdSO)',
   address: 'Ayuntamiento De Gonzalez Bldg., De La Salle University-Dasmariñas, Brgy. Fatima 1, Dasmariñas City, Cavite 4114',
   contact: [
     'scholarship@dlsud.edu.ph · AdSOsecretary@dlsud.edu.ph',

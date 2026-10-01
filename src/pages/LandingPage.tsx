@@ -46,7 +46,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
     },
     {
       q: "How can I renew my active scholarship for the next term?",
-      a: "Scholars can renew their grants by submitting their latest Certified True Copy of Grades (TCG) and any other program-specific requirements during the announced renewal period in the Student Portal. The Scholarship Office will evaluate your academic compliance before automatically renewing your discount."
+      a: "Scholars can renew their grants by submitting their latest Certified True Copy of Grades (TCG) and any other program-specific requirements during the announced renewal period in the Student Portal. The AdSO will evaluate your academic compliance before automatically renewing your discount."
     },
     {
       q: "Can I apply for multiple scholarships at the same time?",
@@ -54,7 +54,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
     },
     {
       q: "What should I do if my document uploads are failing?",
-      a: "Ensure your documents are in JPEG/JPG format and do not exceed 10MB in size. If issues persist, you can contact the Admissions and Scholarship Office directly or visit the office at the Ayuntamiento De Gonzalez Bldg.."
+      a: "Ensure your documents are in JPEG/JPG format and do not exceed 10MB in size. If issues persist, you can contact the Admissions and Scholarship Office (AdSO) directly or visit the office at the Ayuntamiento De Gonzalez Bldg.."
     }
   ];
 
@@ -147,7 +147,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
             </h2>
             <div className="w-16 h-1 bg-brand-green mx-auto mb-6 rounded-full"></div>
             <p className="text-base text-slate-600 leading-relaxed">
-              AniSkolar is the official, student-centered digital scholarship solution of De La Salle University–Dasmariñas. Managed by the Admissions and Scholarship Office, AniSkolar replaces traditional paperwork with a simple, secure, and modern online environment designed specifically for the Lasallian community.
+              AniSkolar is the official, student-centered digital scholarship solution of De La Salle University–Dasmariñas. Managed by the Admissions and Scholarship Office (AdSO), AniSkolar replaces traditional paperwork with a simple, secure, and modern online environment designed specifically for the Lasallian community.
             </p>
           </div>
 
@@ -232,7 +232,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               { step: '01', title: 'Explore Grants', desc: 'Browse and search our categorized scholarships and find the perfect match.' },
               { step: '02', title: 'Check Eligibility', desc: 'Review required grade averages and necessary documentation rules.' },
               { step: '03', title: 'Submit Requirements', desc: 'Log in and upload scanned digital copies of your credentials directly.' },
-              { step: '04', title: 'Wait for Evaluation', desc: 'The Scholarship Office evaluates submissions; receive real-time notifications on outcomes.' }
+              { step: '04', title: 'Wait for Evaluation', desc: 'The AdSO evaluates submissions; receive real-time notifications on outcomes.' }
             ].map((item, idx) => (
               <div key={idx} className="relative p-6 rounded-xl border border-slate-100 bg-slate-50/30">
                 <span className="text-5xl font-display font-black text-emerald-100 block mb-4">{item.step}</span>

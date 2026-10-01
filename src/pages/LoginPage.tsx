@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, Mail, Lock, ArrowLeft, Eye, EyeOff, KeyRound, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, ArrowLeft, Eye, EyeOff, KeyRound, AlertCircle, Smartphone, RotateCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSignIn } from '@clerk/react';
 import logo from '../assets/logo.png';
@@ -30,6 +30,26 @@ export function AniSkolarLogo({ className = "w-12 h-12" }: { className?: string 
   );
 }
 
+// Second-step methods Clerk can ask an admin for after the password, in
+// the order we offer them. Clerk asks for one when two-step verification
+// is on for the account, or when Client Trust sees a sign-in from a new
+// device (status 'needs_second_factor' / 'needs_client_trust').
+type VerifyMethod = 'email_code' | 'phone_code' | 'totp' | 'backup_code';
+const VERIFY_METHOD_ORDER: VerifyMethod[] = ['email_code', 'phone_code', 'totp', 'backup_code'];
+const VERIFY_METHOD_LABELS: Record<VerifyMethod, string> = {
+  email_code: 'Email a code',
+  phone_code: 'Text a code',
+  totp: 'Authenticator app',
+  backup_code: 'Backup code'
+};
+
+interface VerifyStep {
+  method: VerifyMethod;
+  available: VerifyMethod[];
+  destinations: Partial<Record<VerifyMethod, string>>;  // masked email / phone
+  reason: 'new_device' | 'two_factor';
+}
+
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   invalid_domain: 'Please sign in with your official DLSU-D email address (@dlsud.edu.ph). Other email accounts are not allowed.',
 };
@@ -44,6 +64,9 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [verifyStep, setVerifyStep] = useState<VerifyStep | null>(null);
+  const [code, setCode] = useState('');
+  const [codeNotice, setCodeNotice] = useState('');
 
   // Surfaces the reason when SsoCallbackPage bounces someone back here
   // (e.g. ?error=invalid_domain for a non-DLSU-D email). Read once on
@@ -121,9 +144,100 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
 
     if (signIn.status === 'complete') {
       await signIn.finalize({ navigate: noopNavigate });
-    } else {
-      setError('This account needs additional verification that isn\u2019t supported here yet.');
+      return;
     }
+    if (signIn.status === 'needs_second_factor' || signIn.status === 'needs_client_trust') {
+      await startVerification(signIn.status === 'needs_client_trust' ? 'new_device' : 'two_factor');
+      return;
+    }
+    if (signIn.status === 'needs_new_password') {
+      setError('This account has to set a new password before it can sign in. Ask the system administrator to reset it in the Clerk Dashboard.');
+      return;
+    }
+    setError(`This account can\u2019t finish signing in here (Clerk status: ${signIn.status ?? 'unknown'}). Ask the system administrator to check the account in the Clerk Dashboard.`);
+  };
+
+  // Sends the code for email / phone methods; authenticator and backup
+  // codes need nothing sent.
+  const sendCode = async (method: VerifyMethod): Promise<boolean> => {
+    if (method !== 'email_code' && method !== 'phone_code') return true;
+    const { error: sendError } = method === 'email_code'
+      ? await signIn.mfa.sendEmailCode()
+      : await signIn.mfa.sendPhoneCode();
+    if (sendError) {
+      setError(sendError.message || 'Couldn\u2019t send the verification code. Please try again.');
+      return false;
+    }
+    return true;
+  };
+
+  const startVerification = async (reason: VerifyStep['reason']) => {
+    const factors = signIn.supportedSecondFactors ?? [];
+    const destinations: VerifyStep['destinations'] = {};
+    for (const f of factors) {
+      const id = (f as { safeIdentifier?: string }).safeIdentifier;
+      if (id && (f.strategy === 'email_code' || f.strategy === 'phone_code')) destinations[f.strategy] = id;
+    }
+    const available = VERIFY_METHOD_ORDER.filter(m => factors.some(f => f.strategy === m));
+    if (available.length === 0) {
+      setError('This account needs a verification method that isn\u2019t set up. Ask the system administrator to check the account in the Clerk Dashboard.');
+      return;
+    }
+    const method = available[0];
+    if (!(await sendCode(method))) return;
+    setCode('');
+    setCodeNotice('');
+    setVerifyStep({ method, available, destinations, reason });
+  };
+
+  const switchMethod = async (method: VerifyMethod) => {
+    if (!verifyStep) return;
+    setError('');
+    setCode('');
+    setCodeNotice('');
+    if (!(await sendCode(method))) return;
+    setVerifyStep({ ...verifyStep, method });
+  };
+
+  const resendCode = async () => {
+    if (!verifyStep) return;
+    setError('');
+    if (await sendCode(verifyStep.method)) setCodeNotice('A new code is on its way.');
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifyStep) return;
+    setError('');
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setError('Enter the verification code.');
+      return;
+    }
+    const params = { code: trimmed };
+    const { error: verifyError } =
+      verifyStep.method === 'email_code' ? await signIn.mfa.verifyEmailCode(params)
+      : verifyStep.method === 'phone_code' ? await signIn.mfa.verifyPhoneCode(params)
+      : verifyStep.method === 'totp' ? await signIn.mfa.verifyTOTP(params)
+      : await signIn.mfa.verifyBackupCode(params);
+    if (verifyError) {
+      setError(verifyError.message || 'That code didn\u2019t work. Check it and try again.');
+      return;
+    }
+    if (signIn.status === 'complete') {
+      await signIn.finalize({ navigate: noopNavigate });
+    } else {
+      setError('Verification didn\u2019t complete the sign-in. Please start again.');
+    }
+  };
+
+  const cancelVerification = async () => {
+    await signIn.reset();
+    setVerifyStep(null);
+    setCode('');
+    setCodeNotice('');
+    setError('');
+    setPassword('');
   };
 
   // Admin (password) and student (Microsoft SSO) both drive the same shared
@@ -247,7 +361,92 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                   )}
                 </AnimatePresence>
 
-                {loginMode === 'admin' ? (
+                {loginMode === 'admin' && verifyStep ? (
+                  <div className="space-y-6">
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-100 flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-brand-green/10 text-brand-green flex items-center justify-center shrink-0">
+                        {verifyStep.method === 'email_code' ? <Mail className="w-4 h-4" /> : verifyStep.method === 'backup_code' ? <KeyRound className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />}
+                      </div>
+                      <div className="text-sm text-slate-600 leading-relaxed">
+                        <p className="font-semibold text-slate-900">
+                          {verifyStep.reason === 'new_device' ? 'Verify it\u2019s you on this device' : 'Two-step verification'}
+                        </p>
+                        <p className="mt-0.5">
+                          {verifyStep.method === 'email_code'
+                            ? <>We emailed a verification code to <strong>{verifyStep.destinations.email_code ?? email}</strong>.</>
+                            : verifyStep.method === 'phone_code'
+                            ? <>We texted a verification code to <strong>{verifyStep.destinations.phone_code ?? 'your phone'}</strong>.</>
+                            : verifyStep.method === 'totp'
+                            ? 'Enter the 6-digit code from your authenticator app.'
+                            : 'Enter one of your backup codes.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <form className="space-y-6" onSubmit={handleVerify}>
+                      <div>
+                        <label htmlFor="verify-code" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                          Verification code
+                        </label>
+                        <input
+                          id="verify-code"
+                          type="text"
+                          inputMode={verifyStep.method === 'backup_code' ? 'text' : 'numeric'}
+                          autoComplete="one-time-code"
+                          autoFocus
+                          value={code}
+                          onChange={(e) => setCode(e.target.value)}
+                          placeholder={verifyStep.method === 'backup_code' ? 'Backup code' : '123456'}
+                          className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-base tracking-[0.3em] text-center font-semibold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all"
+                        />
+                        {codeNotice && <p className="mt-2 text-xs font-semibold text-brand-green">{codeNotice}</p>}
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full font-display font-bold text-xs tracking-wider text-white bg-brand-green hover:bg-[#00542c] active:scale-[0.99] py-3.5 rounded-lg transition-all duration-150 shadow-sm hover:shadow-md flex items-center justify-center gap-2 focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed uppercase"
+                      >
+                        {isLoading ? (
+                          <>
+                            <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                            Verifying...
+                          </>
+                        ) : (
+                          'Verify and Sign In'
+                        )}
+                      </button>
+                    </form>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
+                      {(verifyStep.method === 'email_code' || verifyStep.method === 'phone_code') ? (
+                        <button type="button" onClick={resendCode} disabled={isLoading} className="inline-flex items-center gap-1.5 text-brand-green hover:underline disabled:opacity-50">
+                          <RotateCw className="w-3.5 h-3.5" /> Resend code
+                        </button>
+                      ) : <span />}
+                      {verifyStep.available.length > 1 && (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-400">
+                          <span>Other ways:</span>
+                          {verifyStep.available.filter(m => m !== verifyStep.method).map(m => (
+                            <button key={m} type="button" onClick={() => switchMethod(m)} disabled={isLoading} className="text-slate-500 hover:text-brand-green disabled:opacity-50">
+                              {VERIFY_METHOD_LABELS[m]}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={cancelVerification}
+                      disabled={isLoading}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-slate-400 hover:text-brand-green transition-colors focus:outline-hidden disabled:opacity-50"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      Use a different account
+                    </button>
+                  </div>
+                ) : loginMode === 'admin' ? (
                   <div className="space-y-6">
                     <form className="space-y-6" onSubmit={handleSubmit}>
                       <div>

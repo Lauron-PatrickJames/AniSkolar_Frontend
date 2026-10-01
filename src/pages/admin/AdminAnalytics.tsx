@@ -11,7 +11,7 @@ import { Button, EmptyState, KpiCard, PageHeader, Panel, SelectInput, SkeletonRo
 type AppStatus = 'Under Evaluation' | 'Approved' | 'Rejected' | 'Needs Revision';
 
 interface HistoryEntry {
-  status: AppStatus | 'Submitted' | 'Resubmitted';
+  status: AppStatus | 'Submitted' | 'Resubmitted' | 'Forwarded to LSO';
   note?: string;
   changedBy?: string;
   changedAt: string;

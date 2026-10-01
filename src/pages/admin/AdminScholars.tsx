@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   ArrowLeft, Users, Repeat, Award, Clock, CheckCircle, XCircle, AlertCircle, FileText,
-  RefreshCw, Download, Printer, ChevronRight, ChevronDown as ChevronDownIcon
+  RefreshCw, Download, Printer, ChevronRight, Send, ChevronDown as ChevronDownIcon
 } from 'lucide-react';
 import {
   AdminAvatar, Button, DetailField, EmptyState, ErrorBanner, KpiCard, PageHeader, Pagination, Panel,
@@ -11,7 +11,7 @@ import {
 // --- Types (mirror AdminDashboard.tsx) -------------------------------------
 
 type AppStatus = 'Under Evaluation' | 'Approved' | 'Rejected' | 'Needs Revision';
-type HistoryStatus = AppStatus | 'Submitted' | 'Resubmitted';
+type HistoryStatus = AppStatus | 'Submitted' | 'Resubmitted' | 'Forwarded to LSO';
 
 interface HistoryEntry {
   status: HistoryStatus;
@@ -51,7 +51,8 @@ const TIMELINE_STYLES: Record<HistoryStatus, { dot: string; icon: React.ElementT
   'Under Evaluation': { dot: 'bg-amber-500', icon: Clock },
   'Approved': { dot: 'bg-emerald-500', icon: CheckCircle },
   'Rejected': { dot: 'bg-rose-500', icon: XCircle },
-  'Needs Revision': { dot: 'bg-sky-500', icon: AlertCircle }
+  'Needs Revision': { dot: 'bg-sky-500', icon: AlertCircle },
+  'Forwarded to LSO': { dot: 'bg-violet-500', icon: Send }
 };
 
 // --- Derived helpers (same shape as AdminDashboard.tsx) --------------------

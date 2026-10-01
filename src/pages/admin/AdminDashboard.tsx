@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth, useUser } from '@clerk/react';
 import {
   FileText, CheckCircle, XCircle, Clock, Eye, Download, AlertCircle, ArrowLeft, Menu, RefreshCw,
-  ChevronRight, Building2, ClipboardList, Paperclip, RotateCcw, Save, Inbox
+  ChevronRight, Building2, ClipboardList, Paperclip, RotateCcw, Save, Inbox, Send, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AdminAnalytics from './AdminAnalytics';
@@ -34,7 +34,7 @@ const STATUS_OPTIONS: AppStatus[] = ['Under Evaluation', 'Approved', 'Rejected',
 // review decisions. Populated server-side (see routes/applications.js) —
 // existing pre-migration applications may have no history at all, which
 // ApplicationTimeline handles gracefully.
-type HistoryStatus = AppStatus | 'Submitted' | 'Resubmitted';
+type HistoryStatus = AppStatus | 'Submitted' | 'Resubmitted' | 'Forwarded to LSO';
 
 interface HistoryEntry {
   status: HistoryStatus;
@@ -132,6 +132,12 @@ interface AdminApplication {
   eligibilityAnswers?: Record<string, unknown>;
   evaluationSheet?: Record<string, unknown>;
   adminFields?: PolcaAdminFields;
+  // Set once a POLCA / Alumni office sends the application to the LSO.
+  forwardedAt?: string | null;
+  forwardedBy?: string;
+  // Office that recorded the current status; 'LSO' on an office
+  // application means the LSO overrode the office's decision.
+  decisionOffice?: string;
 }
 
 interface AdminDashboardProps {
@@ -213,6 +219,15 @@ function documentUrl(fileId: string): string {
   return `${API_BASE_URL}/api/applications/documents/${fileId}`;
 }
 
+// Applications that belong to an office other than the LSO (POLCA, Alumni).
+function isOfficeApp(app: { office?: string }): boolean {
+  return !!app.office && app.office !== 'LSO';
+}
+
+function officeName(office?: string): string {
+  return (office && OFFICE_LABELS[office as keyof typeof OFFICE_LABELS]) || office || 'office';
+}
+
 const FORM_TYPE_LABELS: Record<string, string> = {
   standard: 'Entrance form',
   sfag: 'SFA Grant form',
@@ -233,7 +248,8 @@ const TIMELINE_STYLES: Record<HistoryStatus, { dot: string; icon: React.ElementT
   'Under Evaluation': { dot: 'bg-amber-500', icon: Clock },
   'Approved': { dot: 'bg-emerald-500', icon: CheckCircle },
   'Rejected': { dot: 'bg-rose-500', icon: XCircle },
-  'Needs Revision': { dot: 'bg-sky-500', icon: AlertCircle }
+  'Needs Revision': { dot: 'bg-sky-500', icon: AlertCircle },
+  'Forwarded to LSO': { dot: 'bg-violet-500', icon: Send }
 };
 
 function ApplicationTimeline({ history }: { history?: HistoryEntry[] }) {
@@ -430,6 +446,34 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [noteSaveError, setNoteSaveError] = useState('');
   const [previewDoc, setPreviewDoc] = useState<AdminDocument | null>(null);
 
+  // "Send to LSO" (office admins only). Sends every application the
+  // office hasn't sent yet, whatever its status — see POST /forward.
+  const [confirmForward, setConfirmForward] = useState(false);
+  const [isForwarding, setIsForwarding] = useState(false);
+  const [forwardResult, setForwardResult] = useState<string>('');
+
+  const sendToLso = async () => {
+    setIsForwarding(true);
+    setLoadError('');
+    try {
+      const token = await getToken();
+      const response = await fetch(`${API_BASE_URL}/api/applications/forward`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Failed to send applications to the LSO.');
+      setForwardResult(`Sent ${body.forwarded} application${body.forwarded === 1 ? '' : 's'} to the LSO.`);
+      setConfirmForward(false);
+      await fetchApplications();
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to send applications to the LSO.');
+      setConfirmForward(false);
+    } finally {
+      setIsForwarding(false);
+    }
+  };
+
   const fetchApplications = async () => {
     setIsLoading(true);
     setLoadError('');
@@ -607,7 +651,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const officeLabel = adminOffice
     ? (OFFICE_LABELS[adminOffice as keyof typeof OFFICE_LABELS] ?? adminOffice)
-    : 'LSO · all offices';
+    : 'LSO';
 
   const VIEW_TITLES: Record<MainView, string> = {
     applications: 'Applications',
@@ -715,11 +759,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">{name}</h1>
                 <StatusBadge status={selected.status} />
+                {isOfficeApp(selected) && selected.decisionOffice === 'LSO' && <Tag tone="amber"><ShieldCheck className="w-3 h-3" />LSO override</Tag>}
               </div>
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                 <span className="text-sm text-slate-600">{selected.scholarshipName}</span>
                 <Tag>{FORM_TYPE_LABELS[selected.applicationFormType] ?? selected.applicationFormType}</Tag>
-                {selected.office && selected.office !== 'LSO' && <Tag tone="blue">{selected.office}</Tag>}
+                {isOfficeApp(selected) && <Tag tone="blue">{officeName(selected.office)}</Tag>}
               </div>
               <dl className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 mt-5 pt-5 border-t border-slate-100">
                 {meta.map(([label, value]) => <DetailField key={label} label={label} value={value} />)}
@@ -729,6 +774,27 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         </Panel>
 
         <ErrorBanner message={loadError} />
+
+        {isOfficeApp(selected) && (
+          <div className={`p-3.5 rounded-lg ring-1 ring-inset text-sm flex items-start gap-2.5 ${
+            selected.forwardedAt ? 'bg-violet-50 ring-violet-200 text-violet-900' : 'bg-slate-50 ring-slate-200 text-slate-700'
+          }`}>
+            <Send className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              {selected.forwardedAt ? (
+                <>
+                  Sent to the LSO by the {officeName(selected.office)} on {formatDate(selected.forwardedAt)}
+                  {selected.forwardedBy ? ` (${selected.forwardedBy})` : ''}.{' '}
+                  {adminOffice
+                    ? 'You can keep reviewing it; the LSO can override your decision.'
+                    : `The office's decision stands unless you override it below.`}
+                </>
+              ) : (
+                <>Not sent to the LSO yet. It goes with the office's next "Send to LSO".</>
+              )}
+            </span>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* Answers */}
@@ -791,7 +857,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
           {/* Decision sidebar */}
           <div className="space-y-6 lg:sticky lg:top-24 min-w-0">
-            <Panel title="Review decision" description={`Current status: ${selected.status}`}>
+            <Panel
+              title={!adminOffice && isOfficeApp(selected) ? 'Override decision' : 'Review decision'}
+              description={
+                isOfficeApp(selected) && selected.decisionOffice
+                  ? `Current status: ${selected.status} (set by ${selected.decisionOffice === 'LSO' ? 'the LSO' : officeName(selected.decisionOffice)})`
+                  : `Current status: ${selected.status}`
+              }
+            >
               <div className="space-y-4">
                 {justUpdatedStatus && (
                   <div className="p-3 bg-emerald-50 text-emerald-800 rounded-lg ring-1 ring-inset ring-emerald-200 text-sm flex items-center gap-2">
@@ -927,16 +1000,70 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const decided = stats.approved + stats.rejected;
   const approvalRate = decided > 0 ? Math.round((stats.approved / decided) * 100) : null;
   const filtersActive = search.trim() !== '' || scholarshipFilter !== 'All' || statusFilter !== 'All';
+  const unsent = applications.filter(a => !a.forwardedAt);
+  const unsentSummary = statusTabs
+    .filter(t => t.key !== 'All')
+    .map(t => [t.label.toLowerCase(), unsent.filter(a => a.status === t.key).length] as const)
+    .filter(([, c]) => c > 0)
+    .map(([label, c]) => `${c} ${label}`)
+    .join(', ');
+  const lastForwardedAt = applications.reduce<string | null>(
+    (latest, a) => (a.forwardedAt && (!latest || a.forwardedAt > latest) ? a.forwardedAt : latest), null
+  );
 
   return (
     renderShell(<>
       <PageHeader
         title="Applications"
-        description="Review submissions, verify documents, and record a decision for each applicant."
+        description={adminOffice
+          ? `Applications for the ${officeLabel}. Review them, then send them to the LSO.`
+          : 'Review submissions, verify documents, and record a decision for each applicant.'}
         actions={<Button icon={RefreshCw} onClick={fetchApplications} disabled={isLoading}>Refresh</Button>}
       />
 
       <ErrorBanner message={loadError} />
+
+      {adminOffice && !isLoading && (
+        <Panel bodyClassName="p-4 sm:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-violet-50 text-violet-700 flex items-center justify-center shrink-0">
+              <Send className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-900">
+                {unsent.length > 0
+                  ? `${unsent.length} application${unsent.length === 1 ? '' : 's'} not yet sent to the LSO`
+                  : 'Everything has been sent to the LSO'}
+              </p>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {unsent.length > 0
+                  ? 'Sending forwards all of them, whatever their status. Your decisions stand unless the LSO overrides them.'
+                  : lastForwardedAt ? `Last sent ${formatDateTime(lastForwardedAt)}. New applications will appear here.` : 'New applications will appear here.'}
+              </p>
+              {forwardResult && <p className="text-sm text-emerald-700 font-medium mt-1 flex items-center gap-1.5"><CheckCircle className="w-4 h-4" />{forwardResult}</p>}
+            </div>
+            {confirmForward ? (
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <span className="text-sm text-slate-700">
+                  Send {unsentSummary}?
+                </span>
+                <Button variant="primary" icon={Send} loading={isForwarding} onClick={sendToLso}>Send</Button>
+                <Button variant="ghost" disabled={isForwarding} onClick={() => setConfirmForward(false)}>Cancel</Button>
+              </div>
+            ) : (
+              <Button
+                variant="primary"
+                icon={Send}
+                disabled={unsent.length === 0}
+                onClick={() => { setForwardResult(''); setConfirmForward(true); }}
+                className="shrink-0"
+              >
+                Send to LSO
+              </Button>
+            )}
+          </div>
+        </Panel>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total applications" value={stats.total} hint="All submissions on file" icon={Inbox} tone="slate" />
@@ -1006,11 +1133,26 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         </Td>
                         <Td>
                           <p className="text-sm text-slate-700 truncate max-w-64">{app.scholarshipName}</p>
-                          <p className="text-xs text-slate-400">{FORM_TYPE_LABELS[app.applicationFormType] ?? app.applicationFormType}</p>
+                          <p className="text-xs text-slate-400">
+                            {FORM_TYPE_LABELS[app.applicationFormType] ?? app.applicationFormType}
+                            {!adminOffice && isOfficeApp(app) && <> · from {officeName(app.office)}</>}
+                          </p>
                         </Td>
                         <Td><span className="font-mono text-xs text-slate-500">{app.referenceCode}</span></Td>
                         <Td className="whitespace-nowrap tabular-nums">{formatShortDate(app.createdAt)}</Td>
-                        <Td><StatusBadge status={app.status} /></Td>
+                        <Td>
+                          <div className="flex flex-col items-start gap-1">
+                            <StatusBadge status={app.status} />
+                            {adminOffice && (
+                              app.forwardedAt
+                                ? <span className="text-[11px] text-violet-700 flex items-center gap-1"><Send className="w-3 h-3" />Sent to LSO</span>
+                                : <span className="text-[11px] text-slate-400">Not sent yet</span>
+                            )}
+                            {!adminOffice && isOfficeApp(app) && app.decisionOffice === 'LSO' && (
+                              <span className="text-[11px] text-amber-700 flex items-center gap-1"><ShieldCheck className="w-3 h-3" />LSO override</span>
+                            )}
+                          </div>
+                        </Td>
                         <Td><ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600" /></Td>
                       </tr>
                     );

@@ -3,6 +3,7 @@ import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship } from './types';
 import { mockScholarships } from './data/scholarships';
 import { mockAnnouncements } from './data/announcements';
+import { isGrantFormType, toGrantDetails } from './utils/grantForms';
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout';
@@ -124,6 +125,15 @@ function toFrontendApplication(doc: any): Application {
       assetsExpenses: doc.assetsExpenses,
       agreement: doc.agreement,
     };
+  }
+
+  // Grant-form applications (POLCA / Alumni) are read back into the
+  // wizard's form shape, plus the raw stored documents so a resubmit can
+  // show what's already on file per requirement slot.
+  if (isGrantFormType(doc.applicationFormType)) {
+    const scholarship = mockScholarships.find(s => s.id === doc.scholarshipId);
+    if (scholarship) base.grantDetails = toGrantDetails(doc, scholarship);
+    base.storedDocuments = doc.documents ?? [];
   }
 
   return base as Application;

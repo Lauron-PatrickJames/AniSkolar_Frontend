@@ -25,7 +25,7 @@ interface AdminApplication {
   studentNumber: string;
   scholarshipId: string;
   scholarshipName: string;
-  applicationFormType: 'standard' | 'sfag';
+  applicationFormType: 'standard' | 'sfag' | 'polca' | 'alumni';
   status: AppStatus;
   createdAt: string;
   history?: HistoryEntry[];
@@ -57,7 +57,7 @@ const STATUS_COLORS: Record<AppStatus, string> = {
 };
 
 function applicantProgram(app: AdminApplication): string {
-  return app.applicationFormType === 'sfag' ? app.personalInfo?.course ?? 'Unspecified' : app.standardInfo?.program ?? 'Unspecified';
+  return app.applicationFormType !== 'standard' ? app.personalInfo?.course ?? 'Unspecified' : app.standardInfo?.program ?? 'Unspecified';
 }
 
 function withinRange(iso: string, days: number | null): boolean {

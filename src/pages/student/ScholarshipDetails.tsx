@@ -1,7 +1,8 @@
 import React from 'react';
 import { Scholarship, Application } from '../../types';
-import { ArrowLeft, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info } from 'lucide-react';
 import { motion } from 'motion/react';
+import { OFFICE_SHORT_LABELS, officeOf } from '../../data/scholarships';
 
 interface ScholarshipDetailsProps {
   scholarship: Scholarship;
@@ -76,7 +77,10 @@ export default function ScholarshipDetails({
 
   const isApplied = !!existingApplication;
   const status = (existingApplication?.status as AppStatus) ?? 'Under Evaluation';
-  const meta = STATUS_META[status] ?? STATUS_META['Under Evaluation'];
+  // Status copy names the LSO; swap in whichever office reviews this grant.
+  const officeShort = OFFICE_SHORT_LABELS[officeOf(scholarship)];
+  const baseMeta = STATUS_META[status] ?? STATUS_META['Under Evaluation'];
+  const meta = { ...baseMeta, description: baseMeta.description.replace('the LSO', `the ${officeShort}`) };
   const StatusIcon = meta.icon;
   const hasNote = !!existingApplication?.reviewNote && (status === 'Rejected' || status === 'Needs Revision');
 
@@ -109,7 +113,7 @@ export default function ScholarshipDetails({
           </h2>
           <div className="flex items-center text-slate-500 text-xs gap-1.5">
             <Calendar className="w-4 h-4 text-slate-400" />
-            <span className="font-semibold">LSO Submission Deadline:</span>
+            <span className="font-semibold">{officeShort} Submission Deadline:</span>
             <span className="text-slate-800 font-bold">{scholarship.deadline}</span>
           </div>
         </div>
@@ -157,7 +161,7 @@ export default function ScholarshipDetails({
 
               {hasNote && (
                 <div className="mt-3 p-3 rounded-lg bg-white/70 border border-white text-xs text-slate-600 leading-relaxed">
-                  <span className="font-bold text-slate-700">Note from LSO: </span>
+                  <span className="font-bold text-slate-700">Note from {officeShort}: </span>
                   {existingApplication?.reviewNote}
                 </div>
               )}
@@ -234,6 +238,39 @@ export default function ScholarshipDetails({
 
         {/* Right Side: Eligibility & Requirements (Col-span 1) */}
         <div className="space-y-8">
+          {/* Provider / office (grant-form scholarships) */}
+          {scholarship.provider && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-3">
+              <h3 className="font-display font-extrabold text-base text-slate-900 border-b border-slate-100 pb-3 mb-1 flex items-center space-x-2">
+                <Building2 className="w-4.5 h-4.5 text-brand-green" />
+                <span>Provider</span>
+              </h3>
+              <p className="text-sm font-semibold text-slate-800 leading-snug">{scholarship.provider.name}</p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                {scholarship.provider.office && <span className="font-semibold text-slate-600">{scholarship.provider.office}, </span>}
+                {scholarship.provider.address}
+              </p>
+              {scholarship.provider.contact && (
+                <ul className="text-xs text-slate-500 space-y-0.5">
+                  {scholarship.provider.contact.map(line => <li key={line}>{line}</li>)}
+                </ul>
+              )}
+              {(scholarship.targetApplicants || scholarship.formId || scholarship.guidelinesNote) && (
+                <dl className="pt-3 border-t border-slate-100 space-y-2 text-xs">
+                  {scholarship.targetApplicants && (
+                    <div><dt className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">For</dt><dd className="text-slate-700 font-semibold">{scholarship.targetApplicants}</dd></div>
+                  )}
+                  {scholarship.formId && (
+                    <div><dt className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Form</dt><dd className="text-slate-700 font-semibold">{scholarship.formId}</dd></div>
+                  )}
+                  {scholarship.guidelinesNote && (
+                    <div><dt className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">Guidelines</dt><dd className="text-slate-700">{scholarship.guidelinesNote}</dd></div>
+                  )}
+                </dl>
+              )}
+            </div>
+          )}
+
           {/* Eligibility Criteria */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
             <h3 className="font-display font-extrabold text-base text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
@@ -250,22 +287,66 @@ export default function ScholarshipDetails({
             </ul>
           </div>
 
+          {/* Retention conditions — informational only, never block applying */}
+          {scholarship.retentionConditions && scholarship.retentionConditions.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+              <h3 className="font-display font-extrabold text-base text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
+                <Repeat className="w-4.5 h-4.5 text-brand-green" />
+                <span>To Keep the Scholarship</span>
+              </h3>
+              <ul className="space-y-3">
+                {scholarship.retentionConditions.map(condition => (
+                  <li key={condition} className="flex items-start text-xs sm:text-sm text-slate-600">
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0 mt-2 mr-2.5" />
+                    <span>{condition}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Document Requirements Checklist */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
             <h3 className="font-display font-extrabold text-base text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
               <FileCheck className="w-4.5 h-4.5 text-brand-green" />
               <span>Required Documents</span>
             </h3>
-            <ul className="space-y-3">
-              {scholarship.requirements.map((req, idx) => (
-                <li key={idx} className="flex gap-2.5 text-xs text-slate-600">
-                  <span className="w-5 h-5 rounded-md bg-slate-50 border border-slate-200 text-slate-500 font-bold text-[10px] flex items-center justify-center shrink-0">
-                    PDF
-                  </span>
-                  <span className="leading-tight">{req}</span>
-                </li>
-              ))}
-            </ul>
+            {scholarship.documentSlots ? (
+              <ul className="space-y-3">
+                {scholarship.documentSlots.filter(slot => slot.placement !== 'form').map(slot => (
+                  <li key={slot.key} className="flex gap-2.5 text-xs text-slate-600">
+                    <span className={`px-1 h-5 rounded-md border font-bold text-[9px] flex items-center justify-center shrink-0 ${
+                      slot.source === 'form' ? 'bg-emerald-50 border-emerald-100 text-brand-green' : 'bg-slate-50 border-slate-200 text-slate-500'
+                    }`}>
+                      {slot.source === 'form' ? 'FORM' : 'JPG'}
+                    </span>
+                    <span className="leading-tight">
+                      {slot.label}
+                      {slot.source === 'form' && <span className="text-slate-400"> — filled out online</span>}
+                      {slot.multiple && <span className="text-slate-400"> (multiple files)</span>}
+                      {slot.optional && <span className="text-slate-400"> (if any)</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ul className="space-y-3">
+                {scholarship.requirements.map((req, idx) => (
+                  <li key={idx} className="flex gap-2.5 text-xs text-slate-600">
+                    <span className="w-5 h-5 rounded-md bg-slate-50 border border-slate-200 text-slate-500 font-bold text-[10px] flex items-center justify-center shrink-0">
+                      PDF
+                    </span>
+                    <span className="leading-tight">{req}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {scholarship.submissionNote && (
+              <p className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100 text-[11px] font-semibold text-amber-800 flex items-start gap-1.5">
+                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>{scholarship.submissionNote}</span>
+              </p>
+            )}
           </div>
 
           {/* LSO Integrity Notice */}

@@ -423,11 +423,13 @@ type MainView = 'applications' | 'analytics' | 'lifecycle' | 'announcements';
 export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const { getToken } = useAuth();
   const { user } = useUser();
-  // Office-scoped admins (publicMetadata.office, e.g. "POLCA") only get
-  // their office's applications from the API; this just labels the view
-  // and limits the scholarship filter to match. LSO / unset = all offices.
+  // Office admins (publicMetadata.office, e.g. "POLCA") only get their
+  // office's applications from the API; this just labels the view and
+  // limits the scholarship filter to match.
   const adminOfficeRaw = (user?.publicMetadata as { office?: string } | undefined)?.office?.trim().toUpperCase();
-  const adminOffice = adminOfficeRaw && adminOfficeRaw !== 'LSO' ? adminOfficeRaw : null;
+  // 'ADSO' is the main office (sees its own applications plus whatever the
+  // other offices send); the server refuses admins without an office.
+  const adminOffice = adminOfficeRaw && adminOfficeRaw !== 'ADSO' ? adminOfficeRaw : null;
 
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -490,7 +492,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       const response = await fetch(`${API_BASE_URL}/api/applications`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined
       });
-      if (response.status === 403) throw new Error('This account does not have admin access.');
+      if (response.status === 403) throw new Error((await response.json().catch(() => ({}))).error || 'This account does not have admin access.');
       if (!response.ok) throw new Error('Failed to load applications.');
       const body = await response.json();
       setApplications(body.applications ?? []);
@@ -512,7 +514,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         const response = await fetch(`${API_BASE_URL}/api/applications`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined
         });
-        if (response.status === 403) throw new Error('This account does not have admin access.');
+        if (response.status === 403) throw new Error((await response.json().catch(() => ({}))).error || 'This account does not have admin access.');
         if (!response.ok) throw new Error('Failed to load applications.');
         const body = await response.json();
         if (!cancelled) setApplications(body.applications ?? []);
@@ -663,7 +665,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const officeLabel = adminOffice
     ? (OFFICE_LABELS[adminOffice as keyof typeof OFFICE_LABELS] ?? adminOffice)
-    : OFFICE_SHORT_LABELS.LSO;
+    : adminOfficeRaw === 'ADSO' ? OFFICE_SHORT_LABELS.LSO : 'No office assigned';
 
   const VIEW_TITLES: Record<MainView, string> = {
     applications: 'Applications',

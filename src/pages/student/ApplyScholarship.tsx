@@ -12,14 +12,19 @@ import {
   SfagAgreement,
   SfagApplicationDetails
 } from '../../types';
-import {
-  ArrowLeft, ArrowRight, FileText, CheckCircle, Upload, Trash2, ShieldAlert,
-  AlertCircle, User, MapPin, Users, PiggyBank, ClipboardCheck, Plus, ExternalLink,
-  Info
-} from 'lucide-react';
-import { motion } from 'motion/react';
+import { AlertCircle, CheckCircle, Plus, Trash2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import GrantApplication from './GrantApplication';
 import { isGrantFormType } from '../../utils/grantForms';
+import { OFFICE_LABELS, officeOf } from '../../data/scholarships';
+import {
+  Block, ChoicePills, FieldError, FileSlotView, Hint, Req, SubHeading, errorInputClass, inputClass, labelClass
+} from '../../components/grant-forms/fields';
+import {
+  BackLink, DraftIndicator, FormBanner, PrivacyNote, RevisionNote, SectionNav, SectionPanel, SectionStatus,
+  SubmittedScreen, WizardFooter, WizardHeader, WizardSection
+} from '../../components/grant-forms/WizardShell';
+import { SfagAnswers, StandardProfileAnswers } from '../../components/grant-forms/StandardAnswersView';
 
 interface ApplyScholarshipProps {
   scholarship: Scholarship;
@@ -125,7 +130,7 @@ function emptyPersonalInfo(student: StudentProfile): SfagPersonalInfo {
     gender: '',
     nationality: student.nationality || 'FILIPINO',
     isPwd: false,
-    religion: 'CATHOLIC',
+    religion: 'ROMAN CATHOLIC',
     specifyReligion: ''
   };
 }
@@ -189,8 +194,14 @@ function emptyAssetsExpenses(): SfagAssetsExpenses {
 const REQUIRED_MSG = 'This field is required.';
 const TODAY_ISO = new Date().toISOString().split('T')[0];
 
-function isBlank(value?: string): boolean {
-  return !value || !value.trim();
+function isBlank(value?: string | number | null): boolean {
+  return value === undefined || value === null || !String(value).trim();
+}
+
+// Profile/API values can arrive as numbers or null (e.g. Student.gpa is a
+// Number in Mongo); the form keeps every field as a string.
+function asText(value: unknown): string {
+  return value === undefined || value === null ? '' : String(value);
 }
 
 function isValidEmail(value: string): boolean {
@@ -255,7 +266,10 @@ function getDraftKey(scholarshipId: string, studentNumber: string, clerkId?: str
 }
 
 interface DraftData {
-  wizardStep: number;
+  currentKey?: string;
+  visited?: string[];
+  savedAt?: string;
+  wizardStep?: number;   // drafts saved before the section layout
   personalInfo: SfagPersonalInfo;
   contactSchool: SfagContactSchool;
   parentsGuardian: SfagParentsGuardian;
@@ -290,38 +304,6 @@ function clearDraft(scholarshipId: string, studentNumber: string, clerkId?: stri
   }
 }
 
-const SFAG_TABS = [
-  { step: 1, label: 'Personal Info', icon: User },
-  { step: 2, label: 'Contact & School', icon: MapPin },
-  { step: 3, label: 'Parents & Guardian', icon: Users },
-  { step: 4, label: 'Siblings', icon: Users },
-  { step: 5, label: 'Assets, Expenses & Agreement', icon: PiggyBank }
-];
-
-const inputClass =
-  'block w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all placeholder:text-slate-300';
-const errorInputClass =
-  'block w-full px-3.5 py-2.5 border-2 border-rose-400 rounded-xl text-sm bg-rose-50/60 focus:outline-hidden focus:ring-2 focus:ring-rose-300 focus:border-rose-500 transition-all placeholder:text-rose-300';
-const labelClass = 'flex items-center gap-1 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5';
-
-function Req() {
-  return <span className="text-rose-500">*</span>;
-}
-
-function FieldError({ message }: { message?: string }) {
-  if (!message) return null;
-  return (
-    <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-rose-500">
-      <AlertCircle className="w-3 h-3 shrink-0" />
-      <span>{message}</span>
-    </p>
-  );
-}
-
-function Hint({ children }: { children: React.ReactNode }) {
-  return <p className="mt-1 text-[11px] text-slate-400">{children}</p>;
-}
-
 // Grant-form scholarships (POLCA, Alumni) use their own multi-section
 // wizard; everything else goes through the standard / SFAG flow below.
 export default function ApplyScholarship(props: ApplyScholarshipProps) {
@@ -329,6 +311,86 @@ export default function ApplyScholarship(props: ApplyScholarshipProps) {
     return <GrantApplication {...props} />;
   }
   return <StandardApplyScholarship {...props} />;
+}
+
+// --- Wizard sections ----------------------------------------------------------
+// Same layout as the POLCA / Alumni wizard (components/grant-forms/WizardShell).
+
+type StdSectionKey =
+  | 'profile'
+  | 'personal' | 'contact' | 'parents' | 'siblings' | 'assets' | 'agreement'
+  | 'documents' | 'review';
+
+const PART_LABELS: Record<string, string> = {
+  form: 'Application Form',
+  documents: 'Documents',
+  review: 'Review & Submit'
+};
+
+const SFAG_SECTIONS: (WizardSection & { key: StdSectionKey })[] = [
+  { key: 'personal', label: 'Personal Info', part: 'form' },
+  { key: 'contact', label: 'Contact & School', part: 'form' },
+  { key: 'parents', label: 'Parents & Guardian', part: 'form' },
+  { key: 'siblings', label: 'Siblings', part: 'form' },
+  { key: 'assets', label: 'Assets & Expenses', part: 'form' },
+  { key: 'agreement', label: 'Agreement', part: 'form' },
+  { key: 'documents', label: 'Upload Documents', part: 'documents' },
+  { key: 'review', label: 'Review & Submit', part: 'review' }
+];
+
+const STANDARD_SECTIONS: (WizardSection & { key: StdSectionKey })[] = [
+  { key: 'profile', label: 'Personal & Academic Profile', part: 'form' },
+  { key: 'documents', label: 'Upload Documents', part: 'documents' },
+  { key: 'review', label: 'Review & Submit', part: 'review' }
+];
+
+// Drafts saved before the section layout stored a numbered tab instead.
+const LEGACY_SFAG_STEPS: Record<number, StdSectionKey> = {
+  1: 'personal', 2: 'contact', 3: 'parents', 4: 'siblings', 5: 'assets', 6: 'documents'
+};
+
+const YEAR_LEVEL_OPTIONS = ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year'];
+
+function newSibling(): SfagSibling {
+  return {
+    id: `sib_${Math.random().toString(36).substr(2, 9)}`,
+    fullName: '',
+    socialStatus: SIBLING_SOCIAL_STATUS_OPTIONS[0],
+    civilStatus: 'SINGLE',
+    age: '',
+    schoolOrCompany: '',
+    schoolType: 'Public',
+    tuitionOrIncome: '',
+    isDlsudScholar: false
+  };
+}
+
+interface TextFieldOpts {
+  key: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  kind?: FieldKind;
+  type?: string;
+  placeholder?: string;
+  className?: string;
+  maxLength?: number;
+  max?: string;
+  disabled?: boolean;
+  hint?: React.ReactNode;
+}
+
+interface SelectFieldOpts {
+  key?: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  required?: boolean;
+  placeholder?: string;
+  className?: string;
+  disabled?: boolean;
 }
 
 function StandardApplyScholarship({
@@ -343,6 +405,8 @@ function StandardApplyScholarship({
   const { getToken } = useAuth();
   const isSfag = scholarship.applicationFormType === 'sfag';
   const isResubmit = !!existingApplication;
+  const sections = isSfag ? SFAG_SECTIONS : STANDARD_SECTIONS;
+  const officeLabel = OFFICE_LABELS[officeOf(scholarship)];
 
   // Load any in-progress draft for this exact scholarship + student combo.
   // Computed once per mount (scholarship/student don't change mid-session).
@@ -354,8 +418,22 @@ function StandardApplyScholarship({
     [scholarship.id, student.studentNumber, student.clerkId, isResubmit]
   );
 
-  // --- SFAG multi-step wizard state ---------------------------------------
-  const [wizardStep, setWizardStep] = useState<number>(savedDraft?.wizardStep ?? 1);
+  // --- Navigation state ---------------------------------------------------------
+  const [currentKey, setCurrentKey] = useState<StdSectionKey>(() => {
+    const saved = savedDraft?.currentKey as StdSectionKey | undefined;
+    if (saved && sections.some(s => s.key === saved)) return saved;
+    const legacy = savedDraft?.wizardStep;
+    if (isSfag && legacy && LEGACY_SFAG_STEPS[legacy]) return LEGACY_SFAG_STEPS[legacy];
+    if (!isSfag && legacy === 6) return 'documents';
+    return sections[0].key;
+  });
+  const [visited, setVisited] = useState<Set<string>>(() =>
+    new Set(isResubmit ? sections.map(s => s.key) : savedDraft?.visited ?? [])
+  );
+  const [banner, setBanner] = useState('');
+  const [savedAt, setSavedAt] = useState<string | null>(savedDraft?.savedAt ?? null);
+
+  // --- SFAG form state -------------------------------------------------------------
   const [personalInfo, setPersonalInfo] = useState<SfagPersonalInfo>(() =>
     normalizePersonalInfo(
       existingApplication?.sfagDetails?.personalInfo ?? savedDraft?.personalInfo ?? emptyPersonalInfo(student)
@@ -376,7 +454,6 @@ function StandardApplyScholarship({
   const [agreement, setAgreement] = useState<SfagAgreement>(
     existingApplication?.sfagDetails?.agreement ?? savedDraft?.agreement ?? { certifyConsulted: false, certifyAccuracy: false }
   );
-  const [sfagFormError, setSfagFormError] = useState('');
 
   // errors: fieldKey -> human readable message. Presence of a key = red highlight.
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -400,34 +477,28 @@ function StandardApplyScholarship({
     else clearFieldError(key);
   };
 
-  const [siblingDraft, setSiblingDraft] = useState({
-    fullName: '',
-    socialStatus: SIBLING_SOCIAL_STATUS_OPTIONS[0],
-    civilStatus: 'SINGLE',
-    age: '',
-    schoolOrCompany: '',
-    schoolType: 'Public' as 'Public' | 'Private' | 'N/A',
-    tuitionOrIncome: '',
-    isDlsudScholar: false
-  });
-  const [siblingDraftError, setSiblingDraftError] = useState('');
-
-  // --- Shared state (both flows) ------------------------------------------
-  const [firstName, setFirstName] = useState(
-    existingApplication?.personalInfo.firstName ?? savedDraft?.firstName ?? (student.name.split(' ')[0] || '')
-  );
-  const [lastName, setLastName] = useState(
-    existingApplication?.personalInfo.lastName ?? savedDraft?.lastName ?? (student.name.split(' ').slice(1).join(' ') || '')
-  );
-  const [email, setEmail] = useState(existingApplication?.personalInfo.email ?? savedDraft?.email ?? student.email);
-  const [phone, setPhone] = useState(existingApplication?.personalInfo.phone ?? savedDraft?.phone ?? (student.mobileNumber || ''));
-  const [studentNumber, setStudentNumber] = useState(student.studentNumber);
-  const [program, setProgram] = useState(existingApplication?.program ?? savedDraft?.program ?? student.course);
-  const [yearLevel, setYearLevel] = useState(existingApplication?.yearLevel ?? savedDraft?.yearLevel ?? student.yearLevel);
-  const [gpa, setGpa] = useState(existingApplication?.gpa ?? savedDraft?.gpa ?? student.gpa);
+  // --- Standard (Entrance) form state --------------------------------------------
+  // Applications loaded from the API keep the Entrance answers under
+  // standardInfo (see models/Application.js); ones created in this session
+  // carry them on personalInfo/program/etc. Read whichever is present.
+  const storedStandard: Partial<Record<string, unknown>> =
+    (existingApplication as unknown as { standardInfo?: Record<string, unknown> } | undefined)?.standardInfo ?? {};
+  const existingPI = existingApplication?.personalInfo;
+  const [firstName, setFirstName] = useState(asText(
+    existingPI?.firstName ?? storedStandard.firstName ?? savedDraft?.firstName ?? (student.name.split(' ')[0] || '')
+  ));
+  const [lastName, setLastName] = useState(asText(
+    existingPI?.lastName ?? storedStandard.lastName ?? savedDraft?.lastName ?? (student.name.split(' ').slice(1).join(' ') || '')
+  ));
+  const [email, setEmail] = useState(asText(existingPI?.email ?? storedStandard.email ?? savedDraft?.email ?? student.email));
+  const [phone, setPhone] = useState(asText(existingPI?.phone ?? storedStandard.phone ?? savedDraft?.phone ?? student.mobileNumber));
+  const studentNumber = student.studentNumber;
+  const [program, setProgram] = useState(asText(existingApplication?.program ?? storedStandard.program ?? savedDraft?.program ?? student.course));
+  const [yearLevel, setYearLevel] = useState(asText(existingApplication?.yearLevel ?? storedStandard.yearLevel ?? savedDraft?.yearLevel ?? student.yearLevel));
+  const [gpa, setGpa] = useState(asText(existingApplication?.gpa ?? storedStandard.gpa ?? savedDraft?.gpa ?? student.gpa));
 
   const [uploads, setUploads] = useState<Record<string, UploadedFile>>({});
-  const [formError, setFormError] = useState('');
+  const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [referenceCode, setReferenceCode] = useState('');
@@ -435,18 +506,25 @@ function StandardApplyScholarship({
   // Document names already on file from the application being resubmitted —
   // browsers can't restore actual File bytes, so we still need a fresh
   // JPG per requirement, but we can tell the student what's already there.
-  const previouslySubmittedDocNames = existingApplication?.documents
-    .filter(d => d.uploaded)
-    .map(d => d.name) ?? [];
+  // Documents straight from the API are { docType, fileId, ... }; ones built
+  // in this session are { name, uploaded }. Accept either shape.
+  const previouslySubmittedDocNames = (existingApplication?.documents ?? [])
+    .map(d => d as { name?: string; uploaded?: boolean; docType?: string; fileId?: string })
+    .filter(d => d.uploaded || d.fileId)
+    .map(d => d.name ?? d.docType ?? '')
+    .filter(Boolean);
 
   // Auto-save the draft to localStorage on every relevant change. File
   // contents are intentionally excluded (see previouslyUploadedDocNames)
   // since browsers can't restore actual File objects after a refresh.
   // Skipped entirely during a resubmit — see savedDraft comment above.
   useEffect(() => {
-    if (isResubmit) return;
+    if (isResubmit || isSuccess) return;
+    const now = new Date().toISOString();
     const draft: DraftData = {
-      wizardStep,
+      currentKey,
+      visited: Array.from(visited),
+      savedAt: now,
       personalInfo,
       contactSchool,
       parentsGuardian,
@@ -467,36 +545,34 @@ function StandardApplyScholarship({
         getDraftKey(scholarship.id, student.studentNumber, student.clerkId),
         JSON.stringify(draft)
       );
+      setSavedAt(now);
     } catch {
       // Storage can fail (private browsing, quota) — draft just won't persist, form still works
     }
   }, [
-    wizardStep, personalInfo, contactSchool, parentsGuardian, siblings,
+    currentKey, visited, personalInfo, contactSchool, parentsGuardian, siblings,
     assetsExpenses, agreement, firstName, lastName, email, phone, program,
-    yearLevel, gpa, uploads, scholarship.id, student.studentNumber, student.clerkId, isResubmit
+    yearLevel, gpa, uploads, scholarship.id, student.studentNumber, student.clerkId, isResubmit, isSuccess
   ]);
 
-  const handleFileChange = (docName: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const isJpeg = file.type === 'image/jpeg' || /\.(jpe?g)$/i.test(file.name);
-      if (!isJpeg) {
-        setFormError('Only JPG files are allowed. Please convert your file and try again.');
-        e.target.value = '';
-        return;
-      }
-      if (file.size > 10 * 1024 * 1024) {
-        setFormError('Each file must be under 10MB.');
-        e.target.value = '';
-        return;
-      }
-      setFormError('');
-      const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
-      setUploads(prev => ({
-        ...prev,
-        [docName]: { docName, fileName: file.name, fileSize: `${fileSizeMB} MB`, file }
-      }));
+  // --- Uploads ----------------------------------------------------------------------
+  const pickFile = (docName: string, file: File) => {
+    const isJpeg = file.type === 'image/jpeg' || /\.(jpe?g)$/i.test(file.name);
+    if (!isJpeg) {
+      setUploadErrors(prev => ({ ...prev, [docName]: 'Only JPG files are allowed. Please convert your file and try again.' }));
+      return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadErrors(prev => ({ ...prev, [docName]: 'Each file must be under 10MB.' }));
+      return;
+    }
+    setUploadErrors(prev => ({ ...prev, [docName]: '' }));
+    clearFieldError(`doc:${docName}`);
+    const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    setUploads(prev => ({
+      ...prev,
+      [docName]: { docName, fileName: file.name, fileSize: `${fileSizeMB} MB`, file }
+    }));
   };
 
   const removeFile = (docName: string) => {
@@ -507,43 +583,18 @@ function StandardApplyScholarship({
     });
   };
 
-  const addSibling = () => {
-    if (isBlank(siblingDraft.fullName)) {
-      setSiblingDraftError('Enter the sibling\u2019s full name.');
-      return;
-    }
-    if (!isBlank(siblingDraft.age) && !isValidAge(siblingDraft.age)) {
-      setSiblingDraftError('Enter a valid age (0–120).');
-      return;
-    }
-    setSiblingDraftError('');
-    const newSibling: SfagSibling = {
-      id: `sib_${Math.random().toString(36).substr(2, 9)}`,
-      ...siblingDraft
-    };
-    setSiblings(prev => [...prev, newSibling]);
-    setSiblingDraft({
-      fullName: '',
-      socialStatus: SIBLING_SOCIAL_STATUS_OPTIONS[0],
-      civilStatus: 'SINGLE',
-      age: '',
-      schoolOrCompany: '',
-      schoolType: 'Public',
-      tuitionOrIncome: '',
-      isDlsudScholar: false
-    });
+  // --- Siblings ---------------------------------------------------------------------
+  const updateSibling = (sibId: string, patch: Partial<SfagSibling>) => {
+    setSiblings(prev => prev.map(s => (s.id === sibId ? { ...s, ...patch } : s)));
   };
 
   const removeSibling = (sibId: string) => {
     setSiblings(prev => prev.filter(s => s.id !== sibId));
+    setErrors({});
   };
 
-  interface StepValidation {
-    fields: string[];
-    errors: Record<string, string>;
-  }
-
-  const validateSfagStep = (step: number): StepValidation => {
+  // --- Validation -------------------------------------------------------------------
+  const validateSfagStep = (step: number): Record<string, string> => {
     const errs: Record<string, string> = {};
 
     if (step === 1) {
@@ -600,61 +651,7 @@ function StandardApplyScholarship({
       if (isBlank(assetsExpenses.incomeSources)) errs.incomeSources = REQUIRED_MSG;
     }
 
-    return { fields: Object.keys(errs), errors: errs };
-  };
-
-  const summarizeMissing = (count: number, extraNote?: string): string => {
-    const label = count === 1 ? 'field is' : 'fields are';
-    return `Fill out all required fields. ${count} ${label} missing or invalid.${extraNote ? ` ${extraNote}` : ''}`;
-  };
-
-  const validateStepsUpTo = (uptoStep: number): StepValidation => {
-    let errs: Record<string, string> = {};
-    for (let s = 1; s <= uptoStep; s++) {
-      errs = { ...errs, ...validateSfagStep(s).errors };
-    }
-    return { fields: Object.keys(errs), errors: errs };
-  };
-
-  const goToSfagStep = (nextStep: number) => {
-    if (nextStep > wizardStep) {
-      const { fields, errors: stepErrors } = validateStepsUpTo(nextStep - 1);
-      if (fields.length > 0) {
-        const touchesParents = nextStep - 1 >= 3;
-        setSfagFormError(summarizeMissing(fields.length, touchesParents ? 'Use "N/A" for any parent field that does not apply.' : undefined));
-        setErrors(stepErrors);
-        return;
-      }
-    }
-    setSfagFormError('');
-    setErrors({});
-    setWizardStep(nextStep);
-  };
-
-  const buildSfagDetails = (): SfagApplicationDetails => ({
-    personalInfo,
-    contactSchool,
-    parentsGuardian,
-    siblings,
-    assetsExpenses,
-    agreement
-  });
-
-  const handleSfagAgreementNext = () => {
-    const cumulative = validateStepsUpTo(5);
-    const errs = { ...cumulative.errors };
-    if (!agreement.certifyConsulted) errs.certifyConsulted = REQUIRED_MSG;
-    if (!agreement.certifyAccuracy) errs.certifyAccuracy = REQUIRED_MSG;
-    const fields = Object.keys(errs);
-
-    if (fields.length > 0) {
-      setSfagFormError(summarizeMissing(fields.length, 'Check both certification boxes before proceeding to document upload.'));
-      setErrors(errs);
-      return;
-    }
-    setSfagFormError('');
-    setErrors({});
-    setWizardStep(6);
+    return errs;
   };
 
   const validateStandardFields = (): Record<string, string> => {
@@ -681,18 +678,100 @@ function StandardApplyScholarship({
     return errs;
   };
 
+  const validateSection = (key: StdSectionKey): Record<string, string> => {
+    switch (key) {
+      case 'profile': return validateStandardFields();
+      case 'personal': return validateSfagStep(1);
+      case 'contact': return validateSfagStep(2);
+      case 'parents': return validateSfagStep(3);
+      case 'siblings': {
+        const errs: Record<string, string> = {};
+        siblings.forEach((sib, i) => {
+          if (isBlank(sib.fullName)) errs[`sib.${i}.fullName`] = REQUIRED_MSG;
+          if (!isBlank(sib.age) && !isValidAge(sib.age)) errs[`sib.${i}.age`] = 'Enter a valid age (0–120).';
+        });
+        return errs;
+      }
+      case 'assets': return validateSfagStep(5);
+      case 'agreement': {
+        const errs: Record<string, string> = {};
+        if (!agreement.certifyConsulted) errs.certifyConsulted = 'Tick the box to certify.';
+        if (!agreement.certifyAccuracy) errs.certifyAccuracy = 'Tick the box to certify.';
+        return errs;
+      }
+      case 'documents': {
+        // On resubmit, a requirement already on file doesn't force a fresh upload.
+        const errs: Record<string, string> = {};
+        scholarship.requirements.forEach(req => {
+          if (!uploads[req] && !(isResubmit && previouslySubmittedDocNames.includes(req))) {
+            errs[`doc:${req}`] = 'Upload a JPG file.';
+          }
+        });
+        return errs;
+      }
+      case 'review': return {};
+    }
+  };
+
+  const allErrors = Object.fromEntries(sections.map(s => [s.key, validateSection(s.key)])) as Record<StdSectionKey, Record<string, string>>;
+  const hasErrors = (key: StdSectionKey) => Object.keys(allErrors[key]).length > 0;
+  const statusOf = (key: string): SectionStatus => {
+    const k = key as StdSectionKey;
+    if (k === 'review' || !visited.has(k)) return 'todo';
+    return hasErrors(k) ? 'error' : 'done';
+  };
+  const countable = sections.filter(s => s.key !== 'review');
+  const doneCount = countable.filter(s => statusOf(s.key) === 'done').length;
+
+  const summarizeMissing = (count: number, key: StdSectionKey): string => {
+    if (key === 'documents') return `Please upload all required files. ${count} ${count === 1 ? 'file is' : 'files are'} missing.`;
+    const label = count === 1 ? 'field is' : 'fields are';
+    const note = key === 'parents' ? ' Use "N/A" for any parent field that does not apply.' : '';
+    return `Fill out all required fields. ${count} ${label} missing or invalid.${note}`;
+  };
+
+  // --- Navigation -------------------------------------------------------------------
+  const currentIndex = sections.findIndex(s => s.key === currentKey);
+  const current = sections[currentIndex];
+  const prev = currentIndex > 0 ? sections[currentIndex - 1] : null;
+  const markVisited = (key: string) => setVisited(prevSet => (prevSet.has(key) ? prevSet : new Set(prevSet).add(key)));
+
+  const goTo = (key: StdSectionKey) => {
+    markVisited(currentKey);
+    setBanner('');
+    setErrors(visited.has(key) ? allErrors[key] : {});
+    setCurrentKey(key);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const goNext = () => {
+    markVisited(currentKey);
+    const errs = allErrors[currentKey];
+    const count = Object.keys(errs).length;
+    if (count > 0) {
+      setErrors(errs);
+      setBanner(summarizeMissing(count, currentKey));
+      return;
+    }
+    goTo(sections[currentIndex + 1].key);
+  };
+
+  const buildSfagDetails = (): SfagApplicationDetails => ({
+    personalInfo,
+    contactSchool,
+    parentsGuardian,
+    siblings,
+    assetsExpenses,
+    agreement
+  });
+
   // Matches your real backend contract: POST /api/applications, multipart/form-data,
   // one "documents" file per requirement (in order), a parallel "documentLabels"
   // JSON array naming each one, plus the form-section payloads as JSON strings.
   // Requires a Clerk bearer token — the Express CSRF middleware in server.js
   // rejects any non-GET request without a valid session (401 otherwise).
   // Returns the saved Mongo document (with _id and referenceCode) on success.
-  //
-  // NOTE on resubmission: this assumes a matching PATCH /api/applications/:id
-  // endpoint exists (or can be added) that accepts the same multipart shape
-  // and flips status back to 'Under Evaluation' server-side, clearing any
-  // reviewNote. If your backend doesn't have that route yet, this is the
-  // one place that needs the actual endpoint name/contract swapped in.
+  // On resubmit it PATCHes /api/applications/:id with the same shape instead.
   const submitToServer = async (sfagDetails?: SfagApplicationDetails): Promise<{ _id: string; referenceCode: string }> => {
     const formData = new FormData();
     const labels: string[] = [];
@@ -730,8 +809,6 @@ function StandardApplyScholarship({
     const method = isResubmit ? 'PATCH' : 'POST';
 
     if (isResubmit) {
-      // Explicit, in case the backend needs the client to say so rather
-      // than inferring "PATCH means back to review" on its own.
       formData.append('status', 'Under Evaluation');
     }
 
@@ -748,28 +825,20 @@ function StandardApplyScholarship({
     return body.application;
   };
 
-  const submitFinal = async (sfagDetails?: SfagApplicationDetails) => {
-    // On resubmit, a requirement already on file (from the prior submission)
-    // doesn't force a fresh re-upload — only newly-missing ones block.
-    const missingDocs = scholarship.requirements.filter(
-      req => !uploads[req] && !(isResubmit && previouslySubmittedDocNames.includes(req))
-    );
-    if (missingDocs.length > 0) {
-      setFormError(`Please upload all required files. Missing: ${missingDocs.slice(0, 2).join(', ')}${missingDocs.length > 2 ? ' and others.' : '.'}`);
+  const handleSubmit = async () => {
+    setVisited(new Set(sections.map(s => s.key)));
+    const firstInvalid = sections.find(s => hasErrors(s.key));
+    if (firstInvalid) {
+      setErrors(allErrors[firstInvalid.key]);
+      setCurrentKey(firstInvalid.key);
+      setBanner(`Some sections still need attention. Starting with: ${firstInvalid.label}.`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
-    if (!isSfag) {
-      const errs = validateStandardFields();
-      if (Object.keys(errs).length > 0) {
-        setFormError('Fill out all required fields correctly.');
-        setErrors(errs);
-        return;
-      }
-    }
-
+    const sfagDetails = isSfag ? buildSfagDetails() : undefined;
     setIsSubmitting(true);
-    setFormError('');
+    setBanner('');
 
     try {
       const saved = await submitToServer(sfagDetails);
@@ -800,7 +869,6 @@ function StandardApplyScholarship({
         ...(sfagDetails ? { sfagDetails } : {})
       };
 
-      // in submitFinal, after successful submit:
       clearDraft(scholarship.id, student.studentNumber, student.clerkId);
       setReferenceCode(saved.referenceCode || existingApplication?.id.slice(-8).toUpperCase() || '');
       setIsSubmitting(false);
@@ -812,1202 +880,483 @@ function StandardApplyScholarship({
       }
     } catch (err) {
       setIsSubmitting(false);
-      setFormError(err instanceof Error ? err.message : `Something went wrong ${isResubmit ? 'resubmitting' : 'submitting'} your application. Please try again.`);
+      setBanner(err instanceof Error ? err.message : `Something went wrong ${isResubmit ? 'resubmitting' : 'submitting'} your application. Please try again.`);
     }
   };
 
-  const handleStandardSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError('');
-    submitFinal();
-  };
-
-  const handleSfagFinalSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError('');
-    submitFinal(buildSfagDetails());
-  };
-
   const handleDiscardDraft = () => {
+    if (!window.confirm('Discard your saved answers for this application and start over?')) return;
     clearDraft(scholarship.id, student.studentNumber, student.clerkId);
     window.location.reload();
   };
 
-  // --- Success screen (shared) ---------------------------------------------
-  if (isSuccess) {
-    return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-8 md:p-12 text-center max-w-xl mx-auto space-y-6 shadow-xl my-8">
-        <div className="w-16 h-16 rounded-full bg-emerald-100 text-brand-green flex items-center justify-center mx-auto shadow-md">
-          <CheckCircle className="w-10 h-10" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="font-display font-black text-2xl text-slate-900 tracking-tight">
-            {isResubmit ? 'Application Resubmitted Successfully!' : 'Application Submitted Successfully!'}
-          </h2>
-          {referenceCode && (
-            <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: {referenceCode}</p>
-          )}
-        </div>
-        <p className="text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
-          {isResubmit
-            ? <>Your updated application for the <strong>{scholarship.name}</strong> has been sent back to the Linkages and Scholarship Office (LSO) for another review.</>
-            : <>Your application for the <strong>{scholarship.name}</strong> has been received by the Linkages and Scholarship Office (LSO).</>}
-        </p>
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-left text-xs text-slate-500 space-y-2">
-          <p><strong>What happens next?</strong></p>
-          <p>1. LSO Officers will verify your uploaded grades and certifications.</p>
-          <p>2. Keep an eye on your email and the Portal notifications tab for updates.</p>
-          <p>3. Do not re-submit unless requested by the coordinators.</p>
-        </div>
-        <button
-          onClick={onBack}
-          className="inline-flex items-center space-x-1 font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-6 py-3.5 rounded-xl transition-all shadow-md shadow-emerald-900/10 focus:outline-hidden"
-        >
-          <span>Return to Dashboard</span>
-        </button>
-      </div>
-    );
-  }
-
-  // --- Document upload step (shared by both flows) --------------------------
-  const renderDocumentUpload = (onSubmit: (e: React.FormEvent) => void, backLabel: string, onBackClick: () => void) => (
-    <form onSubmit={onSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div className="lg:col-span-2 space-y-6">
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
-          <h3 className="font-display font-bold text-base text-slate-900 border-b border-slate-100 pb-2 mb-4">
-            Upload Required Documents
-          </h3>
-          <p className="text-xs text-slate-500 mb-4">
-            {isResubmit
-              ? 'Review the requirements below. Anything already on file is marked — re-upload only what the LSO flagged, or replace any file if you\u2019d like to update it.'
-              : 'Please review the requirements below and upload a JPG scan or photo for each item.'}
-          </p>
-
-          {savedDraft?.previouslyUploadedDocNames && savedDraft.previouslyUploadedDocNames.length > 0 && Object.keys(uploads).length === 0 && (
-            <div className="p-4 bg-amber-50 text-amber-800 rounded-xl border border-amber-100 text-xs font-semibold flex items-start gap-2 mb-4">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <span>
-                Your typed information was restored, but for security reasons browsers can't restore
-                selected files after a refresh. Please re-select: {savedDraft.previouslyUploadedDocNames.join(', ')}.
-              </span>
-            </div>
-          )}
-
-          {formError && (
-            <div className="p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-100 text-xs font-bold flex items-center gap-2 mb-4">
-              <AlertCircle className="w-4 h-4 text-rose-600" />
-              <span>{formError}</span>
-            </div>
-          )}
-
-          <div className="space-y-4">
-            {scholarship.requirements.map((req, idx) => {
-              const uploadedFile = uploads[req];
-              const alreadyOnFile = isResubmit && !uploadedFile && previouslySubmittedDocNames.includes(req);
-              return (
-                <div key={idx} className="p-3 border border-slate-200 rounded-xl space-y-2 bg-slate-50/30">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-bold text-slate-700 leading-snug">{req}</p>
-                    {alreadyOnFile && (
-                      <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
-                        On file
-                      </span>
-                    )}
-                  </div>
-                  {uploadedFile ? (
-                    <div className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg border border-emerald-100 text-xs">
-                      <div className="flex items-center space-x-2 truncate">
-                        <FileText className="w-4 h-4 text-brand-green shrink-0" />
-                        <div className="truncate">
-                          <p className="font-semibold text-slate-800 truncate leading-tight">{uploadedFile.fileName}</p>
-                          <span className="text-[10px] text-slate-400 block">{uploadedFile.fileSize}</span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(req)}
-                        className="p-1.5 text-rose-500 hover:bg-rose-100 rounded-md transition-colors"
-                        title="Remove File"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex items-center justify-center border-2 border-dashed border-slate-200 hover:border-brand-green/40 hover:bg-brand-green/5 rounded-lg p-3 cursor-pointer transition-colors text-xs text-slate-500 font-semibold gap-1.5">
-                      <Upload className="w-4 h-4 text-slate-400" />
-                      <span>{alreadyOnFile ? 'Replace File (optional)' : 'Select JPG File'}</span>
-                      <input
-                        type="file"
-                        accept=".jpg,.jpeg,image/jpeg"
-                        onChange={(e) => handleFileChange(req, e)}
-                        className="hidden"
-                      />
-                    </label>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onBackClick}
-            className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors focus:outline-hidden"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>{backLabel}</span>
-          </button>
-          {!isResubmit && (
-            <button
-              type="button"
-              onClick={handleDiscardDraft}
-              className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden"
-            >
-              Discard draft and start over
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-4 rounded-xl transition-all duration-200 shadow-md shadow-emerald-900/10 flex items-center justify-center space-x-1.5 focus:outline-hidden disabled:opacity-50"
-          >
-            <span>{isSubmitting ? (isResubmit ? 'Resubmitting Application...' : 'Submitting Application...') : (isResubmit ? 'Resubmit Application' : 'Submit Application')}</span>
-          </button>
-        </div>
-
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-2.5">
-          <ShieldAlert className="w-4.5 h-4.5 text-slate-400 shrink-0 mt-0.5" />
-          <div className="text-[10px] text-slate-500 leading-relaxed">
-            <span className="font-bold">Privacy Certification:</span> Linkages and Scholarship Office (LSO) complies with the Philippine Data Privacy Act of 2012. Information submitted is kept confidential and utilized solely for scholarship scoring.
-          </div>
-        </div>
-      </div>
-    </form>
+  // --- Field helpers (called as functions so inputs keep focus) ----------------
+  const textField = (o: TextFieldOpts) => (
+    <div className={o.className}>
+      <label className={labelClass}>{o.label} {o.required && !o.disabled && <Req />}</label>
+      <input
+        type={o.type ?? 'text'}
+        inputMode={o.type === 'tel' ? 'tel' : o.kind === 'gpa' ? 'decimal' : undefined}
+        className={o.disabled ? inputClass : fieldClass(o.key)}
+        value={o.value}
+        max={o.max}
+        maxLength={o.maxLength}
+        placeholder={o.placeholder}
+        disabled={o.disabled}
+        onChange={e => { o.onChange(e.target.value); clearFieldError(o.key); }}
+        onBlur={o.required && !o.disabled ? e => validateOnBlur(o.key, e.target.value, o.kind ?? 'text') : undefined}
+        aria-invalid={!!fieldError(o.key)}
+      />
+      {fieldError(o.key) ? <FieldError message={fieldError(o.key)} /> : o.hint ? <Hint>{o.hint}</Hint> : null}
+    </div>
   );
 
-  // --- Standard (non-SFAG) single-page form --------------------------------
-  if (!isSfag) {
-    if (wizardStep === 6) {
-      return (
-        <div id={id} className="space-y-6">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
-            <h2 className="font-display font-black text-xl md:text-2xl text-slate-900 tracking-tight">
-              {isResubmit ? 'Resubmit Application: ' : 'Application Form: '}<span className="text-brand-green">{scholarship.name}</span>
-            </h2>
-          </div>
-          {renderDocumentUpload(handleStandardSubmit, 'Back to Personal Info', () => setWizardStep(0))}
-        </div>
-      );
-    }
-
-    return (
-      <div id={id} className="space-y-6">
-        <button
-          onClick={onBack}
-          className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors focus:outline-hidden"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Scholarship Details</span>
-        </button>
-
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
-          <h2 className="font-display font-black text-xl md:text-2xl text-slate-900 tracking-tight">
-            {isResubmit ? 'Resubmit Application: ' : 'Application Form: '}<span className="text-brand-green">{scholarship.name}</span>
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            {isResubmit
-              ? 'Update whatever the LSO flagged, then continue to documents.'
-              : 'Complete the forms below and upload digital files. Please review your profiles carefully before submission.'}
-          </p>
-        </div>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setFormError('');
-            const errs = validateStandardFields();
-            if (Object.keys(errs).length > 0) {
-              setFormError('Fill out all required fields correctly.');
-              setErrors(errs);
-              return;
-            }
-            setErrors({});
-            setWizardStep(6);
-          }}
-          className="space-y-6"
-        >
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs space-y-6">
-            <h3 className="font-display font-bold text-base text-slate-900 border-b border-slate-100 pb-2 mb-4">
-              Personal & Academic Profile
-            </h3>
-
-            {formError && (
-              <div className="p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-100 text-xs font-bold flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-600" />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div>
-                <label className={labelClass}>First Name <Req /></label>
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => { setFirstName(e.target.value); clearFieldError('firstName'); }}
-                  onBlur={(e) => validateOnBlur('firstName', e.target.value, 'text')}
-                  className={fieldClass('firstName')}
-                  aria-invalid={!!fieldError('firstName')}
-                />
-                <FieldError message={fieldError('firstName')} />
-              </div>
-              <div>
-                <label className={labelClass}>Last Name <Req /></label>
-                <input
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => { setLastName(e.target.value); clearFieldError('lastName'); }}
-                  onBlur={(e) => validateOnBlur('lastName', e.target.value, 'text')}
-                  className={fieldClass('lastName')}
-                  aria-invalid={!!fieldError('lastName')}
-                />
-                <FieldError message={fieldError('lastName')} />
-              </div>
-              <div>
-                <label className={labelClass}>Email Address <Req /></label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); clearFieldError('email'); }}
-                  onBlur={(e) => validateOnBlur('email', e.target.value, 'email')}
-                  className={fieldClass('email')}
-                  aria-invalid={!!fieldError('email')}
-                />
-                <FieldError message={fieldError('email')} />
-              </div>
-              <div>
-                <label className={labelClass}>Mobile Phone <Req /></label>
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  placeholder="09171234567"
-                  value={phone}
-                  onChange={(e) => { setPhone(e.target.value); clearFieldError('phone'); }}
-                  onBlur={(e) => validateOnBlur('phone', e.target.value, 'phone')}
-                  className={fieldClass('phone')}
-                  aria-invalid={!!fieldError('phone')}
-                />
-                <FieldError message={fieldError('phone')} />
-              </div>
-              <div>
-                <label className={labelClass}>Student Number</label>
-                <input type="text" value={studentNumber} disabled className={`${inputClass} bg-slate-50/20 text-slate-500 cursor-not-allowed`} />
-              </div>
-              <div>
-                <label className={labelClass}>Academic Program (Course) <Req /></label>
-                <input
-                  type="text"
-                  value={program}
-                  onChange={(e) => { setProgram(e.target.value); clearFieldError('program'); }}
-                  onBlur={(e) => validateOnBlur('program', e.target.value, 'text')}
-                  className={fieldClass('program')}
-                  aria-invalid={!!fieldError('program')}
-                />
-                <FieldError message={fieldError('program')} />
-              </div>
-              <div>
-                <label className={labelClass}>Year Level <Req /></label>
-                <select
-                  value={yearLevel}
-                  onChange={(e) => { setYearLevel(e.target.value); clearFieldError('yearLevel'); }}
-                  className={fieldClass('yearLevel')}
-                >
-                  <option value="1st Year">1st Year</option>
-                  <option value="2nd Year">2nd Year</option>
-                  <option value="3rd Year">3rd Year</option>
-                  <option value="4th Year">4th Year</option>
-                  <option value="5th Year">5th Year</option>
-                </select>
-                <FieldError message={fieldError('yearLevel')} />
-              </div>
-              <div>
-                <label className={labelClass}>Cumulative GPA <Req /></label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="e.g. 1.75"
-                  value={gpa}
-                  onChange={(e) => { setGpa(e.target.value); clearFieldError('gpa'); }}
-                  onBlur={(e) => validateOnBlur('gpa', e.target.value, 'gpa')}
-                  className={fieldClass('gpa')}
-                  aria-invalid={!!fieldError('gpa')}
-                />
-                {fieldError('gpa') ? <FieldError message={fieldError('gpa')} /> : <Hint>Scale: 1.00 (highest) – 5.00 (lowest)</Hint>}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center">
-            {!isResubmit ? (
-              <button
-                type="button"
-                onClick={handleDiscardDraft}
-                className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden"
-              >
-                Discard draft and start over
-              </button>
-            ) : <span />}
-            <button
-              type="submit"
-              className="inline-flex items-center space-x-1.5 font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-6 py-3.5 rounded-xl transition-all shadow-md shadow-emerald-900/10 focus:outline-hidden"
-            >
-              <span>Next: Upload Documents</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
-  // --- SFAG detailed 5-tab wizard + document upload -------------------------
-  if (wizardStep === 6) {
-    return (
-      <div id={id} className="space-y-6">
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
-          <h2 className="font-display font-black text-xl md:text-2xl text-slate-900 tracking-tight">
-            {isResubmit ? 'Resubmit Application: ' : 'Application Form: '}<span className="text-brand-green">{scholarship.name}</span>
-          </h2>
-        </div>
-        {renderDocumentUpload(handleSfagFinalSubmit, 'Back to Assets, Expenses & Agreement', () => setWizardStep(5))}
-      </div>
-    );
-  }
-
-  const progressPct = Math.round(((wizardStep - 1) / 5) * 100);
-
-  return (
-    <div id={id} className="space-y-6">
-      <button
-        onClick={onBack}
-        className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors focus:outline-hidden"
+  const selectField = (o: SelectFieldOpts) => (
+    <div className={o.className}>
+      <label className={labelClass}>{o.label} {o.required && !o.disabled && <Req />}</label>
+      <select
+        className={o.key && !o.disabled ? fieldClass(o.key) : inputClass}
+        value={o.value}
+        disabled={o.disabled}
+        onChange={e => { o.onChange(e.target.value); if (o.key) clearFieldError(o.key); }}
       >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Back to Scholarship Details</span>
-      </button>
+        {o.placeholder !== undefined && <option value="">{o.placeholder}</option>}
+        {o.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+      {o.key && <FieldError message={fieldError(o.key)} />}
+    </div>
+  );
 
-      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-2.5">
-        <AlertCircle className="w-4.5 h-4.5 text-yellow-600 shrink-0 mt-0.5" />
-        <p className="text-xs text-yellow-800 leading-relaxed">
-          {isResubmit ? (
-            <><strong>You're editing a previously submitted application.</strong> Update whatever the LSO flagged, then work back through to Upload Documents to resubmit.</>
-          ) : (
-            <><strong>Fill out all required fields.</strong> Fields marked <Req /> are mandatory. Use "N/A" where not applicable. Information cannot be changed after submission.</>
-          )}
-        </p>
-      </div>
+  const setPI = (patch: Partial<SfagPersonalInfo>) => setPersonalInfo(p => ({ ...p, ...patch }));
+  const setCS = (patch: Partial<SfagContactSchool>) => setContactSchool(c => ({ ...c, ...patch }));
+  const setAE = (patch: Partial<SfagAssetsExpenses>) => setAssetsExpenses(a => ({ ...a, ...patch }));
 
-      {/* Progress bar */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs px-6 py-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Application Progress</span>
-          <span className="text-[11px] font-bold text-brand-green">{progressPct}% Complete</span>
+  // --- Success ------------------------------------------------------------------------
+  if (isSuccess) {
+    return (
+      <SubmittedScreen
+        isResubmit={isResubmit}
+        referenceCode={referenceCode}
+        scholarshipName={scholarship.name}
+        officeLabel={officeLabel}
+        onBack={onBack}
+      />
+    );
+  }
+
+  // --- Sections -------------------------------------------------------------------------
+  const renderProfile = () => (
+    <div className="space-y-6">
+      <Block>
+        <SubHeading note="Prefilled from your student profile — please check each entry.">Student Details</SubHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          {textField({ key: 'firstName', label: 'First Name', required: true, value: firstName, onChange: setFirstName })}
+          {textField({ key: 'lastName', label: 'Last Name', required: true, value: lastName, onChange: setLastName })}
+          {textField({ key: 'email', label: 'Email Address', type: 'email', kind: 'email', required: true, value: email, onChange: setEmail })}
+          {textField({ key: 'phone', label: 'Mobile Phone', type: 'tel', kind: 'phone', required: true, placeholder: '09171234567', value: phone, onChange: setPhone })}
+          {textField({ key: 'studentNumber', label: 'Student Number', disabled: true, value: studentNumber, onChange: () => {} })}
+          {textField({ key: 'program', label: 'Academic Program (Course)', required: true, value: program, onChange: setProgram })}
+          {selectField({ key: 'yearLevel', label: 'Year Level', required: true, value: yearLevel, onChange: setYearLevel, options: YEAR_LEVEL_OPTIONS, placeholder: 'Select…' })}
+          {textField({ key: 'gpa', label: 'Cumulative GPA', kind: 'gpa', required: true, placeholder: 'e.g. 1.75', value: gpa, onChange: setGpa, hint: 'Scale: 1.00 (highest) – 5.00 (lowest)' })}
         </div>
-        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-brand-green rounded-full transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
-      </div>
+      </Block>
+    </div>
+  );
 
-      {/* Tab Navigation */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="flex overflow-x-auto border-b border-slate-100">
-          {SFAG_TABS.map(tab => {
-            const isActive = wizardStep === tab.step;
-            const isComplete = wizardStep > tab.step;
+  const renderPersonal = () => (
+    <div className="space-y-6">
+      <Block>
+        <SubHeading note="Prefilled from your student profile — please check each entry.">Name</SubHeading>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {textField({ key: 'lastName', label: 'Last Name', required: true, value: personalInfo.lastName, onChange: v => setPI({ lastName: v }) })}
+          {textField({ key: 'firstName', label: 'First Name', required: true, value: personalInfo.firstName, onChange: v => setPI({ firstName: v }) })}
+          {textField({ key: 'middleInitial', label: 'M.I.', maxLength: 2, value: personalInfo.middleInitial, onChange: v => setPI({ middleInitial: v }) })}
+          {textField({ key: 'suffix', label: 'Suffix', placeholder: 'Jr., III, etc.', value: personalInfo.suffix, onChange: v => setPI({ suffix: v }) })}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+          {textField({ key: 'studentNumber', label: 'Student No.', disabled: true, value: personalInfo.studentNumber, onChange: () => {} })}
+          {textField({ key: 'course', label: 'Course / Program', value: personalInfo.course, onChange: v => setPI({ course: v }) })}
+          {textField({ key: 'yearLevel', label: 'Year Level', value: personalInfo.yearLevel, onChange: v => setPI({ yearLevel: v }) })}
+        </div>
+      </Block>
+
+      <Block>
+        <SubHeading>Basic Information</SubHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {textField({ key: 'placeOfBirth', label: 'Place of Birth', required: true, value: personalInfo.placeOfBirth, onChange: v => setPI({ placeOfBirth: v }) })}
+          {textField({
+            key: 'dateOfBirth', label: 'Date of Birth', type: 'date', kind: 'date', required: true, max: TODAY_ISO,
+            value: personalInfo.dateOfBirth, onChange: v => setPI({ dateOfBirth: v, age: calculateAge(v) })
+          })}
+          <div>
+            <label className={labelClass}>Age</label>
+            <div className="px-3.5 py-2.5 rounded-xl text-sm bg-slate-100/70 border border-slate-100 text-slate-600 font-semibold">{personalInfo.age || '—'}</div>
+          </div>
+          {selectField({ label: 'Civil Status', value: personalInfo.civilStatus, onChange: v => setPI({ civilStatus: v }), options: CIVIL_STATUS_OPTIONS })}
+          {selectField({ key: 'gender', label: 'Gender', required: true, value: personalInfo.gender, onChange: v => setPI({ gender: v }), options: GENDER_OPTIONS, placeholder: 'Select…' })}
+          {textField({ key: 'nationality', label: 'Nationality', required: true, value: personalInfo.nationality, onChange: v => setPI({ nationality: v }) })}
+          {selectField({ label: 'Religion', value: personalInfo.religion, onChange: v => setPI({ religion: v }), options: RELIGION_OPTIONS })}
+          {personalInfo.religion === 'OTHERS' &&
+            textField({ key: 'specifyReligion', label: 'Specify Religion', required: true, value: personalInfo.specifyReligion, onChange: v => setPI({ specifyReligion: v }) })}
+          <div>
+            <label className={labelClass}>Person with Disability (PWD)?</label>
+            <ChoicePills value={personalInfo.isPwd ? 'Yes' : 'No'} onChange={v => setPI({ isPwd: v === 'Yes' })} options={['Yes', 'No']} />
+          </div>
+        </div>
+      </Block>
+    </div>
+  );
+
+  const renderContact = () => (
+    <div className="space-y-6">
+      <Block>
+        <SubHeading>Home Address</SubHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {textField({ key: 'streetAddress', label: 'No. / Street / Subdivision / Barangay', required: true, className: 'sm:col-span-3', value: contactSchool.streetAddress, onChange: v => setCS({ streetAddress: v }) })}
+          {textField({ key: 'municipality', label: 'Municipality / City', required: true, value: contactSchool.municipality, onChange: v => setCS({ municipality: v }) })}
+          {textField({ key: 'province', label: 'Province', required: true, value: contactSchool.province, onChange: v => setCS({ province: v }) })}
+          {textField({ key: 'country', label: 'Country', required: true, value: contactSchool.country, onChange: v => setCS({ country: v }) })}
+        </div>
+      </Block>
+      <Block>
+        <SubHeading>Contact Details</SubHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {textField({ key: 'mobileNo', label: 'Mobile No.', type: 'tel', kind: 'phone', required: true, placeholder: '09171234567', value: contactSchool.mobileNo, onChange: v => setCS({ mobileNo: v }) })}
+          {textField({ key: 'landlineNo', label: 'Landline No.', type: 'tel', value: contactSchool.landlineNo, onChange: v => setCS({ landlineNo: v }) })}
+          {textField({ key: 'email', label: 'Email Address', type: 'email', kind: 'email', required: true, value: contactSchool.email, onChange: v => setCS({ email: v }) })}
+        </div>
+      </Block>
+      <Block>
+        <SubHeading>Secondary School</SubHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {textField({ key: 'secondarySchool', label: 'Secondary School Attended', required: true, className: 'sm:col-span-2', value: contactSchool.secondarySchool, onChange: v => setCS({ secondarySchool: v }) })}
+          <div>
+            <label className={labelClass}>Type</label>
+            <ChoicePills value={contactSchool.schoolType} onChange={v => setCS({ schoolType: v as 'Public' | 'Private' })} options={['Public', 'Private']} />
+          </div>
+          {textField({ key: 'schoolAddress', label: 'School Address', required: true, className: 'sm:col-span-3', value: contactSchool.schoolAddress, onChange: v => setCS({ schoolAddress: v }) })}
+        </div>
+      </Block>
+    </div>
+  );
+
+  const renderParents = () => (
+    <div className="space-y-6">
+      <Block>
+        <SubHeading note={'Tick "Solo parent" if one parent raises you alone — the other parent is then marked N/A.'}>Parents</SubHeading>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {(['father', 'mother'] as const).map(parentKey => {
+            const parent = parentsGuardian[parentKey];
+            const otherKey = parentKey === 'father' ? 'mother' : 'father';
+            const isDisabled = parentsGuardian[otherKey].isSoloParent;
+            const setParent = (updates: Partial<typeof parent>) =>
+              setParentsGuardian(pg => ({ ...pg, [parentKey]: { ...pg[parentKey], ...updates } }));
+            const fk = (name: string) => `${parentKey}.${name}`;
+
+            const handleSoloToggle = (checked: boolean) => {
+              setParentsGuardian(pg => {
+                if (checked) {
+                  return {
+                    ...pg,
+                    [parentKey]: { ...pg[parentKey], isSoloParent: true },
+                    [otherKey]: { ...pg[otherKey], fullName: 'N/A', occupation: 'N/A', company: 'N/A', companyTel: 'N/A', isSoloParent: false }
+                  };
+                }
+                const clear = (v: string) => (v === 'N/A' ? '' : v);
+                return {
+                  ...pg,
+                  [parentKey]: { ...pg[parentKey], isSoloParent: false },
+                  [otherKey]: {
+                    ...pg[otherKey],
+                    fullName: clear(pg[otherKey].fullName),
+                    occupation: clear(pg[otherKey].occupation),
+                    company: clear(pg[otherKey].company),
+                    companyTel: clear(pg[otherKey].companyTel)
+                  }
+                };
+              });
+              ['fullName', 'occupation', 'company', 'companyTel'].forEach(f => {
+                clearFieldError(`${parentKey}.${f}`);
+                clearFieldError(`${otherKey}.${f}`);
+              });
+            };
+
             return (
-              <button
-                key={tab.step}
-                type="button"
-                onClick={() => goToSfagStep(tab.step)}
-                className={`flex items-center gap-2 px-5 py-4 text-xs font-bold whitespace-nowrap border-b-2 transition-colors focus:outline-hidden ${
-                  isActive
-                    ? 'border-brand-green text-brand-green bg-brand-green/5'
-                    : isComplete
-                    ? 'border-transparent text-slate-500 hover:text-brand-green hover:bg-slate-50'
-                    : 'border-transparent text-slate-400 hover:bg-slate-50'
-                }`}
-              >
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0 ${
-                  isActive ? 'bg-brand-green text-white' : isComplete ? 'bg-brand-green/80 text-white' : 'bg-slate-200 text-slate-500'
-                }`}>
-                  {isComplete ? <CheckCircle className="w-3 h-3" /> : tab.step}
-                </span>
-                <span>{tab.label}</span>
-              </button>
+              <div key={parentKey} className="p-4 border border-slate-200 rounded-xl bg-slate-50/40 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{parentKey}</p>
+                  {isDisabled && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">N/A (solo parent)</span>
+                  )}
+                </div>
+                {textField({ key: fk('fullName'), label: 'Full Name', required: true, disabled: isDisabled, value: parent.fullName, onChange: v => setParent({ fullName: v }) })}
+                {textField({ key: fk('occupation'), label: 'Occupation', required: true, disabled: isDisabled, value: parent.occupation, onChange: v => setParent({ occupation: v }) })}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {textField({ key: fk('company'), label: 'Company', required: true, disabled: isDisabled, value: parent.company, onChange: v => setParent({ company: v }) })}
+                  {textField({ key: fk('companyTel'), label: 'Company Tel.', required: true, disabled: isDisabled, value: parent.companyTel, onChange: v => setParent({ companyTel: v }) })}
+                </div>
+                {selectField({ label: 'Monthly Income', disabled: isDisabled, value: parent.monthlyIncome, onChange: v => setParent({ monthlyIncome: v }), options: INCOME_BRACKETS })}
+                <label className={`flex items-center gap-2 text-xs font-semibold ${isDisabled ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 cursor-pointer'}`}>
+                  <input type="checkbox" checked={parent.isSoloParent} disabled={isDisabled} onChange={e => handleSoloToggle(e.target.checked)} className="accent-brand-green" />
+                  Solo parent
+                </label>
+              </div>
             );
           })}
         </div>
+      </Block>
 
-        <div className="p-6 md:p-8">
-          {sfagFormError && (
-            <div className="p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-100 text-xs font-bold flex items-center gap-2 mb-6">
-              <AlertCircle className="w-4 h-4 text-rose-600" />
-              <span>{sfagFormError}</span>
-            </div>
-          )}
+      <Block>
+        <SubHeading note="Optional — only fill this out if a guardian assists with your support.">Guardian</SubHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {textField({ key: 'guardian.fullName', label: 'Full Name', value: parentsGuardian.guardian.fullName, onChange: v => setParentsGuardian(pg => ({ ...pg, guardian: { ...pg.guardian, fullName: v } })) })}
+          {textField({ key: 'guardian.relationship', label: 'Relationship', value: parentsGuardian.guardian.relationship, onChange: v => setParentsGuardian(pg => ({ ...pg, guardian: { ...pg.guardian, relationship: v } })) })}
+          {textField({ key: 'guardian.occupation', label: 'Occupation', value: parentsGuardian.guardian.occupation, onChange: v => setParentsGuardian(pg => ({ ...pg, guardian: { ...pg.guardian, occupation: v } })) })}
+          {selectField({ label: 'Monthly Income', value: parentsGuardian.guardian.monthlyIncome, onChange: v => setParentsGuardian(pg => ({ ...pg, guardian: { ...pg.guardian, monthlyIncome: v } })), options: INCOME_BRACKETS })}
+          {textField({ key: 'guardian.contactNo', label: 'Contact No.', type: 'tel', value: parentsGuardian.guardian.contactNo, onChange: v => setParentsGuardian(pg => ({ ...pg, guardian: { ...pg.guardian, contactNo: v } })) })}
+        </div>
+      </Block>
+    </div>
+  );
 
-          {/* --- Tab 1: Personal Info --- */}
-          {wizardStep === 1 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Name</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div>
-                    <label className={labelClass}>Last Name <Req /></label>
-                    <input
-                      className={fieldClass('lastName')}
-                      value={personalInfo.lastName}
-                      onChange={e => { setPersonalInfo(p => ({ ...p, lastName: e.target.value })); clearFieldError('lastName'); }}
-                      onBlur={e => validateOnBlur('lastName', e.target.value, 'text')}
-                      aria-invalid={!!fieldError('lastName')}
-                    />
-                    <FieldError message={fieldError('lastName')} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>First Name <Req /></label>
-                    <input
-                      className={fieldClass('firstName')}
-                      value={personalInfo.firstName}
-                      onChange={e => { setPersonalInfo(p => ({ ...p, firstName: e.target.value })); clearFieldError('firstName'); }}
-                      onBlur={e => validateOnBlur('firstName', e.target.value, 'text')}
-                      aria-invalid={!!fieldError('firstName')}
-                    />
-                    <FieldError message={fieldError('firstName')} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>M.I.</label>
-                    <input className={inputClass} value={personalInfo.middleInitial} onChange={e => setPersonalInfo(p => ({ ...p, middleInitial: e.target.value }))} maxLength={2} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Suffix</label>
-                    <input className={inputClass} placeholder="Jr., III, etc." value={personalInfo.suffix} onChange={e => setPersonalInfo(p => ({ ...p, suffix: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-                  <div>
-                    <label className={labelClass}>Student No.</label>
-                    <input className={`${inputClass} bg-slate-50/20 text-slate-500 cursor-not-allowed`} value={personalInfo.studentNumber} disabled />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Course / Program</label>
-                    <input className={inputClass} value={personalInfo.course} onChange={e => setPersonalInfo(p => ({ ...p, course: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Year Level</label>
-                    <input className={inputClass} value={personalInfo.yearLevel} onChange={e => setPersonalInfo(p => ({ ...p, yearLevel: e.target.value }))} />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3 border-t border-slate-100 pt-6">Basic Information</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className={labelClass}>Place of Birth <Req /></label>
-                    <input
-                      className={fieldClass('placeOfBirth')}
-                      value={personalInfo.placeOfBirth}
-                      onChange={e => { setPersonalInfo(p => ({ ...p, placeOfBirth: e.target.value })); clearFieldError('placeOfBirth'); }}
-                      onBlur={e => validateOnBlur('placeOfBirth', e.target.value, 'text')}
-                      aria-invalid={!!fieldError('placeOfBirth')}
-                    />
-                    <FieldError message={fieldError('placeOfBirth')} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Date of Birth <Req /></label>
-                    <input
-                      type="date"
-                      max={TODAY_ISO}
-                      className={fieldClass('dateOfBirth')}
-                      value={personalInfo.dateOfBirth}
-                      onChange={e => {
-                        const dob = e.target.value;
-                        setPersonalInfo(p => ({ ...p, dateOfBirth: dob, age: calculateAge(dob) }));
-                        clearFieldError('dateOfBirth');
-                      }}
-                      onBlur={e => validateOnBlur('dateOfBirth', e.target.value, 'date')}
-                      aria-invalid={!!fieldError('dateOfBirth')}
-                    />
-                    <FieldError message={fieldError('dateOfBirth')} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Age</label>
-                    <input
-                      className={`${inputClass} bg-slate-50/20 text-slate-500 cursor-not-allowed`}
-                      value={personalInfo.age}
-                      disabled
-                      placeholder="Auto-calculated"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4 items-start">
-                  <div>
-                    <label className={labelClass}>Civil Status</label>
-                    <select className={inputClass} value={personalInfo.civilStatus} onChange={e => setPersonalInfo(p => ({ ...p, civilStatus: e.target.value }))}>
-                      {CIVIL_STATUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Gender <Req /></label>
-                    <select
-                      className={fieldClass('gender')}
-                      value={personalInfo.gender}
-                      onChange={e => { setPersonalInfo(p => ({ ...p, gender: e.target.value })); clearFieldError('gender'); }}
-                    >
-                      <option value="">Select</option>
-                      {GENDER_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                    <FieldError message={fieldError('gender')} />
-                  </div>
-                  <div className="flex items-start gap-4">
-                    <div className="flex-1">
-                      <label className={labelClass}>Nationality <Req /></label>
-                      <input
-                        className={fieldClass('nationality')}
-                        value={personalInfo.nationality}
-                        onChange={e => { setPersonalInfo(p => ({ ...p, nationality: e.target.value })); clearFieldError('nationality'); }}
-                        onBlur={e => validateOnBlur('nationality', e.target.value, 'text')}
-                        aria-invalid={!!fieldError('nationality')}
-                      />
-                      <FieldError message={fieldError('nationality')} />
-                    </div>
-                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 pt-6 shrink-0">
-                      <input type="checkbox" checked={personalInfo.isPwd} onChange={e => setPersonalInfo(p => ({ ...p, isPwd: e.target.checked }))} className="accent-brand-green" />
-                      PWD?
-                    </label>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <label className={labelClass}>Religion</label>
-                    <select className={inputClass} value={personalInfo.religion} onChange={e => setPersonalInfo(p => ({ ...p, religion: e.target.value }))}>
-                      {RELIGION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </div>
-                  {personalInfo.religion === 'OTHERS' && (
-                    <div>
-                      <label className={labelClass}>Specify Religion <Req /></label>
-                      <input
-                        className={fieldClass('specifyReligion')}
-                        value={personalInfo.specifyReligion}
-                        onChange={e => { setPersonalInfo(p => ({ ...p, specifyReligion: e.target.value })); clearFieldError('specifyReligion'); }}
-                        onBlur={e => validateOnBlur('specifyReligion', e.target.value, 'text')}
-                        aria-invalid={!!fieldError('specifyReligion')}
-                      />
-                      <FieldError message={fieldError('specifyReligion')} />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --- Tab 2: Contact & School --- */}
-          {wizardStep === 2 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Home Address</h3>
-                <div>
-                  <label className={labelClass}>No. / Street / Subdivision / Barangay <Req /></label>
-                  <input
-                    className={fieldClass('streetAddress')}
-                    value={contactSchool.streetAddress}
-                    onChange={e => { setContactSchool(c => ({ ...c, streetAddress: e.target.value })); clearFieldError('streetAddress'); }}
-                    onBlur={e => validateOnBlur('streetAddress', e.target.value, 'text')}
-                    aria-invalid={!!fieldError('streetAddress')}
-                  />
-                  <FieldError message={fieldError('streetAddress')} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-                  <div>
-                    <label className={labelClass}>Municipality / City <Req /></label>
-                    <input
-                      className={fieldClass('municipality')}
-                      value={contactSchool.municipality}
-                      onChange={e => { setContactSchool(c => ({ ...c, municipality: e.target.value })); clearFieldError('municipality'); }}
-                      onBlur={e => validateOnBlur('municipality', e.target.value, 'text')}
-                      aria-invalid={!!fieldError('municipality')}
-                    />
-                    <FieldError message={fieldError('municipality')} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Province <Req /></label>
-                    <input
-                      className={fieldClass('province')}
-                      value={contactSchool.province}
-                      onChange={e => { setContactSchool(c => ({ ...c, province: e.target.value })); clearFieldError('province'); }}
-                      onBlur={e => validateOnBlur('province', e.target.value, 'text')}
-                      aria-invalid={!!fieldError('province')}
-                    />
-                    <FieldError message={fieldError('province')} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Country <Req /></label>
-                    <input
-                      className={fieldClass('country')}
-                      value={contactSchool.country}
-                      onChange={e => { setContactSchool(c => ({ ...c, country: e.target.value })); clearFieldError('country'); }}
-                      onBlur={e => validateOnBlur('country', e.target.value, 'text')}
-                      aria-invalid={!!fieldError('country')}
-                    />
-                    <FieldError message={fieldError('country')} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-6">
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Contact Details</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className={labelClass}>Mobile No. <Req /></label>
-                    <input
-                      type="tel"
-                      inputMode="tel"
-                      placeholder="09171234567"
-                      className={fieldClass('mobileNo')}
-                      value={contactSchool.mobileNo}
-                      onChange={e => { setContactSchool(c => ({ ...c, mobileNo: e.target.value })); clearFieldError('mobileNo'); }}
-                      onBlur={e => validateOnBlur('mobileNo', e.target.value, 'phone')}
-                      aria-invalid={!!fieldError('mobileNo')}
-                    />
-                    <FieldError message={fieldError('mobileNo')} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Landline No.</label>
-                    <input className={inputClass} value={contactSchool.landlineNo} onChange={e => setContactSchool(c => ({ ...c, landlineNo: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Email Address <Req /></label>
-                    <input
-                      type="email"
-                      className={fieldClass('email')}
-                      value={contactSchool.email}
-                      onChange={e => { setContactSchool(c => ({ ...c, email: e.target.value })); clearFieldError('email'); }}
-                      onBlur={e => validateOnBlur('email', e.target.value, 'email')}
-                      aria-invalid={!!fieldError('email')}
-                    />
-                    <FieldError message={fieldError('email')} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-6">
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Secondary School</h3>
-                <div>
-                  <label className={labelClass}>Secondary School Attended <Req /></label>
-                  <input
-                    className={fieldClass('secondarySchool')}
-                    value={contactSchool.secondarySchool}
-                    onChange={e => { setContactSchool(c => ({ ...c, secondarySchool: e.target.value })); clearFieldError('secondarySchool'); }}
-                    onBlur={e => validateOnBlur('secondarySchool', e.target.value, 'text')}
-                    aria-invalid={!!fieldError('secondarySchool')}
-                  />
-                  <FieldError message={fieldError('secondarySchool')} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4">
-                  <div className="sm:col-span-3">
-                    <label className={labelClass}>School Address <Req /></label>
-                    <input
-                      className={fieldClass('schoolAddress')}
-                      value={contactSchool.schoolAddress}
-                      onChange={e => { setContactSchool(c => ({ ...c, schoolAddress: e.target.value })); clearFieldError('schoolAddress'); }}
-                      onBlur={e => validateOnBlur('schoolAddress', e.target.value, 'text')}
-                      aria-invalid={!!fieldError('schoolAddress')}
-                    />
-                    <FieldError message={fieldError('schoolAddress')} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Type</label>
-                    <select className={inputClass} value={contactSchool.schoolType} onChange={e => setContactSchool(c => ({ ...c, schoolType: e.target.value as 'Public' | 'Private' }))}>
-                      <option value="Public">Public</option>
-                      <option value="Private">Private</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --- Tab 3: Parents & Guardian --- */}
-          {wizardStep === 3 && (
-            <div className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {(['father', 'mother'] as const).map(parentKey => {
-                  const parent = parentsGuardian[parentKey];
-                  const otherKey = parentKey === 'father' ? 'mother' : 'father';
-                  const isDisabled = parentsGuardian[otherKey].isSoloParent;
-                  const setParent = (updates: Partial<typeof parent>) =>
-                    setParentsGuardian(pg => ({ ...pg, [parentKey]: { ...pg[parentKey], ...updates } }));
-                  const disabledInputClass = `${inputClass} bg-slate-50/40 text-slate-400 cursor-not-allowed`;
-                  const fk = (name: string) => `${parentKey}.${name}`;
-
-                  const handleSoloToggle = (checked: boolean) => {
-                    setParentsGuardian(pg => {
-                      if (checked) {
-                        return {
-                          ...pg,
-                          [parentKey]: { ...pg[parentKey], isSoloParent: true },
-                          [otherKey]: {
-                            ...pg[otherKey],
-                            fullName: 'N/A',
-                            occupation: 'N/A',
-                            company: 'N/A',
-                            companyTel: 'N/A',
-                            isSoloParent: false
-                          }
-                        };
-                      }
-                      return {
-                        ...pg,
-                        [parentKey]: { ...pg[parentKey], isSoloParent: false },
-                        [otherKey]: {
-                          ...pg[otherKey],
-                          fullName: pg[otherKey].fullName === 'N/A' ? '' : pg[otherKey].fullName,
-                          occupation: pg[otherKey].occupation === 'N/A' ? '' : pg[otherKey].occupation,
-                          company: pg[otherKey].company === 'N/A' ? '' : pg[otherKey].company,
-                          companyTel: pg[otherKey].companyTel === 'N/A' ? '' : pg[otherKey].companyTel
-                        }
-                      };
-                    });
-                    ['fullName', 'occupation', 'company', 'companyTel'].forEach(f => {
-                      clearFieldError(`${parentKey}.${f}`);
-                      clearFieldError(`${otherKey}.${f}`);
-                    });
-                  };
-
-                  return (
-                    <div key={parentKey} className="rounded-xl border border-slate-200 overflow-hidden">
-                      <div className="bg-brand-green text-white px-4 py-2.5 font-display font-bold text-xs uppercase tracking-wider flex items-center justify-between gap-2">
-                        <span>{parentKey}</span>
-                        {isDisabled && (
-                          <span className="text-[10px] font-semibold bg-white/15 px-2 py-0.5 rounded-full normal-case tracking-normal">
-                            N/A (solo parent)
-                          </span>
-                        )}
-                      </div>
-                      <div className="p-4 space-y-3">
-                        <div>
-                          <label className={labelClass}>Full Name {!isDisabled && <Req />}</label>
-                          <input
-                            className={isDisabled ? disabledInputClass : fieldClass(fk('fullName'))}
-                            value={parent.fullName}
-                            disabled={isDisabled}
-                            onChange={e => { setParent({ fullName: e.target.value }); clearFieldError(fk('fullName')); }}
-                            onBlur={e => !isDisabled && validateOnBlur(fk('fullName'), e.target.value, 'text')}
-                            aria-invalid={!!fieldError(fk('fullName'))}
-                          />
-                          <FieldError message={fieldError(fk('fullName'))} />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Occupation {!isDisabled && <Req />}</label>
-                          <input
-                            className={isDisabled ? disabledInputClass : fieldClass(fk('occupation'))}
-                            value={parent.occupation}
-                            disabled={isDisabled}
-                            onChange={e => { setParent({ occupation: e.target.value }); clearFieldError(fk('occupation')); }}
-                            onBlur={e => !isDisabled && validateOnBlur(fk('occupation'), e.target.value, 'text')}
-                            aria-invalid={!!fieldError(fk('occupation'))}
-                          />
-                          <FieldError message={fieldError(fk('occupation'))} />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Company {!isDisabled && <Req />}</label>
-                          <input
-                            className={isDisabled ? disabledInputClass : fieldClass(fk('company'))}
-                            value={parent.company}
-                            disabled={isDisabled}
-                            onChange={e => { setParent({ company: e.target.value }); clearFieldError(fk('company')); }}
-                            onBlur={e => !isDisabled && validateOnBlur(fk('company'), e.target.value, 'text')}
-                            aria-invalid={!!fieldError(fk('company'))}
-                          />
-                          <FieldError message={fieldError(fk('company'))} />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Company Tel. {!isDisabled && <Req />}</label>
-                          <input
-                            className={isDisabled ? disabledInputClass : fieldClass(fk('companyTel'))}
-                            value={parent.companyTel}
-                            disabled={isDisabled}
-                            onChange={e => { setParent({ companyTel: e.target.value }); clearFieldError(fk('companyTel')); }}
-                            onBlur={e => !isDisabled && validateOnBlur(fk('companyTel'), e.target.value, 'text')}
-                            aria-invalid={!!fieldError(fk('companyTel'))}
-                          />
-                          <FieldError message={fieldError(fk('companyTel'))} />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Monthly Income</label>
-                          <select
-                            className={isDisabled ? disabledInputClass : inputClass}
-                            value={parent.monthlyIncome}
-                            disabled={isDisabled}
-                            onChange={e => setParent({ monthlyIncome: e.target.value })}
-                          >
-                            {INCOME_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                          </select>
-                        </div>
-                        <label className={`flex items-center gap-1.5 text-xs font-semibold ${isDisabled ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 cursor-pointer'}`}>
-                          <input
-                            type="checkbox"
-                            checked={parent.isSoloParent}
-                            disabled={isDisabled}
-                            onChange={e => handleSoloToggle(e.target.checked)}
-                            className="accent-brand-green"
-                          />
-                          Solo Parent?
-                        </label>
-                      </div>
-
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="border-t border-slate-100 pt-6">
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Guardian's Information</h3>
-                <p className="text-[11px] text-slate-400 mb-3">Optional — only fill this out if a guardian assists with your support.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelClass}>Full Name</label>
-                    <input className={inputClass} value={parentsGuardian.guardian.fullName} onChange={e => setParentsGuardian(pg => ({ ...pg, guardian: { ...pg.guardian, fullName: e.target.value } }))} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Occupation</label>
-                    <input className={inputClass} value={parentsGuardian.guardian.occupation} onChange={e => setParentsGuardian(pg => ({ ...pg, guardian: { ...pg.guardian, occupation: e.target.value } }))} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Monthly Income</label>
-                    <select className={inputClass} value={parentsGuardian.guardian.monthlyIncome} onChange={e => setParentsGuardian(pg => ({ ...pg, guardian: { ...pg.guardian, monthlyIncome: e.target.value } }))}>
-                      {INCOME_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Relationship</label>
-                    <input className={inputClass} value={parentsGuardian.guardian.relationship} onChange={e => setParentsGuardian(pg => ({ ...pg, guardian: { ...pg.guardian, relationship: e.target.value } }))} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Contact No.</label>
-                    <input className={inputClass} value={parentsGuardian.guardian.contactNo} onChange={e => setParentsGuardian(pg => ({ ...pg, guardian: { ...pg.guardian, contactNo: e.target.value } }))} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --- Tab 4: Siblings --- */}
-          {wizardStep === 4 && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider">Brothers & Sisters</h3>
-                <span className="text-[11px] text-slate-400">Optional — add one row per sibling, if any.</span>
-              </div>
-
-              {siblings.length > 0 && (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-emerald-50 text-left text-slate-700">
-                        <th className="p-3 font-bold">Name</th>
-                        <th className="p-3 font-bold">Status</th>
-                        <th className="p-3 font-bold">Civil</th>
-                        <th className="p-3 font-bold">Age</th>
-                        <th className="p-3 font-bold">School/Company</th>
-                        <th className="p-3 font-bold">Type</th>
-                        <th className="p-3 font-bold">Tuition/Salary</th>
-                        <th className="p-3 font-bold">DLSU-D</th>
-                        <th className="p-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {siblings.map(sib => (
-                        <tr key={sib.id} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="p-3 font-semibold text-slate-800">{sib.fullName}</td>
-                          <td className="p-3 text-slate-600">{sib.socialStatus}</td>
-                          <td className="p-3 text-slate-600">{sib.civilStatus}</td>
-                          <td className="p-3 text-slate-600">{sib.age}</td>
-                          <td className="p-3 text-slate-600">{sib.schoolOrCompany}</td>
-                          <td className="p-3 text-slate-600">{sib.schoolType}</td>
-                          <td className="p-3 text-slate-600">{sib.tuitionOrIncome}</td>
-                          <td className="p-3 text-slate-600">{sib.isDlsudScholar ? 'Yes' : 'No'}</td>
-                          <td className="p-3">
-                            <button type="button" onClick={() => removeSibling(sib.id)} className="p-1.5 text-rose-500 hover:bg-rose-100 rounded-md transition-colors">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4 space-y-3">
-                <p className="text-xs font-bold text-brand-green-dark uppercase tracking-wider">+ Add a Sibling</p>
-                {siblingDraftError && (
-                  <div className="p-2.5 bg-rose-50 text-rose-700 rounded-lg border border-rose-100 text-[11px] font-bold flex items-center gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span>{siblingDraftError}</span>
-                  </div>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <input
-                    placeholder="Last name, First name"
-                    className={siblingDraftError && isBlank(siblingDraft.fullName) ? errorInputClass : inputClass}
-                    value={siblingDraft.fullName}
-                    onChange={e => { setSiblingDraft(d => ({ ...d, fullName: e.target.value })); setSiblingDraftError(''); }}
-                  />
-                  <select className={inputClass} value={siblingDraft.socialStatus} onChange={e => setSiblingDraft(d => ({ ...d, socialStatus: e.target.value }))}>
-                    {SIBLING_SOCIAL_STATUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                  <select className={inputClass} value={siblingDraft.civilStatus} onChange={e => setSiblingDraft(d => ({ ...d, civilStatus: e.target.value }))}>
-                    {CIVIL_STATUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                  <input
-                    placeholder="Age"
-                    inputMode="numeric"
-                    className={siblingDraftError && !isBlank(siblingDraft.age) && !isValidAge(siblingDraft.age) ? errorInputClass : inputClass}
-                    value={siblingDraft.age}
-                    onChange={e => { setSiblingDraft(d => ({ ...d, age: e.target.value })); setSiblingDraftError(''); }}
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-center">
-                  <input placeholder="Name of school or employer" className={inputClass} value={siblingDraft.schoolOrCompany} onChange={e => setSiblingDraft(d => ({ ...d, schoolOrCompany: e.target.value }))} />
-                  <select className={inputClass} value={siblingDraft.schoolType} onChange={e => setSiblingDraft(d => ({ ...d, schoolType: e.target.value as 'Public' | 'Private' | 'N/A' }))}>
-                    <option value="Public">Public</option>
-                    <option value="Private">Private</option>
-                    <option value="N/A">N/A</option>
-                  </select>
-                  <input placeholder="Tuition / Monthly Income" className={inputClass} value={siblingDraft.tuitionOrIncome} onChange={e => setSiblingDraft(d => ({ ...d, tuitionOrIncome: e.target.value }))} />
-                  <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                    <input type="checkbox" checked={siblingDraft.isDlsudScholar} onChange={e => setSiblingDraft(d => ({ ...d, isDlsudScholar: e.target.checked }))} className="accent-brand-green" />
-                    DLSU-D Scholar?
-                  </label>
-                </div>
-                <button
-                  type="button"
-                  onClick={addSibling}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-4 py-2.5 rounded-lg transition-colors focus:outline-hidden"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Sibling</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* --- Tab 5: Assets, Expenses & Agreement --- */}
-          {wizardStep === 5 && (
-            <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-2.5">
-                <Info className="w-4.5 h-4.5 text-blue-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-blue-800">
-                  Assets and Expenses fields apply to <strong>Student Financial Aid Grant</strong> applicants only.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Market Value of Assets</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelClass}>House and Lot</label>
-                    <select className={inputClass} value={assetsExpenses.houseAndLot} onChange={e => setAssetsExpenses(a => ({ ...a, houseAndLot: e.target.value }))}>
-                      {ASSET_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Automobile</label>
-                    <select className={inputClass} value={assetsExpenses.automobile} onChange={e => setAssetsExpenses(a => ({ ...a, automobile: e.target.value }))}>
-                      {ASSET_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-6">
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Income Sources</h3>
-                <div>
-                  <label className={labelClass}>Income Sources <Req /></label>
-                  <input
-                    className={fieldClass('incomeSources')}
-                    value={assetsExpenses.incomeSources}
-                    onChange={e => { setAssetsExpenses(a => ({ ...a, incomeSources: e.target.value })); clearFieldError('incomeSources'); }}
-                    onBlur={e => validateOnBlur('incomeSources', e.target.value, 'text')}
-                    aria-invalid={!!fieldError('incomeSources')}
-                  />
-                  <FieldError message={fieldError('incomeSources')} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <label className={labelClass}>Combined Total Non-Taxable Income</label>
-                    <select className={inputClass} value={assetsExpenses.combinedNonTaxableIncome} onChange={e => setAssetsExpenses(a => ({ ...a, combinedNonTaxableIncome: e.target.value }))}>
-                      {INCOME_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Affidavit of Non-Filing of Income Tax</label>
-                    <select className={inputClass} value={assetsExpenses.affidavitNonFilingIncomeTax} onChange={e => setAssetsExpenses(a => ({ ...a, affidavitNonFilingIncomeTax: e.target.value }))}>
-                      {INCOME_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-6">
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider mb-3">Latest Monthly Bills</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className={labelClass}>Water</label>
-                    <select className={inputClass} value={assetsExpenses.waterBill} onChange={e => setAssetsExpenses(a => ({ ...a, waterBill: e.target.value }))}>
-                      {BILL_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Electricity</label>
-                    <select className={inputClass} value={assetsExpenses.electricityBill} onChange={e => setAssetsExpenses(a => ({ ...a, electricityBill: e.target.value }))}>
-                      {BILL_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Telephone</label>
-                    <select className={inputClass} value={assetsExpenses.telephoneBill} onChange={e => setAssetsExpenses(a => ({ ...a, telephoneBill: e.target.value }))}>
-                      {BILL_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Mobile Phone</label>
-                    <select className={inputClass} value={assetsExpenses.mobilePhoneBill} onChange={e => setAssetsExpenses(a => ({ ...a, mobilePhoneBill: e.target.value }))}>
-                      {BILL_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Internet</label>
-                    <select className={inputClass} value={assetsExpenses.internetBill} onChange={e => setAssetsExpenses(a => ({ ...a, internetBill: e.target.value }))}>
-                      {BILL_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Amortization (House)</label>
-                    <select className={inputClass} value={assetsExpenses.amortizationHouse} onChange={e => setAssetsExpenses(a => ({ ...a, amortizationHouse: e.target.value }))}>
-                      {BILL_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Amortization (Auto)</label>
-                    <select className={inputClass} value={assetsExpenses.amortizationAuto} onChange={e => setAssetsExpenses(a => ({ ...a, amortizationAuto: e.target.value }))}>
-                      {BILL_BRACKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-6 space-y-4">
-                <h3 className="font-display font-bold text-sm text-brand-green uppercase tracking-wider">Agreement</h3>
-                <button type="button" className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-green hover:text-brand-green-dark underline focus:outline-hidden">
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  Read Scholarship Application Guidelines and Procedures
-                </button>
-
-                <div className={`border rounded-xl p-4 space-y-3 ${
-                  fieldError('certifyConsulted') || fieldError('certifyAccuracy')
-                    ? 'border-rose-400 bg-rose-50/60'
-                    : 'border-amber-300 bg-amber-50/50'
-                }`}>
-                  <label className={`flex items-start gap-2.5 text-xs leading-relaxed cursor-pointer rounded-lg p-1 -m-1 ${
-                    fieldError('certifyConsulted') ? 'text-rose-700' : 'text-slate-700'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={agreement.certifyConsulted}
-                      onChange={e => { setAgreement(a => ({ ...a, certifyConsulted: e.target.checked })); clearFieldError('certifyConsulted'); }}
-                      className={`mt-0.5 shrink-0 ${fieldError('certifyConsulted') ? 'accent-rose-500' : 'accent-brand-green'}`}
-                    />
-                    <span>
-                      I hereby certify that I have consulted family members with regard to the statements and other information.
-                      They are to the best of our knowledge correct and complete. The Student Scholarship Office has my permission
-                      to verify the information on this form and at any time revoke my scholarship should, after observing due
-                      process, find the information false.
-                    </span>
-                  </label>
-                  <label className={`flex items-start gap-2.5 text-xs leading-relaxed cursor-pointer rounded-lg p-1 -m-1 ${
-                    fieldError('certifyAccuracy') ? 'text-rose-700' : 'text-slate-700'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={agreement.certifyAccuracy}
-                      onChange={e => { setAgreement(a => ({ ...a, certifyAccuracy: e.target.checked })); clearFieldError('certifyAccuracy'); }}
-                      className={`mt-0.5 shrink-0 ${fieldError('certifyAccuracy') ? 'accent-rose-500' : 'accent-brand-green'}`}
-                    />
-                    <span>
-                      This is to certify the veracity and completeness of all information written on this form. I understand
-                      that any falsification, misrepresentation or withholding of information shall be a ground for
-                      non-processing or exclusion from the Scholarship Office of De La Salle University-Dasmariñas.
-                    </span>
-                  </label>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Tab footer navigation */}
-          <div className="flex justify-between items-center pt-6 mt-6 border-t border-slate-100">
-            {wizardStep > 1 ? (
+  const renderSiblings = () => (
+    <div className="space-y-4">
+      <SubHeading note="List all your brothers and sisters. Fill in the school if they are studying, or the employer if working.">Brothers & Sisters</SubHeading>
+      {siblings.length === 0 && (
+        <p className="text-xs text-slate-400 italic px-1">No siblings added. Skip this step if you are an only child.</p>
+      )}
+      <AnimatePresence initial={false}>
+        {siblings.map((sib, i) => (
+          <motion.div
+            key={sib.id}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="p-4 border border-slate-200 rounded-xl bg-slate-50/40 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Sibling {i + 1}</span>
               <button
                 type="button"
-                onClick={() => goToSfagStep(wizardStep - 1)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-brand-green bg-slate-50 hover:bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-lg transition-colors focus:outline-hidden"
+                onClick={() => removeSibling(sib.id)}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-500 hover:bg-rose-50 px-2 py-1 rounded-md transition-colors focus:outline-hidden"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>{SFAG_TABS[wizardStep - 2].label}</span>
+                <Trash2 className="w-3.5 h-3.5" />
+                Remove
               </button>
-            ) : !isResubmit ? (
-              <button
-                type="button"
-                onClick={handleDiscardDraft}
-                className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden"
-              >
-                Discard draft and start over
-              </button>
-            ) : <span />}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              {textField({ key: `sib.${i}.fullName`, label: 'Full Name', required: true, placeholder: 'Last name, First name', className: 'sm:col-span-2', value: sib.fullName, onChange: v => updateSibling(sib.id, { fullName: v }) })}
+              {textField({ key: `sib.${i}.age`, label: 'Age', value: sib.age, onChange: v => updateSibling(sib.id, { age: v }) })}
+              {selectField({ label: 'Civil Status', value: sib.civilStatus, onChange: v => updateSibling(sib.id, { civilStatus: v }), options: CIVIL_STATUS_OPTIONS })}
+              {selectField({ label: 'Status', className: 'sm:col-span-2', value: sib.socialStatus, onChange: v => updateSibling(sib.id, { socialStatus: v }), options: SIBLING_SOCIAL_STATUS_OPTIONS })}
+              {textField({ key: `sib.${i}.schoolOrCompany`, label: 'School or Employer', className: 'sm:col-span-2', value: sib.schoolOrCompany, onChange: v => updateSibling(sib.id, { schoolOrCompany: v }) })}
+              <div className="sm:col-span-2">
+                <label className={labelClass}>School Type</label>
+                <ChoicePills value={sib.schoolType} onChange={v => updateSibling(sib.id, { schoolType: v as SfagSibling['schoolType'] })} options={['Public', 'Private', 'N/A']} />
+              </div>
+              {textField({ key: `sib.${i}.tuitionOrIncome`, label: 'Tuition / Monthly Income', value: sib.tuitionOrIncome, onChange: v => updateSibling(sib.id, { tuitionOrIncome: v }) })}
+              <div>
+                <label className={labelClass}>DLSU-D Scholar?</label>
+                <ChoicePills value={sib.isDlsudScholar ? 'Yes' : 'No'} onChange={v => updateSibling(sib.id, { isDlsudScholar: v === 'Yes' })} options={['Yes', 'No']} />
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+      <button
+        type="button"
+        onClick={() => setSiblings(prev => [...prev, newSibling()])}
+        className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-green hover:text-brand-green-dark bg-brand-green/5 hover:bg-brand-green/10 border border-brand-green/20 px-3.5 py-2 rounded-lg transition-colors focus:outline-hidden"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Add sibling
+      </button>
+    </div>
+  );
 
-            {wizardStep < 5 ? (
-              <button
-                type="button"
-                onClick={() => goToSfagStep(wizardStep + 1)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-2.5 rounded-lg transition-colors focus:outline-hidden"
-              >
-                <span>{SFAG_TABS[wizardStep].label}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSfagAgreementNext}
-                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-2.5 rounded-lg transition-colors focus:outline-hidden"
-              >
-                <span>Next: Upload Documents</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+  const BILLS: { key: keyof SfagAssetsExpenses; label: string }[] = [
+    { key: 'waterBill', label: 'Water' },
+    { key: 'electricityBill', label: 'Electricity' },
+    { key: 'telephoneBill', label: 'Telephone' },
+    { key: 'mobilePhoneBill', label: 'Mobile Phone' },
+    { key: 'internetBill', label: 'Internet' },
+    { key: 'amortizationHouse', label: 'Amortization (House)' },
+    { key: 'amortizationAuto', label: 'Amortization (Auto)' }
+  ];
+
+  const renderAssets = () => (
+    <div className="space-y-6">
+      <Block>
+        <SubHeading>Market Value of Assets</SubHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {selectField({ label: 'House and Lot', value: assetsExpenses.houseAndLot, onChange: v => setAE({ houseAndLot: v }), options: ASSET_BRACKETS })}
+          {selectField({ label: 'Automobile', value: assetsExpenses.automobile, onChange: v => setAE({ automobile: v }), options: ASSET_BRACKETS })}
+        </div>
+      </Block>
+      <Block>
+        <SubHeading>Income</SubHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {textField({ key: 'incomeSources', label: 'Income Sources', required: true, className: 'sm:col-span-2', placeholder: 'e.g. Salary, small business, remittances', value: assetsExpenses.incomeSources, onChange: v => setAE({ incomeSources: v }) })}
+          {selectField({ label: 'Combined Total Non-Taxable Income', value: assetsExpenses.combinedNonTaxableIncome, onChange: v => setAE({ combinedNonTaxableIncome: v }), options: INCOME_BRACKETS })}
+          {selectField({ label: 'Affidavit of Non-Filing of Income Tax', value: assetsExpenses.affidavitNonFilingIncomeTax, onChange: v => setAE({ affidavitNonFilingIncomeTax: v }), options: INCOME_BRACKETS })}
+        </div>
+      </Block>
+      <Block>
+        <SubHeading>Latest Monthly Bills</SubHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {BILLS.map(b => (
+            <React.Fragment key={b.key}>
+              {selectField({ label: b.label, value: assetsExpenses[b.key] as string, onChange: v => setAE({ [b.key]: v } as Partial<SfagAssetsExpenses>), options: BILL_BRACKETS })}
+            </React.Fragment>
+          ))}
+        </div>
+      </Block>
+    </div>
+  );
+
+  const renderAgreement = () => {
+    const hasError = !!fieldError('certifyConsulted') || !!fieldError('certifyAccuracy');
+    const box = (key: 'certifyConsulted' | 'certifyAccuracy', text: string) => (
+      <div>
+        <label className={`flex items-start gap-2.5 text-xs leading-relaxed cursor-pointer ${fieldError(key) ? 'text-rose-700' : 'text-slate-700'}`}>
+          <input
+            type="checkbox"
+            checked={agreement[key]}
+            onChange={e => { setAgreement(a => ({ ...a, [key]: e.target.checked })); clearFieldError(key); }}
+            className={`mt-0.5 shrink-0 ${fieldError(key) ? 'accent-rose-500' : 'accent-brand-green'}`}
+          />
+          <span>{text}</span>
+        </label>
+        <FieldError message={fieldError(key)} />
+      </div>
+    );
+    return (
+      <div className={`border rounded-xl p-4 space-y-4 ${hasError ? 'border-rose-400 bg-rose-50/60' : 'border-amber-300 bg-amber-50/50'}`}>
+        {box('certifyConsulted', 'I hereby certify that I have consulted family members with regard to the statements and other information. They are to the best of our knowledge correct and complete. The Student Scholarship Office has my permission to verify the information on this form and at any time revoke my scholarship should, after observing due process, find the information false.')}
+        {box('certifyAccuracy', 'This is to certify the veracity and completeness of all information written on this form. I understand that any falsification, misrepresentation or withholding of information shall be a ground for non-processing or exclusion from the Scholarship Office of De La Salle University-Dasmariñas.')}
+      </div>
+    );
+  };
+
+  const restoredDocNames = savedDraft?.previouslyUploadedDocNames ?? [];
+  const renderDocuments = () => (
+    <div className="space-y-5">
+      <p className="text-xs text-slate-500">
+        {isResubmit
+          ? 'Anything already on file is marked. Re-upload only what the office flagged, or replace any file you want to update.'
+          : 'Upload a clear JPG scan or photo for each requirement (max 10MB per file).'}
+      </p>
+      {restoredDocNames.length > 0 && Object.keys(uploads).length === 0 && (
+        <div className="p-4 bg-amber-50 text-amber-800 rounded-xl border border-amber-100 text-xs font-semibold flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <span>
+            Your answers were restored, but browsers can't restore selected files. Please re-select: {restoredDocNames.join(', ')}.
+          </span>
+        </div>
+      )}
+      <div className="space-y-3">
+        {scholarship.requirements.map(req => (
+          <FileSlotView
+            key={req}
+            label={req}
+            required
+            selected={uploads[req] ? [uploads[req].file] : []}
+            onRecordCount={isResubmit && previouslySubmittedDocNames.includes(req) ? 1 : 0}
+            onPick={files => pickFile(req, files[0])}
+            onRemove={() => removeFile(req)}
+            error={uploadErrors[req] || fieldError(`doc:${req}`)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderReview = () => (
+    <div className="space-y-8">
+      <p className="text-xs text-slate-500">Review your answers below. Use the section list to go back and edit anything before submitting.</p>
+      {isSfag
+        ? <SfagAnswers details={buildSfagDetails()} />
+        : <StandardProfileAnswers info={{ firstName, lastName, email, phone, studentNumber, program, yearLevel, gpa }} />}
+      <div className="pt-6 border-t border-slate-100 space-y-2">
+        <h4 className="font-display font-bold text-sm text-slate-900 mb-3">Documents</h4>
+        {scholarship.requirements.map(req => {
+          const selected = uploads[req];
+          const onRecord = isResubmit && previouslySubmittedDocNames.includes(req);
+          const ok = !!selected || onRecord;
+          return (
+            <div key={req} className="flex items-start gap-2 text-xs">
+              {ok ? <CheckCircle className="w-4 h-4 text-brand-green shrink-0" /> : <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />}
+              <span className="text-slate-700">
+                <span className="font-semibold">{req}</span>
+                <span className="text-slate-400"> — {selected ? selected.fileName : onRecord ? 'on record' : 'missing'}</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const SECTION_RENDERERS: Record<StdSectionKey, () => React.ReactNode> = {
+    profile: renderProfile,
+    personal: renderPersonal,
+    contact: renderContact,
+    parents: renderParents,
+    siblings: renderSiblings,
+    assets: renderAssets,
+    agreement: renderAgreement,
+    documents: renderDocuments,
+    review: renderReview
+  };
+
+  return (
+    <div id={id} className="space-y-6">
+      <BackLink onClick={onBack} />
+
+      <WizardHeader
+        scholarshipName={scholarship.name}
+        isResubmit={isResubmit}
+        subtitle={<>Reviewed by the {officeLabel}</>}
+        right={!isResubmit && <DraftIndicator status={savedAt ? 'saved' : 'idle'} savedAt={savedAt} localOnly />}
+        doneCount={doneCount}
+        total={countable.length}
+      />
+
+      {isResubmit && <RevisionNote note={existingApplication?.reviewNote} />}
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+        <SectionNav
+          sections={sections}
+          currentKey={currentKey}
+          statusOf={statusOf}
+          onSelect={key => goTo(key as StdSectionKey)}
+          partLabels={PART_LABELS}
+        />
+
+        <div className="lg:col-span-3 space-y-4 min-w-0">
+          <FormBanner message={banner} />
+          <SectionPanel
+            partLabel={PART_LABELS[current.part]}
+            title={current.label}
+            sectionKey={currentKey}
+            footer={
+              <WizardFooter
+                prevLabel={prev?.label}
+                onPrev={prev ? () => goTo(prev.key) : undefined}
+                onDiscard={!isResubmit ? handleDiscardDraft : undefined}
+                isLast={currentKey === 'review'}
+                onNext={goNext}
+                onSubmit={handleSubmit}
+                isSubmitting={isSubmitting}
+                submitLabel={isResubmit ? 'Resubmit Application' : 'Submit Application'}
+              />
+            }
+          >
+            {SECTION_RENDERERS[currentKey]()}
+          </SectionPanel>
+          <PrivacyNote officeLabel={officeLabel} />
         </div>
       </div>
     </div>

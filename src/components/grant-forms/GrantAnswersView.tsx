@@ -33,11 +33,11 @@ export function AnswerGroup({ title, children }: { title: string; children: Reac
   );
 }
 
-function Grid({ children }: { children: React.ReactNode }) {
+export function AnswerGrid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-4">{children}</div>;
 }
 
-function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
+export function AnswerCheck({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
     <div className={`flex items-start gap-2 text-xs font-semibold ${ok ? 'text-brand-green' : 'text-rose-500'}`}>
       {ok ? <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" /> : <XCircle className="w-4 h-4 shrink-0 mt-0.5" />}
@@ -47,7 +47,7 @@ function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
 }
 
 // Compact table for repeatable rows; scrolls horizontally on small screens.
-function RowsTable({ columns, rows, empty }: { columns: string[]; rows: React.ReactNode[][]; empty: string }) {
+export function RowsTable({ columns, rows, empty }: { columns: string[]; rows: React.ReactNode[][]; empty: string }) {
   if (rows.length === 0) return <p className="text-xs text-slate-400 italic">{empty}</p>;
   return (
     <div className="overflow-x-auto -mx-1">
@@ -81,25 +81,25 @@ export function ApplicationFormAnswers({ details, scholarship }: { details: Gran
     <div className="space-y-7">
       <AnswerGroup title="Eligibility">
         {isAlumni ? (
-          <Grid>
+          <AnswerGrid>
             <AnswerField label="Alumnus / Alumna" value={e.alumnusName} />
             <AnswerField label="Relationship" value={e.relationship} />
             <AnswerField label="Institution" value={e.institution} />
             <AnswerField label="Batch / Year Graduated" value={e.batchYear} />
-          </Grid>
+          </AnswerGrid>
         ) : (
           <div className="space-y-3">
-            <Grid>
+            <AnswerGrid>
               <AnswerField label="HS General Average" value={e.hsGeneralAverage} />
               <AnswerField label="Lowest HS Grade" value={e.lowestHsGrade} />
-            </Grid>
-            <Check ok={!!e.notRelatedToBoardMember}>Declares no relation by consanguinity to any current board member</Check>
+            </AnswerGrid>
+            <AnswerCheck ok={!!e.notRelatedToBoardMember}>Declares no relation by consanguinity to any current board member</AnswerCheck>
           </div>
         )}
       </AnswerGroup>
 
       <AnswerGroup title="Student Data">
-        <Grid>
+        <AnswerGrid>
           <AnswerField label="Last Name" value={p.lastName} />
           <AnswerField label="First Name" value={p.firstName} />
           <AnswerField label="Middle Name" value={p.middleName} />
@@ -114,39 +114,39 @@ export function ApplicationFormAnswers({ details, scholarship }: { details: Gran
           <AnswerField label="Religion" value={p.religion} />
           <AnswerField label="Email" value={p.email} />
           <AnswerField label="Secondary School" value={p.secondarySchool ? `${p.secondarySchool}${p.secondarySchoolType ? ` (${p.secondarySchoolType})` : ''}` : ''} wide />
-        </Grid>
+        </AnswerGrid>
       </AnswerGroup>
 
       <AnswerGroup title="Parents">
-        <Grid>
+        <AnswerGrid>
           <AnswerField label="Father" value={pg.father.name} />
           <AnswerField label="Occupation" value={pg.father.occupation} />
           <AnswerField label="Monthly Income" value={formatPeso(pg.father.monthlyIncome)} />
           <AnswerField label="Mother" value={pg.mother.name} />
           <AnswerField label="Occupation" value={pg.mother.occupation} />
           <AnswerField label="Monthly Income" value={formatPeso(pg.mother.monthlyIncome)} />
-        </Grid>
+        </AnswerGrid>
       </AnswerGroup>
 
       <AnswerGroup title="Contact Information">
-        <Grid>
+        <AnswerGrid>
           <AnswerField label="Street Address" value={c.streetAddress} wide />
           <AnswerField label="Barangay" value={c.barangay} />
           <AnswerField label="City / Municipality" value={c.municipality} />
           <AnswerField label="Province" value={c.province} />
           <AnswerField label="Landline" value={c.landlineNo} />
           <AnswerField label="Mobile" value={c.mobileNo} />
-        </Grid>
+        </AnswerGrid>
       </AnswerGroup>
 
       <AnswerGroup title="Guardian">
-        <Grid>
+        <AnswerGrid>
           <AnswerField label="Name" value={pg.guardian.name} />
           <AnswerField label="Relationship" value={pg.guardian.relationship} />
           <AnswerField label="Address" value={pg.guardian.address} />
           <AnswerField label="Landline" value={pg.guardian.landlineNo} />
           <AnswerField label="Mobile" value={pg.guardian.mobileNo} />
-        </Grid>
+        </AnswerGrid>
       </AnswerGroup>
 
       <AnswerGroup title={`Siblings (${details.siblings.length})`}>
@@ -158,21 +158,21 @@ export function ApplicationFormAnswers({ details, scholarship }: { details: Gran
       </AnswerGroup>
 
       <AnswerGroup title="Financial Information">
-        <Grid>
+        <AnswerGrid>
           <AnswerField label="House and Lot" value={[f.houseTenure, f.houseValue].filter(Boolean).join(' · ')} />
           <AnswerField label="Automobile" value={f.hasAutomobile === 'Yes' ? `Yes · ${f.automobileValue}` : f.hasAutomobile} />
           <AnswerField label="Combined Family Monthly Income" value={f.familyIncomeBracket} />
           <AnswerField label="Monthly Expenses" value={f.monthlyExpensesBracket} />
-        </Grid>
+        </AnswerGrid>
       </AnswerGroup>
 
       <AnswerGroup title="Certification">
         <div className="space-y-3">
-          <Check ok={!!details.agreement.agreed}>Certifies the information is correct and complete, consulted with family</Check>
-          <Grid>
+          <AnswerCheck ok={!!details.agreement.agreed}>Certifies the information is correct and complete, consulted with family</AnswerCheck>
+          <AnswerGrid>
             <AnswerField label="Applicant" value={details.agreement.applicantName} />
             <AnswerField label="Parent / Guardian" value={details.agreement.parentGuardianName} />
-          </Grid>
+          </AnswerGrid>
         </div>
       </AnswerGroup>
     </div>
@@ -242,30 +242,30 @@ export function EvaluationSheetAnswers({ sheet }: { sheet: EvaluationSheet }) {
       </AnswerGroup>
 
       <AnswerGroup title="2–3. Boarding & Employment">
-        <Grid>
+        <AnswerGrid>
           <AnswerField label="Boarding House / Dorm" value={sheet.boarding.isBoarding === 'Yes' ? `Yes · ${formatPeso(sheet.boarding.monthlyFee)}/month` : sheet.boarding.isBoarding} />
           <AnswerField label="Employed" value={sheet.employment.isEmployed === 'Yes' ? `Yes · ${sheet.employment.type}` : sheet.employment.isEmployed} />
           {sheet.employment.isEmployed === 'Yes' && (
             <AnswerField label="Company" value={[sheet.employment.company, sheet.employment.address, sheet.employment.telNo].filter(Boolean).join(' · ')} />
           )}
-        </Grid>
+        </AnswerGrid>
       </AnswerGroup>
 
       <AnswerGroup title="4–6. Financing, Memberships & Travel">
-        <Grid>
+        <AnswerGrid>
           <AnswerField label="Who Finances Schooling" value={financingList(sheet)} wide />
           <AnswerField label="Parent / Guardian / Spouse Memberships" value={membershipList(sheet)} wide />
           <AnswerField label="Passport" value={sheet.travel.hasPassport === 'Yes' ? `Yes · issued ${formatDate(sheet.travel.passportDateIssued)}` : sheet.travel.hasPassport} />
           <AnswerField label="Traveled Abroad (5 yrs)" value={sheet.travel.traveledAbroad === 'Yes' ? `Yes · ${sheet.travel.numberOfTrips} trip(s), financed by ${sheet.travel.financedBy}` : sheet.travel.traveledAbroad} />
-        </Grid>
+        </AnswerGrid>
       </AnswerGroup>
 
       <AnswerGroup title="7. Family Data">
         <div className="space-y-4">
-          <Grid>
+          <AnswerGrid>
             <AnswerField label={`Co-residing (total ${coResidingTotal(sheet)})`} value={coResidents} wide />
             <AnswerField label="Parents Separated / Divorced" value={fam.parentsSeparated} />
-          </Grid>
+          </AnswerGrid>
           <RowsTable
             columns={['', 'Name', 'Age', 'Highest Degree / School', 'Employer', 'Job Title', 'Gross Income', 'Living']}
             empty=""
@@ -294,7 +294,7 @@ export function EvaluationSheetAnswers({ sheet }: { sheet: EvaluationSheet }) {
 
       <AnswerGroup title="8. Income, Properties & Assets">
         <div className="space-y-4">
-          <Grid>
+          <AnswerGrid>
             <AnswerField label="Income Sources" value={a.incomeSources.map(s => (s === 'Others' ? `Others: ${a.incomeSourcesOther}` : s)).join(', ')} wide />
             <AnswerField label="Electricity" value={a.electricity.has === 'Yes' ? `Yes · last bill ${formatPeso(a.electricity.lastBill)}` : a.electricity.has} />
             <AnswerField label="Piped Water" value={a.water.has === 'Yes' ? `Yes · last bill ${formatPeso(a.water.lastBill)}` : a.water.has} />
@@ -305,7 +305,7 @@ export function EvaluationSheetAnswers({ sheet }: { sheet: EvaluationSheet }) {
             <AnswerField label="Vehicles" value={vehicles.length ? vehicles.join('; ') : 'None'} wide />
             <AnswerField label="Credit Cards" value={a.hasCreditCards} />
             <AnswerField label="Boarders / Lodgers" value={a.boarders.has === 'Yes' ? `Yes · ${formatPeso(a.boarders.monthlyIncome)}/month` : a.boarders.has} />
-          </Grid>
+          </AnswerGrid>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-2">Real Estate</p>
           <RowsTable
             columns={['Type', 'Area (sqm)', 'Location', 'Market Value', 'Monthly Income']}
@@ -317,12 +317,12 @@ export function EvaluationSheetAnswers({ sheet }: { sheet: EvaluationSheet }) {
 
       <AnswerGroup title="9. Statements">
         <div className="space-y-2">
-          <Check ok={!!sheet.statements.applicant.agreed}>
+          <AnswerCheck ok={!!sheet.statements.applicant.agreed}>
             Applicant: {sheet.statements.applicant.name || '—'}{sheet.statements.applicant.date ? ` · ${formatDate(sheet.statements.applicant.date)}` : ''}
-          </Check>
-          <Check ok={!!sheet.statements.parent.agreed}>
+          </AnswerCheck>
+          <AnswerCheck ok={!!sheet.statements.parent.agreed}>
             Parent / Guardian: {sheet.statements.parent.name || '—'}{sheet.statements.parent.date ? ` · ${formatDate(sheet.statements.parent.date)}` : ''}
-          </Check>
+          </AnswerCheck>
         </div>
       </AnswerGroup>
     </div>

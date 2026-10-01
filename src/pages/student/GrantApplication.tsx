@@ -1,9 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { AnimatePresence, motion } from 'motion/react';
-import {
-  AlertCircle, ArrowLeft, ArrowRight, CheckCircle, Circle, CloudOff, FileText, Loader2, Save, ShieldAlert
-} from 'lucide-react';
+import { AlertCircle, CheckCircle, FileText, Loader2 } from 'lucide-react';
 import { Application, DocumentSlot, GrantApplicationDetails, Scholarship, StoredDocument, StudentProfile } from '../../types';
 import { OFFICE_LABELS, officeOf } from '../../data/scholarships';
 import {
@@ -19,6 +16,10 @@ import {
   MembershipsSection, StatementsSection, TravelSection
 } from '../../components/grant-forms/EvaluationSheetSections';
 import { ApplicationFormAnswers, EvaluationSheetAnswers } from '../../components/grant-forms/GrantAnswersView';
+import {
+  BackLink, DraftIndicator, DraftStatus, FormBanner, PrivacyNote, RevisionNote, SectionNav, SectionPanel,
+  SubmittedScreen, WizardFooter, WizardHeader
+} from '../../components/grant-forms/WizardShell';
 
 // Application wizard for the grant-form scholarships (POLCA, DLSU-D Alumni
 // Association). Rendered by ApplyScholarship.tsx when the scholarship's
@@ -56,8 +57,6 @@ interface DraftData {
   selectedFileNames: Record<string, string[]>;
   savedAt: string;
 }
-
-type DraftStatus = 'idle' | 'loading' | 'saving' | 'saved' | 'offline';
 
 const SECTION_COMPONENTS: Record<GrantSectionKey, React.ComponentType | null> = {
   eligibility: EligibilitySection,
@@ -110,10 +109,6 @@ function normalizeForSubmit(values: GrantApplicationDetails): GrantApplicationDe
     Object.entries(values.evaluationSheet.assets.vehicles).map(([k, v]) => [k, { count: v.count, models: v.models.slice(0, v.count) }])
   );
   return setIn(values, 'evaluationSheet.assets.vehicles', vehicles);
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
 export default function GrantApplication({
@@ -367,7 +362,6 @@ export default function GrantApplication({
   const countable = sections.filter(s => s.key !== 'review');
   const doneCount = countable.filter(s => sectionDone(s.key)).length;
   const progressPct = Math.round((doneCount / countable.length) * 100);
-  const parts = Array.from(new Set(sections.map(s => s.part))) as GrantPart[];
 
   // --- Submit -------------------------------------------------------------------
   const handleSubmit = async () => {
@@ -464,38 +458,14 @@ export default function GrantApplication({
   // --- Render -------------------------------------------------------------------
   if (submitted) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-2xl border border-slate-200 p-8 md:p-12 text-center max-w-xl mx-auto space-y-6 shadow-xl my-8"
-      >
-        <div className="w-16 h-16 rounded-full bg-emerald-100 text-brand-green flex items-center justify-center mx-auto shadow-md">
-          <CheckCircle className="w-10 h-10" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="font-display font-black text-2xl text-slate-900 tracking-tight">
-            {isResubmit ? 'Application Resubmitted Successfully!' : 'Application Submitted Successfully!'}
-          </h2>
-          {submitted.referenceCode && (
-            <p className="text-xs font-semibold text-brand-green uppercase tracking-wider">Reference Code: {submitted.referenceCode}</p>
-          )}
-        </div>
-        <p className="text-sm text-slate-500 leading-relaxed max-w-sm mx-auto">
-          Your application for the <strong>{scholarship.name}</strong> has been sent to the {officeLabel} for evaluation.
-        </p>
-        {scholarship.submissionNote && (
-          <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 text-xs text-amber-800 font-semibold text-left flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{scholarship.submissionNote}</span>
-          </div>
-        )}
-        <button
-          onClick={onBack}
-          className="inline-flex items-center font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-6 py-3.5 rounded-xl transition-all shadow-md shadow-emerald-900/10 focus:outline-hidden"
-        >
-          Back to Scholarship
-        </button>
-      </motion.div>
+      <SubmittedScreen
+        isResubmit={isResubmit}
+        referenceCode={submitted.referenceCode}
+        scholarshipName={scholarship.name}
+        officeLabel={officeLabel}
+        submissionNote={scholarship.submissionNote}
+        onBack={onBack}
+      />
     );
   }
 
@@ -510,201 +480,66 @@ export default function GrantApplication({
 
   const SectionBody = SECTION_COMPONENTS[currentKey];
   const reselect = Object.entries(reselectNames).filter(([, names]) => names.length > 0);
+  const prev = currentIndex > 0 ? sections[currentIndex - 1] : null;
+  const statusOf = (key: string) => {
+    const k = key as GrantSectionKey;
+    if (sectionDone(k)) return 'done' as const;
+    return visited.has(k) && Object.keys(allErrors[k]).length > 0 ? 'error' as const : 'todo' as const;
+  };
 
   return (
     <GrantFormProvider value={contextValue}>
       <div id={id} className="space-y-6">
-        <button
-          onClick={onBack}
-          className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors focus:outline-hidden"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to Scholarship Details</span>
-        </button>
+        <BackLink onClick={onBack} />
 
-        {/* Header + overall progress */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-            <div>
-              <h2 className="font-display font-black text-xl md:text-2xl text-slate-900 tracking-tight">
-                {isResubmit ? 'Resubmit Application: ' : 'Application Form: '}<span className="text-brand-green">{scholarship.name}</span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">
-                {scholarship.formId ? `${scholarship.formId} · ` : ''}Reviewed by the {officeLabel}
-              </p>
-            </div>
-            {!isResubmit && <DraftIndicator status={draftStatus} savedAt={savedAt} onSave={saveNow} />}
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                {doneCount} of {countable.length} sections complete
-              </span>
-              <span className="text-[11px] font-bold text-brand-green">{progressPct}%</span>
-            </div>
-            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-              <motion.div className="h-full bg-brand-green rounded-full" initial={false} animate={{ width: `${progressPct}%` }} transition={{ duration: 0.3 }} />
-            </div>
-          </div>
-        </div>
+        <WizardHeader
+          scholarshipName={scholarship.name}
+          isResubmit={isResubmit}
+          subtitle={<>{scholarship.formId ? `${scholarship.formId} · ` : ''}Reviewed by the {officeLabel}</>}
+          right={!isResubmit && <DraftIndicator status={draftStatus} savedAt={savedAt} onSave={saveNow} />}
+          doneCount={doneCount}
+          total={countable.length}
+        />
 
-        {isResubmit && existingApplication?.reviewNote && (
-          <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 text-xs text-sky-800 flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span><strong>Requested changes:</strong> {existingApplication.reviewNote}</span>
-          </div>
-        )}
+        {isResubmit && <RevisionNote note={existingApplication?.reviewNote} />}
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-          {/* Section navigator */}
-          <nav className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 shadow-xs p-3 lg:sticky lg:top-24">
-            <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible scrollbar-none">
-              {parts.map(part => {
-                const partSections = sections.filter(s => s.part === part);
-                const partCountable = partSections.filter(s => s.key !== 'review');
-                const partDone = partCountable.filter(s => sectionDone(s.key)).length;
-                return (
-                  <div key={part} className="flex lg:flex-col gap-1 lg:mb-2 shrink-0">
-                    <p className="hidden lg:flex items-center justify-between px-2 pt-2 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      <span>{GRANT_PART_LABELS[part]}</span>
-                      {partCountable.length > 0 && <span className={partDone === partCountable.length ? 'text-brand-green' : ''}>{partDone}/{partCountable.length}</span>}
-                    </p>
-                    {partSections.map(section => {
-                      const active = section.key === currentKey;
-                      const done = sectionDone(section.key);
-                      const hasErrors = visited.has(section.key) && Object.keys(allErrors[section.key]).length > 0;
-                      return (
-                        <button
-                          key={section.key}
-                          type="button"
-                          onClick={() => goTo(section.key)}
-                          className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold text-left whitespace-nowrap lg:whitespace-normal transition-colors focus:outline-hidden ${
-                            active ? 'bg-brand-green/10 text-brand-green' : 'text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          {done ? (
-                            <CheckCircle className="w-4 h-4 text-brand-green shrink-0" />
-                          ) : hasErrors ? (
-                            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-                          ) : (
-                            <Circle className={`w-4 h-4 shrink-0 ${active ? 'text-brand-green' : 'text-slate-300'}`} />
-                          )}
-                          <span>{section.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          </nav>
+          <SectionNav
+            sections={sections}
+            currentKey={currentKey}
+            statusOf={statusOf}
+            onSelect={key => goTo(key as GrantSectionKey)}
+            partLabels={GRANT_PART_LABELS}
+          />
 
-          {/* Current section */}
           <div className="lg:col-span-3 space-y-4 min-w-0">
-            {banner && (
-              <div className="p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-100 text-xs font-bold flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                <span>{banner}</span>
-              </div>
-            )}
-
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs">
-              <div className="px-6 md:px-8 pt-6 pb-4 border-b border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{GRANT_PART_LABELS[current.part]}</p>
-                <h3 className="font-display font-bold text-lg text-slate-900">{current.label}</h3>
-              </div>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentKey}
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -12 }}
-                  transition={{ duration: 0.18 }}
-                  className="p-6 md:p-8"
-                >
-                  {SectionBody && <SectionBody />}
-                  {currentKey === 'documents' && <DocumentsStep reselect={reselect} />}
-                  {currentKey === 'review' && <ReviewStep />}
-                </motion.div>
-              </AnimatePresence>
-
-              <div className="flex justify-between items-center gap-3 px-6 md:px-8 py-4 border-t border-slate-100">
-                {currentIndex > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => goTo(sections[currentIndex - 1].key)}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-brand-green bg-slate-50 hover:bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-lg transition-colors focus:outline-hidden"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">{sections[currentIndex - 1].label}</span>
-                    <span className="sm:hidden">Back</span>
-                  </button>
-                ) : !isResubmit ? (
-                  <button type="button" onClick={discardDraft} className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden">
-                    Discard draft and start over
-                  </button>
-                ) : <span />}
-
-                {currentKey !== 'review' ? (
-                  <button
-                    type="button"
-                    onClick={goNext}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-2.5 rounded-lg transition-colors focus:outline-hidden"
-                  >
-                    <span>Next</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className="inline-flex items-center gap-1.5 font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-6 py-3 rounded-xl transition-all shadow-md shadow-emerald-900/10 focus:outline-hidden disabled:opacity-50"
-                  >
-                    {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    {isSubmitting ? 'Submitting…' : isResubmit ? 'Resubmit Application' : 'Submit Application'}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-2.5">
-              <ShieldAlert className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                <span className="font-bold">Privacy:</span> The {officeLabel} complies with the Philippine Data Privacy Act of 2012. Your information is kept confidential and used solely to evaluate your scholarship application.
-              </p>
-            </div>
+            <FormBanner message={banner} />
+            <SectionPanel
+              partLabel={GRANT_PART_LABELS[current.part as GrantPart]}
+              title={current.label}
+              sectionKey={currentKey}
+              footer={
+                <WizardFooter
+                  prevLabel={prev?.label}
+                  onPrev={prev ? () => goTo(prev.key) : undefined}
+                  onDiscard={!isResubmit ? discardDraft : undefined}
+                  isLast={currentKey === 'review'}
+                  onNext={goNext}
+                  onSubmit={handleSubmit}
+                  isSubmitting={isSubmitting}
+                  submitLabel={isResubmit ? 'Resubmit Application' : 'Submit Application'}
+                />
+              }
+            >
+              {SectionBody && <SectionBody />}
+              {currentKey === 'documents' && <DocumentsStep reselect={reselect} />}
+              {currentKey === 'review' && <ReviewStep />}
+            </SectionPanel>
+            <PrivacyNote officeLabel={officeLabel} />
           </div>
         </div>
       </div>
     </GrantFormProvider>
-  );
-}
-
-function DraftIndicator({ status, savedAt, onSave }: { status: DraftStatus; savedAt: string | null; onSave: () => void }) {
-  const label =
-    status === 'saving' ? 'Saving draft…'
-    : status === 'offline' ? 'Saved on this device only'
-    : savedAt ? `Draft saved · ${formatTime(savedAt)}`
-    : 'Not saved yet';
-  return (
-    <div className="flex items-center gap-2 shrink-0">
-      <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${status === 'offline' ? 'text-amber-600' : 'text-slate-400'}`}>
-        {status === 'saving' ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          : status === 'offline' ? <CloudOff className="w-3.5 h-3.5" />
-          : savedAt ? <CheckCircle className="w-3.5 h-3.5 text-brand-green" /> : null}
-        {label}
-      </span>
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={status === 'saving'}
-        className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-green hover:text-brand-green-dark bg-brand-green/5 hover:bg-brand-green/10 border border-brand-green/20 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 focus:outline-hidden"
-      >
-        <Save className="w-3.5 h-3.5" />
-        Save draft
-      </button>
-    </div>
   );
 }
 

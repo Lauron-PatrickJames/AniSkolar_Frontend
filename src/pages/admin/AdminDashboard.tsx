@@ -441,6 +441,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [pendingAction, setPendingAction] = useState<AppStatus | 'note' | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [justUpdatedStatus, setJustUpdatedStatus] = useState<AppStatus | null>(null);
+  // True when the last status change itself sent the application to the
+  // LSO (an office approving an application it hadn't sent yet).
+  const [justSentToLso, setJustSentToLso] = useState(false);
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [noteJustSaved, setNoteJustSaved] = useState(false);
   const [noteSaveError, setNoteSaveError] = useState('');
@@ -565,6 +568,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setActiveTab('form');
     setReviewNote('');
     setJustUpdatedStatus(null);
+    setJustSentToLso(false);
     setNoteJustSaved(false);
     setNoteSaveError('');
     setPreviewDoc(null);
@@ -575,8 +579,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setIsUpdating(true);
     setLoadError('');
     setJustUpdatedStatus(null);
+    setJustSentToLso(false);
     setNoteJustSaved(false);
     setNoteSaveError('');
+    const wasSent = !!applications.find(a => a._id === appId)?.forwardedAt;
     try {
       const token = await getToken();
       const response = await fetch(`${API_BASE_URL}/api/applications/${appId}/status`, {
@@ -602,6 +608,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       // that's now on file, same as reopening the application would.
       setReviewNote('');
       setJustUpdatedStatus(status);
+      setJustSentToLso(!wasSent && !!updated.forwardedAt);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to update application status.');
     } finally {
@@ -869,7 +876,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 {justUpdatedStatus && (
                   <div className="p-3 bg-emerald-50 text-emerald-800 rounded-lg ring-1 ring-inset ring-emerald-200 text-sm flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 shrink-0" />
-                    Marked as {justUpdatedStatus}.
+                    {justSentToLso
+                      ? 'Approved and sent to the LSO.'
+                      : `Marked as ${justUpdatedStatus}.`}
                   </div>
                 )}
 
@@ -915,6 +924,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 </div>
 
                 <div className="space-y-2 pt-4 border-t border-slate-100">
+                  {adminOffice && !selected.forwardedAt && (
+                    <p className="text-xs text-slate-500 flex items-start gap-1.5">
+                      <Send className="w-3.5 h-3.5 shrink-0 mt-px text-violet-600" />
+                      Approving also sends this application to the LSO.
+                    </p>
+                  )}
                   {(['Approved', 'Needs Revision', 'Rejected'] as AppStatus[]).map(status => {
                     const s = decisionStyles[status];
                     const isCurrent = selected.status === status;
@@ -1037,8 +1052,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </p>
               <p className="text-sm text-slate-500 mt-0.5">
                 {unsent.length > 0
-                  ? 'Sending forwards all of them, whatever their status. Your decisions stand unless the LSO overrides them.'
-                  : lastForwardedAt ? `Last sent ${formatDateTime(lastForwardedAt)}. New applications will appear here.` : 'New applications will appear here.'}
+                  ? 'Approved applications go to the LSO automatically. This sends the rest, whatever their status. Your decisions stand unless the LSO overrides them.'
+                  : lastForwardedAt ? `Last sent ${formatDateTime(lastForwardedAt)}. Approved applications are sent automatically.` : 'Approved applications are sent automatically.'}
               </p>
               {forwardResult && <p className="text-sm text-emerald-700 font-medium mt-1 flex items-center gap-1.5"><CheckCircle className="w-4 h-4" />{forwardResult}</p>}
             </div>

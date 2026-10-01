@@ -69,7 +69,7 @@ export default function Footer() {
 
           {/* Contact LSO */}
           <div id="footer-contact">
-            <h3 className="font-display font-semibold text-white mb-4 text-sm uppercase tracking-wider">Contact LSO</h3>
+            <h3 className="font-display font-semibold text-white mb-4 text-sm uppercase tracking-wider">Contact the Scholarship Office</h3>
             <ul className="space-y-3 text-sm text-slate-400">
               <li className="flex items-start space-x-3">
                 <MapPin className="w-4 h-4 text-brand-green shrink-0 mt-1" />
@@ -77,7 +77,7 @@ export default function Footer() {
               </li>
               <li className="flex items-start space-x-3">
                 <Phone className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />
-                <span>+63 46 4811900 or +63 02 87795180 local 3126</span>
+                <span>+63 (46) 481.1900 or +63 (2) 8779.5180 local 3029</span>
               </li>
               <li className="flex items-start space-x-3">
                 <Mail className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />

@@ -17,7 +17,7 @@ Key Dates to Remember:
 
 Please ensure that you have your True Copy of Grades (TCG) and all financial/recommending documents ready prior to initiating the online submission. Failure to submit within the designated period will result in forfeiture of application.
 
-For further inquiries, please contact the Linkages and Scholarship Office (LSO) at extension 4015 or email lso@dlsud.edu.ph.
+For further inquiries, please contact the Admissions and Scholarship Office at local 3029 or email scholarship@dlsud.edu.ph.
 
 Animo La Salle!`,
     category: 'General'
@@ -29,7 +29,7 @@ Animo La Salle!`,
     description: 'All applicants for the Brother President Financial Assistance Grant must upload their updated parents Income Tax Return or Low-Income certificate by July 20 to complete evaluation.',
     content: `This is a critical reminder for all applicants of the Br. President Financial Assistance Grant. 
 
-The Linkages and Scholarship Office (LSO) requires the submission of supporting financial documentation to evaluate your application. Please upload one of the following:
+The Admissions and Scholarship Office requires the submission of supporting financial documentation to evaluate your application. Please upload one of the following:
 1. Latest BIR Income Tax Return (ITR) of both parents/guardians (for calendar year 2025).
 2. Official Certificate of Low Income / Certificate of Indigency issued by your local Barangay or Municipal Social Welfare office.
 
@@ -42,14 +42,14 @@ Thank you for your cooperation and prompt action.`,
   },
   {
     id: 'a3',
-    title: 'LSO Scholarship Orientation and Guidelines Assembly 2026',
+    title: 'Scholarship Orientation and Guidelines Assembly 2026',
     date: 'June 28, 2026',
     description: 'Join us for the annual orientation on June 28 at the Ugnayang La Salle (ULS) to learn about guidelines, grade requirements, and scholarship obligations.',
-    content: `To help our scholars and interested applicants navigate the scholarship guidelines, the Linkages and Scholarship Office (LSO) is hosting the Annual Scholarship Orientation and Assembly.
+    content: `To help our scholars and interested applicants navigate the scholarship guidelines, the Admissions and Scholarship Office is hosting the Annual Scholarship Orientation and Assembly.
 
 Date: July 12, 2026 (Friday)
 Time: 9:00 AM - 12:00 PM
-Venue: Ugnayang La Salle (ULS) / Streamed Live on the official DLSU-D LSO Page
+Venue: Ugnayang La Salle (ULS) / Streamed Live on the official DLSU-D Scholarship Office Page
 
 Agenda:
 - Introduction of the AniSkolar digital platform
@@ -81,7 +81,7 @@ Please secure your digital TCG from the Online Student Records Portal (OSRP) and
 
 The hard deadline for submission of grades is July 15, 2026. Extensions will not be granted.
 
-Office of the Registrar & LSO`,
+Office of the Registrar & Admissions and Scholarship Office`,
     category: 'Deadline'
   }
 ];

@@ -220,6 +220,11 @@ function documentUrl(fileId: string): string {
 }
 
 // Applications that belong to an office other than the LSO (POLCA, Alumni).
+// 'Forwarded to LSO' is the stored history value; show the office's name.
+function historyLabel(status: string): string {
+  return status === 'Forwarded to LSO' ? 'Sent to the Scholarship Office' : status;
+}
+
 function isOfficeApp(app: { office?: string }): boolean {
   return !!app.office && app.office !== 'LSO';
 }
@@ -276,7 +281,7 @@ function ApplicationTimeline({ history }: { history?: HistoryEntry[] }) {
             </span>
             <div className="min-w-0 flex-1 pt-0.5">
               <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-                <p className="text-sm font-medium text-slate-900">{entry.status}</p>
+                <p className="text-sm font-medium text-slate-900">{historyLabel(entry.status)}</p>
                 <time className="text-xs text-slate-400 tabular-nums">{formatDateTime(entry.changedAt)}</time>
               </div>
               {entry.changedBy && (
@@ -465,12 +470,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'Failed to send applications to the LSO.');
-      setForwardResult(`Sent ${body.forwarded} application${body.forwarded === 1 ? '' : 's'} to the LSO.`);
+      if (!response.ok) throw new Error(body.error || 'Failed to send applications to the Scholarship Office.');
+      setForwardResult(`Sent ${body.forwarded} application${body.forwarded === 1 ? '' : 's'} to the Scholarship Office.`);
       setConfirmForward(false);
       await fetchApplications();
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to send applications to the LSO.');
+      setLoadError(err instanceof Error ? err.message : 'Failed to send applications to the Scholarship Office.');
       setConfirmForward(false);
     } finally {
       setIsForwarding(false);
@@ -658,7 +663,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const officeLabel = adminOffice
     ? (OFFICE_LABELS[adminOffice as keyof typeof OFFICE_LABELS] ?? adminOffice)
-    : 'LSO';
+    : OFFICE_LABELS.LSO;
 
   const VIEW_TITLES: Record<MainView, string> = {
     applications: 'Applications',
@@ -766,7 +771,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">{name}</h1>
                 <StatusBadge status={selected.status} />
-                {isOfficeApp(selected) && selected.decisionOffice === 'LSO' && <Tag tone="amber"><ShieldCheck className="w-3 h-3" />LSO override</Tag>}
+                {isOfficeApp(selected) && selected.decisionOffice === 'LSO' && <Tag tone="amber"><ShieldCheck className="w-3 h-3" />Scholarship Office override</Tag>}
               </div>
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                 <span className="text-sm text-slate-600">{selected.scholarshipName}</span>
@@ -790,14 +795,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             <span>
               {selected.forwardedAt ? (
                 <>
-                  Sent to the LSO by the {officeName(selected.office)} on {formatDate(selected.forwardedAt)}
+                  Sent to the Scholarship Office by the {officeName(selected.office)} on {formatDate(selected.forwardedAt)}
                   {selected.forwardedBy ? ` (${selected.forwardedBy})` : ''}.{' '}
                   {adminOffice
-                    ? 'You can keep reviewing it; the LSO can override your decision.'
+                    ? 'You can keep reviewing it; the Scholarship Office can override your decision.'
                     : `The office's decision stands unless you override it below.`}
                 </>
               ) : (
-                <>Not sent to the LSO yet. It goes with the office's next "Send to LSO".</>
+                <>Not sent to the Scholarship Office yet. It goes with the office's next "Send to Scholarship Office".</>
               )}
             </span>
           </div>
@@ -868,7 +873,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               title={!adminOffice && isOfficeApp(selected) ? 'Override decision' : 'Review decision'}
               description={
                 isOfficeApp(selected) && selected.decisionOffice
-                  ? `Current status: ${selected.status} (set by ${selected.decisionOffice === 'LSO' ? 'the LSO' : officeName(selected.decisionOffice)})`
+                  ? `Current status: ${selected.status} (set by ${selected.decisionOffice === 'LSO' ? 'the Scholarship Office' : officeName(selected.decisionOffice)})`
                   : `Current status: ${selected.status}`
               }
             >
@@ -877,7 +882,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   <div className="p-3 bg-emerald-50 text-emerald-800 rounded-lg ring-1 ring-inset ring-emerald-200 text-sm flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 shrink-0" />
                     {justSentToLso
-                      ? 'Approved and sent to the LSO.'
+                      ? 'Approved and sent to the Scholarship Office.'
                       : `Marked as ${justUpdatedStatus}.`}
                   </div>
                 )}
@@ -887,7 +892,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   // rejects further status/note changes from the office.
                   <div className="p-3 bg-amber-50 text-amber-800 rounded-lg ring-1 ring-inset ring-amber-200 text-sm flex items-start gap-2">
                     <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>The LSO has overridden your office's decision. The status and note can no longer be changed here.</span>
+                    <span>The Scholarship Office has overridden your office's decision. The status and note can no longer be changed here.</span>
                   </div>
                 ) : (
                 <>
@@ -936,7 +941,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   {adminOffice && !selected.forwardedAt && (
                     <p className="text-xs text-slate-500 flex items-start gap-1.5">
                       <Send className="w-3.5 h-3.5 shrink-0 mt-px text-violet-600" />
-                      Approving also sends this application to the LSO.
+                      Approving also sends this application to the Scholarship Office.
                     </p>
                   )}
                   {(['Approved', 'Needs Revision', 'Rejected'] as AppStatus[]).map(status => {
@@ -1042,7 +1047,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       <PageHeader
         title="Applications"
         description={adminOffice
-          ? `Applications for the ${officeLabel}. Review them, then send them to the LSO.`
+          ? `Applications for the ${officeLabel}. Review them, then send them to the Scholarship Office.`
           : 'Review submissions, verify documents, and record a decision for each applicant.'}
         actions={<Button icon={RefreshCw} onClick={fetchApplications} disabled={isLoading}>Refresh</Button>}
       />
@@ -1058,12 +1063,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-slate-900">
                 {unsent.length > 0
-                  ? `${unsent.length} application${unsent.length === 1 ? '' : 's'} not yet sent to the LSO`
-                  : 'Everything has been sent to the LSO'}
+                  ? `${unsent.length} application${unsent.length === 1 ? '' : 's'} not yet sent to the Scholarship Office`
+                  : 'Everything has been sent to the Scholarship Office'}
               </p>
               <p className="text-sm text-slate-500 mt-0.5">
                 {unsent.length > 0
-                  ? 'Approved applications go to the LSO automatically. This sends the rest, whatever their status. Your decisions stand unless the LSO overrides them.'
+                  ? 'Approved applications go to the Scholarship Office automatically. This sends the rest, whatever their status. Your decisions stand unless the Scholarship Office overrides them.'
                   : lastForwardedAt ? `Last sent ${formatDateTime(lastForwardedAt)}. Approved applications are sent automatically.` : 'Approved applications are sent automatically.'}
               </p>
               {forwardResult && <p className="text-sm text-emerald-700 font-medium mt-1 flex items-center gap-1.5"><CheckCircle className="w-4 h-4" />{forwardResult}</p>}
@@ -1084,7 +1089,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 onClick={() => { setForwardResult(''); setConfirmForward(true); }}
                 className="shrink-0"
               >
-                Send to LSO
+                Send to Scholarship Office
               </Button>
             )}
           </div>
@@ -1171,11 +1176,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                             <StatusBadge status={app.status} />
                             {adminOffice && (
                               app.forwardedAt
-                                ? <span className="text-[11px] text-violet-700 flex items-center gap-1"><Send className="w-3 h-3" />Sent to LSO</span>
+                                ? <span className="text-[11px] text-violet-700 flex items-center gap-1"><Send className="w-3 h-3" />Sent to Scholarship Office</span>
                                 : <span className="text-[11px] text-slate-400">Not sent yet</span>
                             )}
                             {!adminOffice && isOfficeApp(app) && app.decisionOffice === 'LSO' && (
-                              <span className="text-[11px] text-amber-700 flex items-center gap-1"><ShieldCheck className="w-3 h-3" />LSO override</span>
+                              <span className="text-[11px] text-amber-700 flex items-center gap-1"><ShieldCheck className="w-3 h-3" />Scholarship Office override</span>
                             )}
                           </div>
                         </Td>

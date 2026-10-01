@@ -434,7 +434,7 @@ function MergedTimeline({ entries }: { entries: MergedHistoryEntry[] }) {
             </span>
             <div className="min-w-0 flex-1 pt-0.5">
               <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-                <p className="text-sm font-medium text-slate-900">{entry.status === 'Forwarded to LSO' ? 'Sent to the Scholarship Office' : entry.status}</p>
+                <p className="text-sm font-medium text-slate-900">{entry.status === 'Forwarded to LSO' ? 'Sent to the AdSO' : entry.status}</p>
                 <time className="text-xs text-slate-400 tabular-nums">{formatDateTime(entry.changedAt)}</time>
               </div>
               <div className="flex flex-wrap items-center gap-1.5 mt-1">

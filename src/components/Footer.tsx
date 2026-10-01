@@ -69,7 +69,7 @@ export default function Footer() {
 
           {/* Contact LSO */}
           <div id="footer-contact">
-            <h3 className="font-display font-semibold text-white mb-4 text-sm uppercase tracking-wider">Contact the Scholarship Office</h3>
+            <h3 className="font-display font-semibold text-white mb-4 text-sm uppercase tracking-wider">Contact AdSO</h3>
             <ul className="space-y-3 text-sm text-slate-400">
               <li className="flex items-start space-x-3">
                 <MapPin className="w-4 h-4 text-brand-green shrink-0 mt-1" />

@@ -91,7 +91,7 @@ export default function Dashboard({
         <DashboardCard
           title="Announcements"
           value={totalAnnouncements}
-          description="Latest Scholarship Office releases"
+          description="Latest AdSO releases"
           icon={Bell}
           onClick={() => onNavigate('announcements')}
         />
@@ -102,7 +102,7 @@ export default function Dashboard({
         {/* Left Column: Recent Announcements */}
         <div className="lg:col-span-2 space-y-5 sm:space-y-6 min-w-0">
           <div className="flex justify-between items-center gap-2">
-            <h3 className="font-display font-bold text-base sm:text-lg text-slate-900">Recent Scholarship Office Announcements</h3>
+            <h3 className="font-display font-bold text-base sm:text-lg text-slate-900">Recent AdSO Announcements</h3>
             <button
               onClick={() => onNavigate('announcements')}
               className="text-xs font-semibold text-brand-green hover:text-brand-green-dark flex items-center space-x-1 focus:outline-hidden shrink-0"

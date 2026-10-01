@@ -3,13 +3,13 @@ import { DocumentSlot, Scholarship, ScholarshipOffice } from '../types';
 // Display names for the offices that review scholarships. Scholarships
 // without an `office` belong to the LSO.
 export const OFFICE_LABELS: Record<ScholarshipOffice, string> = {
-  LSO: 'Linkages and Scholarship Office (LSO)',
+  LSO: 'Admissions and Scholarship Office',
   POLCA: 'POLCA Office',
   ALUMNI: 'Alumni Office'
 };
 
 export const OFFICE_SHORT_LABELS: Record<ScholarshipOffice, string> = {
-  LSO: 'LSO',
+  LSO: 'Scholarship Office',
   POLCA: 'POLCA',
   ALUMNI: 'Alumni Office'
 };
@@ -23,6 +23,18 @@ export function officeOf(scholarship: Pick<Scholarship, 'office'>): ScholarshipO
 function requirementLabels(slots: DocumentSlot[]): string[] {
   return slots.filter(slot => slot.placement !== 'form').map(slot => slot.label);
 }
+
+// Contact details from the official scholarship page
+// (dlsud.edu.ph/admissions/scholarship).
+const SCHOLARSHIP_OFFICE_PROVIDER = {
+  name: 'De La Salle University-Dasmariñas',
+  office: 'Admissions and Scholarship Office',
+  address: 'Ayuntamiento De Gonzalez Bldg., De La Salle University-Dasmariñas, Brgy. Fatima 1, Dasmariñas City, Cavite 4114',
+  contact: [
+    'scholarship@dlsud.edu.ph · AdSOsecretary@dlsud.edu.ph',
+    'Cavite +63 (46) 481.1900 · Manila +63 (2) 8779.5180 · local 3029'
+  ]
+};
 
 export const ALUMNI_INSTITUTIONS = ['DLSU-EAC', 'DLSU-Aguinaldo', 'DLSU-Dasmariñas'];
 // Up to the 2nd degree of consanguinity.
@@ -86,9 +98,13 @@ export const mockScholarships: Scholarship[] = [
       applicantType: 'any'
     },
     category: 'Financial',
-    description: 'This guideline serves as the basis for approving the student financial aid grant application for new students entering the first semester of A.Y. 2026-2027.',
+    provider: {
+      ...SCHOLARSHIP_OFFICE_PROVIDER,
+      office: 'Office of the Vice President for Global Engagement and External Relations, through the Scholarship Unit'
+    },
+    description: 'Interested students may apply for financial aid through the Office of the Vice President for Global Engagement and External Relations via the Scholarship Unit. The Scholarship Committee determines the amount of financial aid in the form of tuition discounts.\n\nThis guideline serves as the basis for approving the student financial aid grant application for new students entering the first semester of A.Y. 2026-2027.',
     benefits: [
-      'Financial assistance grant covering a portion of tuition and/or fees, with the specific amount and coverage determined by the Linkages and Scholarship Office (LSO) based on evaluation of the applicant\'s financial need'
+      'Tuition discount, with the amount of financial aid determined by the Scholarship Committee based on evaluation of the applicant\'s financial need'
     ],
     eligibility: [
       'Must be a Filipino citizen, preferably Catholic, with good moral character, and preferably a graduate of a public school',
@@ -123,14 +139,16 @@ export const mockScholarships: Scholarship[] = [
       applicantType: 'incoming'
     },
     category: 'Academic',
-    description: 'This scholarship offers financial aid to deserving Grade 7, Grade 11, and Freshman students who rank at the top of their graduating batch.',
+    provider: SCHOLARSHIP_OFFICE_PROVIDER,
+    description: 'Entrance scholarships are awarded to students who ranked first and second in a batch of at least 100 graduates from any DepEd-recognized school. This scholarship offers financial aid to deserving Grade 7, Grade 11, and Freshman students who rank at the top of their graduating batch.',
     benefits: [
-      'Rank 1: 100% Tuition discount (excludes miscellaneous fees)',
-      'Rank 2: 50% Tuition discount (excludes miscellaneous fees)'
+      'Rank 1: 100% tuition discount',
+      'Rank 2: 50% tuition discount',
+      'Tuition discounts exclude miscellaneous, laboratory, and other fees. The entrance scholarship is valid for one (1) semester only.'
     ],
     eligibility: [
       'Must be an incoming Grade 7, Grade 11, or Freshman student',
-      'Must rank first or second from a batch of at least 100 graduates from a DepEd-recognized school'
+      'Must have ranked first or second in a batch of at least 100 graduates from any DepEd-recognized school'
     ],
     requirements: [
       'Certificate of Ranking indicating the number of graduates',

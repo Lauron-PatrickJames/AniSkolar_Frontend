@@ -27,7 +27,7 @@ const STATUS_META: Record<AppStatus, {
 }> = {
   'Under Evaluation': {
     label: 'Application Submitted',
-    description: 'Your application is in the queue and awaiting review by the LSO.',
+    description: 'Your application is in the queue and awaiting review by the Scholarship Office.',
     badgeClass: 'bg-slate-100 text-slate-500 border border-slate-200',
     cardClass: 'bg-slate-50 border-slate-200',
     iconWrapClass: 'bg-slate-100 text-slate-500',
@@ -35,7 +35,7 @@ const STATUS_META: Record<AppStatus, {
   },
   'Approved': {
     label: 'Application Approved',
-    description: 'Congratulations — your application has been approved by the LSO.',
+    description: 'Congratulations — your application has been approved by the Scholarship Office.',
     badgeClass: 'bg-emerald-50 text-brand-green border border-emerald-200',
     cardClass: 'bg-emerald-50 border-emerald-200',
     iconWrapClass: 'bg-emerald-100 text-brand-green',
@@ -51,7 +51,7 @@ const STATUS_META: Record<AppStatus, {
   },
   'Needs Revision': {
     label: 'Revision Needed',
-    description: 'The LSO has requested changes before this application can move forward.',
+    description: 'The Scholarship Office has requested changes before this application can move forward.',
     badgeClass: 'bg-sky-50 text-sky-700 border border-sky-200',
     cardClass: 'bg-sky-50 border-sky-200',
     iconWrapClass: 'bg-sky-100 text-sky-700',
@@ -80,7 +80,7 @@ export default function ScholarshipDetails({
   // Status copy names the LSO; swap in whichever office reviews this grant.
   const officeShort = OFFICE_SHORT_LABELS[officeOf(scholarship)];
   const baseMeta = STATUS_META[status] ?? STATUS_META['Under Evaluation'];
-  const meta = { ...baseMeta, description: baseMeta.description.replace('the LSO', `the ${officeShort}`) };
+  const meta = { ...baseMeta, description: baseMeta.description.replace(/\b([Tt])he Scholarship Office/, (_, t) => `${t}he ${officeShort}`) };
   const StatusIcon = meta.icon;
   const hasNote = !!existingApplication?.reviewNote && (status === 'Rejected' || status === 'Needs Revision');
 
@@ -139,7 +139,7 @@ export default function ScholarshipDetails({
 
       {/* Status Card — replaces the old inline badge once an application exists.
           Shows the current review state, a one-line explainer, and (for
-          Rejected / Needs Revision) the LSO's note plus a resubmit action. */}
+          Rejected / Needs Revision) the Scholarship Office's note plus a resubmit action. */}
       {isApplied && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}

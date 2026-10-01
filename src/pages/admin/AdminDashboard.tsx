@@ -882,6 +882,15 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   </div>
                 )}
 
+                {adminOffice && selected.decisionOffice === 'LSO' ? (
+                  // The LSO overrode this office's decision; the backend
+                  // rejects further status/note changes from the office.
+                  <div className="p-3 bg-amber-50 text-amber-800 rounded-lg ring-1 ring-inset ring-amber-200 text-sm flex items-start gap-2">
+                    <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>The LSO has overridden your office's decision. The status and note can no longer be changed here.</span>
+                  </div>
+                ) : (
+                <>
                 <div>
                   <label htmlFor="review-note" className="block text-xs font-medium text-slate-700 mb-1.5">
                     Note to applicant <span className="text-slate-400 font-normal">(optional)</span>
@@ -958,6 +967,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     );
                   })}
                 </div>
+                </>
+                )}
 
                 {selected.reviewNote && (
                   <div className="pt-4 border-t border-slate-100">

@@ -37,9 +37,14 @@ export default function PolcaAdminFieldsCard({ applicationId, fields, getToken, 
       applicantType: fields?.applicantType ?? '',
       gpa: fields?.gpa !== undefined && fields?.gpa !== null ? String(fields.gpa) : ''
     });
+  }, [applicationId, fields]);
+
+  // Clear the confirmation/error only when switching applications — a
+  // successful save also updates `fields`, which mustn't hide "Saved".
+  useEffect(() => {
     setSaved(false);
     setError('');
-  }, [applicationId, fields]);
+  }, [applicationId]);
 
   const update = (key: keyof typeof form, value: string) => {
     setForm(prev => ({ ...prev, [key]: value }));

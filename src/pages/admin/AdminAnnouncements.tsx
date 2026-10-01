@@ -2,10 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@clerk/react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Megaphone, Plus, Pin, PinOff, Pencil, Trash2, X, CheckCircle,
-  AlertCircle, Clock, Send, FileEdit, ChevronDown, Search, Calendar, Award, Bell,
-  Facebook, ExternalLink, RotateCw
+  Megaphone, Plus, Pin, PinOff, Pencil, Trash2, X, AlertCircle, Clock, Send, FileEdit,
+  Calendar, Award, Bell, Facebook, ExternalLink, RotateCw
 } from 'lucide-react';
+import {
+  Button, EmptyState, ErrorBanner, KpiCard, PageHeader, SearchInput, SelectInput, SkeletonRows, TabBar, Tag, controlClass
+} from './AdminUI';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -65,11 +67,11 @@ interface AdminAnnouncement {
   facebookPostedAt: string | null;
 }
 
-const CATEGORY_STYLES: Record<Category, string> = {
-  'General': 'bg-blue-50 text-blue-700',
-  'Update': 'bg-emerald-50 text-brand-green',
-  'Deadline': 'bg-rose-50 text-rose-600',
-  'Event': 'bg-amber-50 text-amber-600'
+const CATEGORY_TONES: Record<Category, 'blue' | 'green' | 'rose' | 'amber'> = {
+  'General': 'blue',
+  'Update': 'green',
+  'Deadline': 'rose',
+  'Event': 'amber'
 };
 
 const CATEGORY_ICONS: Record<Category, React.ElementType> = {
@@ -89,19 +91,19 @@ function formatDateTime(iso?: string | null): string {
 // Small pill shown next to the status badge in the list, and reused in the
 // editor's "also post to Facebook" section. Keeps the same visual weight as
 // the existing published/draft pill so it doesn't compete for attention.
-function FacebookStatusPill({ status, compact = false }: { status: FacebookStatus; compact?: boolean }) {
+function FacebookStatusPill({ status }: { status: FacebookStatus }) {
   if (status === 'none') return null;
-  const config: Record<Exclude<FacebookStatus, 'none'>, { label: string; classes: string; icon: React.ElementType }> = {
-    pending: { label: 'Posting…', classes: 'bg-slate-100 text-slate-500', icon: Clock },
-    posted: { label: 'On Facebook', classes: 'bg-blue-50 text-blue-700', icon: Facebook },
-    failed: { label: 'FB post failed', classes: 'bg-rose-50 text-rose-600', icon: AlertCircle }
+  const config: Record<Exclude<FacebookStatus, 'none'>, { label: string; tone: 'slate' | 'blue' | 'rose'; icon: React.ElementType }> = {
+    pending: { label: 'Posting…', tone: 'slate', icon: Clock },
+    posted: { label: 'On Facebook', tone: 'blue', icon: Facebook },
+    failed: { label: 'Facebook post failed', tone: 'rose', icon: AlertCircle }
   };
   const c = config[status];
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${c.classes}`}>
+    <Tag tone={c.tone}>
       <c.icon className={`w-3 h-3 ${status === 'pending' ? 'animate-pulse' : ''}`} />
-      {!compact && c.label}
-    </span>
+      {c.label}
+    </Tag>
   );
 }
 
@@ -153,89 +155,81 @@ function AnnouncementEditor({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 8, scale: 0.97 }}
         transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-        className="bg-white sm:rounded-2xl shadow-2xl w-full h-full sm:h-auto sm:max-w-xl sm:max-h-[90vh] flex flex-col overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="announcement-editor-title"
+        className="bg-white sm:rounded-xl shadow-2xl ring-1 ring-slate-200 w-full h-full sm:h-auto sm:max-w-2xl sm:max-h-[90vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 shrink-0">
-          <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider">
-            {isEdit ? 'Edit Announcement' : 'New Announcement'}
-          </h3>
+          <div>
+            <h3 id="announcement-editor-title" className="text-base font-semibold text-slate-900">
+              {isEdit ? 'Edit announcement' : 'New announcement'}
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">Published announcements appear on every student's dashboard.</p>
+          </div>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="flex-1 overflow-auto p-5 space-y-4">
-          {error && (
-            <div className="p-3 bg-rose-50 text-rose-700 rounded-lg border border-rose-100 text-xs font-bold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+          <ErrorBanner message={error} />
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Title</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Title</label>
             <input
               type="text"
               value={form.title}
               onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
               maxLength={150}
               placeholder="e.g. 1st Semester Scholarship Application Window Now Open"
-              className="block w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50/50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all"
+              className={`${controlClass} px-3 py-2`}
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              Description <span className="text-slate-300 normal-case font-normal">— short teaser shown on the collapsed card, and used as the Facebook post text</span>
-            </label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Summary</label>
+            <p className="text-xs text-slate-500 -mt-1 mb-1.5">Shown on the collapsed card, and used as the Facebook post text.</p>
             <textarea
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               rows={2}
               maxLength={500}
               placeholder="One or two sentences summarizing the announcement..."
-              className="block w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50/50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all resize-none"
+              className={`${controlClass} px-3 py-2 resize-none`}
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              Full Content <span className="text-slate-300 normal-case font-normal">— shown when the card is expanded</span>
-            </label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Full content</label>
+            <p className="text-xs text-slate-500 -mt-1 mb-1.5">Shown when a student expands the announcement.</p>
             <textarea
               value={form.content}
               onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
               rows={8}
               maxLength={8000}
               placeholder="Write the full announcement..."
-              className="block w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50/50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all resize-none font-mono"
+              className={`${controlClass} px-3 py-2 resize-y`}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3 items-end">
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Category</label>
-              <div className="relative">
-                <select
-                  value={form.category}
-                  onChange={e => setForm(f => ({ ...f, category: e.target.value as Category }))}
-                  className="w-full appearance-none px-3.5 py-2.5 pr-9 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50/50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all"
-                >
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Category</label>
+              <SelectInput value={form.category} onChange={v => setForm(f => ({ ...f, category: v as Category }))} ariaLabel="Category">
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </SelectInput>
             </div>
-            <label className="flex items-center gap-2 cursor-pointer h-10.5">
+            <label className="flex items-center gap-2 cursor-pointer h-9.5">
               <input
                 type="checkbox"
                 checked={form.isPinned}
                 onChange={e => setForm(f => ({ ...f, isPinned: e.target.checked }))}
-                className="w-4 h-4 rounded border-slate-300 text-brand-green focus:ring-brand-green/30"
+                className="w-4 h-4 rounded border-slate-300 accent-brand-green"
               />
-              <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
-                <Pin className="w-3.5 h-3.5" /> Pin to top of feed
+              <span className="text-sm text-slate-700 flex items-center gap-1.5">
+                <Pin className="w-4 h-4 text-slate-400" /> Pin to top of feed
               </span>
             </label>
           </div>
@@ -244,7 +238,7 @@ function AnnouncementEditor({
               actually publishes — greyed out with an explanatory note
               while the form is in "Save Draft" territory, rather than
               hiding it and making the option feel undiscoverable. */}
-          <label className="flex items-start gap-2.5 p-3.5 rounded-xl border border-slate-100 bg-slate-50/60 cursor-pointer">
+          <label className="flex items-start gap-3 p-3.5 rounded-lg ring-1 ring-inset ring-slate-200 bg-slate-50/60 cursor-pointer">
             <input
               type="checkbox"
               checked={form.crosspostToFacebook}
@@ -252,44 +246,35 @@ function AnnouncementEditor({
               className="w-4 h-4 mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30"
             />
             <span className="min-w-0">
-              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Facebook className="w-3.5 h-3.5 text-blue-600" />
+              <span className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                <Facebook className="w-4 h-4 text-blue-600" />
                 Also post to the AniSkolar Facebook Page
               </span>
-              <span className="block text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+              <span className="block text-xs text-slate-500 mt-0.5 leading-relaxed">
                 Uses the title, description, and a link back to this announcement. Only happens when you hit Publish — saving as a draft never posts.
               </span>
             </span>
           </label>
         </div>
 
-        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 px-5 py-4 border-t border-slate-100 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isSaving}
-            className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 px-5 py-3.5 border-t border-slate-100 bg-slate-50/60 shrink-0">
+          <Button onClick={onClose} disabled={isSaving}>Cancel</Button>
+          <Button
+            icon={FileEdit}
             onClick={() => onSave(form, false)}
             disabled={isSaving || !form.title.trim() || !form.description.trim() || !form.content.trim()}
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <FileEdit className="w-3.5 h-3.5" />
-            Save Draft
-          </button>
-          <button
-            type="button"
+            Save as draft
+          </Button>
+          <Button
+            variant="primary"
+            icon={Send}
+            loading={isSaving}
             onClick={() => onSave(form, true)}
             disabled={isSaving || !form.title.trim() || !form.description.trim() || !form.content.trim()}
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark shadow-md shadow-emerald-900/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSaving ? <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            {form.crosspostToFacebook ? 'Publish & Post to Facebook' : 'Publish'}
-          </button>
+            {form.crosspostToFacebook ? 'Publish & post to Facebook' : 'Publish'}
+          </Button>
         </div>
       </motion.div>
     </motion.div>
@@ -311,16 +296,18 @@ function DeleteConfirm({ announcement, onCancel, onConfirm, isDeleting }: { anno
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5"
+        role="alertdialog"
+        aria-modal="true"
+        className="bg-white rounded-xl shadow-2xl ring-1 ring-slate-200 w-full max-w-md p-5"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 mb-4">
-          <div className="p-2 rounded-lg bg-rose-50 text-rose-600 shrink-0">
-            <Trash2 className="w-4 h-4" />
+          <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+            <Trash2 className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-800">Delete announcement?</p>
-            <p className="text-xs text-slate-500 mt-1 wrap-break-word">"{announcement.title}" will be permanently removed for everyone.</p>
+            <p className="text-base font-semibold text-slate-900">Delete announcement?</p>
+            <p className="text-sm text-slate-500 mt-1 wrap-break-word">"{announcement.title}" will be permanently removed for everyone. This can't be undone.</p>
             {announcement.facebookStatus === 'posted' && (
               <p className="text-[11px] text-amber-600 font-semibold mt-2 flex items-start gap-1.5">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
@@ -329,19 +316,17 @@ function DeleteConfirm({ announcement, onCancel, onConfirm, isDeleting }: { anno
             )}
           </div>
         </div>
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onCancel} disabled={isDeleting} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors disabled:opacity-50">
-            Cancel
-          </button>
-          <button
-            type="button"
+        <div className="flex justify-end gap-2 mt-5">
+          <Button onClick={onCancel} disabled={isDeleting}>Cancel</Button>
+          <Button
+            icon={Trash2}
+            loading={isDeleting}
             onClick={onConfirm}
             disabled={isDeleting}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-white bg-rose-600 hover:bg-rose-700 transition-colors disabled:opacity-50"
+            className="!bg-rose-600 !text-white hover:!bg-rose-700 !ring-0"
           >
-            {isDeleting ? <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
             Delete
-          </button>
+          </Button>
         </div>
       </motion.div>
     </motion.div>
@@ -543,189 +528,122 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
     }
   };
 
+  const statusTabs: { key: AnnouncementStatus | 'All'; label: string; count: number }[] = [
+    { key: 'All', label: 'All', count: stats.total },
+    { key: 'published', label: 'Published', count: stats.published },
+    { key: 'draft', label: 'Drafts', count: stats.draft }
+  ];
+  const filtersActive = search.trim() !== '' || statusFilter !== 'All' || facebookFilter !== 'All';
+
   return (
-    <div id={id} className="space-y-5 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="font-display font-black text-lg sm:text-xl md:text-2xl text-slate-900 tracking-tight">Announcements</h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">Post and manage official updates shown to applicants.</p>
-        </div>
-        <motion.button
-          whileTap={{ scale: 0.97 }}
-          onClick={openCreate}
-          className="inline-flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-4 py-2.5 rounded-xl shadow-md shadow-emerald-900/10 transition-all shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          New Announcement
-        </motion.button>
+    <div id={id} className="space-y-6">
+      <PageHeader
+        title="Announcements"
+        description="Post and manage the official updates students see on their dashboard."
+        actions={<Button variant="primary" icon={Plus} onClick={openCreate}>New announcement</Button>}
+      />
+
+      <ErrorBanner message={loadError} />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard label="Published" value={stats.published} hint="Visible to students" icon={Send} tone="green" />
+        <KpiCard label="Drafts" value={stats.draft} hint="Not yet visible" icon={FileEdit} tone="amber" />
+        <KpiCard label="Pinned" value={stats.pinned} hint="Shown at the top" icon={Pin} tone="sky" />
+        <KpiCard label="On Facebook" value={stats.onFacebook} hint="Cross-posted to the Page" icon={Facebook} tone="violet" />
       </div>
 
-      {loadError && (
-        <div className="p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-100 text-xs font-bold flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{loadError}</span>
+      <section className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(16,24,40,0.04)] min-w-0">
+        <div className="px-3 sm:px-4">
+          <TabBar<AnnouncementStatus | 'All'> tabs={statusTabs} value={statusFilter} onChange={setStatusFilter} className="border-slate-100" />
         </div>
-      )}
-
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-        {[
-          { label: 'Total', value: stats.total, icon: Megaphone, accent: 'bg-slate-50 text-slate-500' },
-          { label: 'Published', value: stats.published, icon: Send, accent: 'bg-emerald-50 text-brand-green' },
-          { label: 'Drafts', value: stats.draft, icon: FileEdit, accent: 'bg-amber-50 text-amber-600' },
-          { label: 'Pinned', value: stats.pinned, icon: Pin, accent: 'bg-sky-50 text-sky-600' },
-          { label: 'On Facebook', value: stats.onFacebook, icon: Facebook, accent: 'bg-blue-50 text-blue-600' }
-        ].map(s => (
-          <div key={s.label} className="p-3.5 sm:p-5 rounded-xl border border-slate-100 bg-white card-shadow min-w-0">
-            <div className="flex justify-between items-start gap-2">
-              <div className="min-w-0">
-                <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{s.label}</p>
-                <h3 className="text-2xl sm:text-3xl font-display font-extrabold text-brand-green mt-1">{s.value}</h3>
-              </div>
-              <div className={`p-2 sm:p-2.5 rounded-lg shrink-0 ${s.accent}`}>
-                <s.icon className="w-4 h-4 sm:w-5 sm:h-5" />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-100 card-shadow">
-        <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center gap-3">
-          <div className="relative flex-1 min-w-0">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search announcements..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all placeholder:text-slate-300"
-            />
-          </div>
-          <div className="flex gap-3">
-            <div className="relative flex-1 md:flex-none">
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value as AnnouncementStatus | 'All')}
-                className="w-full appearance-none pl-3.5 pr-9 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all"
-              >
-                <option value="All">All Statuses</option>
-                <option value="published">Published</option>
-                <option value="draft">Draft</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-            <div className="relative flex-1 md:flex-none">
-              <select
-                value={facebookFilter}
-                onChange={e => setFacebookFilter(e.target.value as FacebookStatus | 'All')}
-                className="w-full appearance-none pl-3.5 pr-9 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all"
-              >
-                <option value="All">Any Facebook Status</option>
-                <option value="posted">On Facebook</option>
-                <option value="pending">Posting…</option>
-                <option value="failed">Failed</option>
-                <option value="none">Not Cross-posted</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-          </div>
+        <div className="p-4 flex flex-col md:flex-row gap-3 border-b border-slate-100">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search announcements…" className="flex-1" />
+          <SelectInput value={facebookFilter} onChange={v => setFacebookFilter(v as FacebookStatus | 'All')} className="md:w-56" ariaLabel="Filter by Facebook status">
+            <option value="All">Any Facebook status</option>
+            <option value="posted">On Facebook</option>
+            <option value="pending">Posting…</option>
+            <option value="failed">Failed</option>
+            <option value="none">Not cross-posted</option>
+          </SelectInput>
         </div>
 
         {isLoading ? (
-          <div className="p-12 text-center text-xs text-slate-400 font-semibold">Loading announcements...</div>
+          <SkeletonRows rows={3} />
         ) : filtered.length === 0 ? (
-          <div className="p-12 text-center">
-            <Megaphone className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-            <p className="text-xs font-semibold text-slate-400">No announcements match your filters.</p>
-          </div>
+          <EmptyState
+            icon={Megaphone}
+            title={filtersActive ? 'No announcements match your filters' : 'No announcements yet'}
+            description={filtersActive ? 'Try a different search or filter.' : 'Create your first announcement to keep students informed.'}
+            action={filtersActive
+              ? <Button size="sm" onClick={() => { setSearch(''); setStatusFilter('All'); setFacebookFilter('All'); }}>Clear filters</Button>
+              : <Button size="sm" variant="primary" icon={Plus} onClick={openCreate}>New announcement</Button>}
+          />
         ) : (
-          <div className="divide-y divide-slate-100">
+          <ul className="divide-y divide-slate-100">
             {filtered.map(a => {
               const CategoryIcon = CATEGORY_ICONS[a.category] ?? Bell;
               return (
-                <div key={a.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+                <li key={a.id} className="group px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 hover:bg-slate-50/60 transition-colors">
+                  <div className={`hidden sm:flex w-9 h-9 rounded-lg items-center justify-center shrink-0 ${a.isPinned ? 'bg-emerald-50 text-brand-green' : 'bg-slate-100 text-slate-500'}`}>
+                    {a.isPinned ? <Pin className="w-4 h-4" /> : <CategoryIcon className="w-4 h-4" />}
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                      {a.isPinned && <Pin className="w-3.5 h-3.5 text-brand-green shrink-0" />}
-                      <p className="text-sm font-bold text-slate-800 truncate">{a.title}</p>
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${CATEGORY_STYLES[a.category] ?? CATEGORY_STYLES.General}`}>
-                        <CategoryIcon className="w-3 h-3" />
-                        {a.category}
-                      </span>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${a.status === 'published' ? 'bg-emerald-50 text-brand-green' : 'bg-slate-100 text-slate-500'}`}>
-                        {a.status}
-                      </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-sm font-medium text-slate-900 mr-1">{a.title}</p>
+                      <Tag tone={CATEGORY_TONES[a.category] ?? 'blue'}><CategoryIcon className="w-3 h-3" />{a.category}</Tag>
+                      {a.status === 'published' ? <Tag tone="green">Published</Tag> : <Tag>Draft</Tag>}
+                      {a.isPinned && <Tag tone="green"><Pin className="w-3 h-3" />Pinned</Tag>}
                       <FacebookStatusPill status={a.facebookStatus} />
                     </div>
-                    <p className="text-xs text-slate-500 line-clamp-2 wrap-break-word">{a.description}</p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-slate-400 font-semibold">
-                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {a.status === 'published' ? `Published ${formatDateTime(a.publishedAt)}` : `Updated ${formatDateTime(a.updatedAt)}`}</span>
+                    <p className="text-sm text-slate-500 line-clamp-2 mt-1 wrap-break-word">{a.description}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-400">
+                      <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {a.status === 'published' ? `Published ${formatDateTime(a.publishedAt)}` : `Updated ${formatDateTime(a.updatedAt)}`}</span>
                       {a.facebookStatus === 'posted' && a.facebookPostUrl && (
-                        <a
-                          href={a.facebookPostUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
-                        >
-                          <ExternalLink className="w-3 h-3" /> View on Facebook
+                        <a href={a.facebookPostUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-600 hover:text-blue-700">
+                          <ExternalLink className="w-3.5 h-3.5" /> View on Facebook
                         </a>
                       )}
                       {a.facebookStatus === 'failed' && a.facebookError && (
-                        <span className="flex items-center gap-1 text-rose-500 wrap-break-word">
-                          <AlertCircle className="w-3 h-3 shrink-0" /> {a.facebookError}
+                        <span className="flex items-center gap-1 text-rose-600 wrap-break-word">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {a.facebookError}
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0 self-start">
+                  <div className="flex items-center gap-1 shrink-0 self-start">
                     {/* Cross-post action: only offered for published posts.
-                        Shows "Post" when never tried, "Retry" after a
-                        failure — same button, different affordance. */}
+                        Shows "Post" when never tried, "Retry" after a failure. */}
                     {a.status === 'published' && a.facebookStatus !== 'posted' && a.facebookStatus !== 'pending' && (
-                      <button
-                        type="button"
-                        onClick={() => postToFacebook(a, a.facebookStatus === 'failed')}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={a.facebookStatus === 'failed' ? RotateCw : Facebook}
+                        loading={postingFacebookId === a.id}
                         disabled={postingFacebookId === a.id}
+                        onClick={() => postToFacebook(a, a.facebookStatus === 'failed')}
                         title={a.facebookStatus === 'failed' ? 'Retry posting to Facebook' : 'Post to Facebook'}
-                        className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
-                      >
-                        {a.facebookStatus === 'failed' ? <RotateCw className="w-4 h-4" /> : <Facebook className="w-4 h-4" />}
-                      </button>
+                        aria-label={a.facebookStatus === 'failed' ? 'Retry posting to Facebook' : 'Post to Facebook'}
+                      />
                     )}
-                    <button
-                      type="button"
-                      onClick={() => togglePin(a)}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={a.isPinned ? PinOff : Pin}
+                      loading={togglingPinId === a.id}
                       disabled={togglingPinId === a.id}
+                      onClick={() => togglePin(a)}
                       title={a.isPinned ? 'Unpin' : 'Pin'}
-                      className="p-2 rounded-lg text-slate-400 hover:text-brand-green hover:bg-emerald-50 transition-colors disabled:opacity-50"
-                    >
-                      {togglingPinId === a.id ? (
-                        <span className="w-4 h-4 border-2 border-slate-200 border-t-brand-green rounded-full animate-spin block" />
-                      ) : a.isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openEdit(a)}
-                      title="Edit"
-                      className="p-2 rounded-lg text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition-colors"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingDelete(a)}
-                      title="Delete"
-                      className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      aria-label={a.isPinned ? 'Unpin' : 'Pin'}
+                    />
+                    <Button size="sm" variant="ghost" icon={Pencil} onClick={() => openEdit(a)} title="Edit" aria-label="Edit" />
+                    <Button size="sm" variant="ghost" icon={Trash2} onClick={() => setPendingDelete(a)} title="Delete" aria-label="Delete" className="hover:!text-rose-600 hover:!bg-rose-50" />
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )}
-      </div>
+      </section>
 
       <AnimatePresence>
         {editorState && (

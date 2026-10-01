@@ -1,9 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Search, ChevronDown, ArrowLeft, Users, Repeat, Award, Clock,
-  CheckCircle, XCircle, AlertCircle, FileText, RefreshCw, GraduationCap,
-  Mail, Phone, History, Download, Printer, ChevronDown as ChevronDownIcon
+  ArrowLeft, Users, Repeat, Award, Clock, CheckCircle, XCircle, AlertCircle, FileText,
+  RefreshCw, Download, Printer, ChevronRight, ChevronDown as ChevronDownIcon
 } from 'lucide-react';
+import {
+  AdminAvatar, Button, DetailField, EmptyState, ErrorBanner, KpiCard, PageHeader, Pagination, Panel,
+  SearchInput, SelectInput, SkeletonRows, StatusBadge, Tag, Td, Th, usePagination
+} from './AdminUI';
 
 // --- Types (mirror AdminDashboard.tsx) -------------------------------------
 
@@ -38,20 +41,15 @@ interface AdminScholarsProps {
   isLoading?: boolean;
   getToken: () => Promise<string | null>;
   apiBaseUrl: string;
+  onRefresh?: () => void;
 }
 
-const STATUS_STYLES: Record<AppStatus, { badge: string; dot: string }> = {
-  'Under Evaluation': { badge: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
-  'Approved': { badge: 'bg-emerald-50 text-brand-green border-emerald-200', dot: 'bg-brand-green' },
-  'Rejected': { badge: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
-  'Needs Revision': { badge: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' }
-};
 
 const TIMELINE_STYLES: Record<HistoryStatus, { dot: string; icon: React.ElementType }> = {
   'Submitted': { dot: 'bg-slate-400', icon: FileText },
   'Resubmitted': { dot: 'bg-slate-400', icon: RefreshCw },
   'Under Evaluation': { dot: 'bg-amber-500', icon: Clock },
-  'Approved': { dot: 'bg-brand-green', icon: CheckCircle },
+  'Approved': { dot: 'bg-emerald-500', icon: CheckCircle },
   'Rejected': { dot: 'bg-rose-500', icon: XCircle },
   'Needs Revision': { dot: 'bg-sky-500', icon: AlertCircle }
 };
@@ -413,96 +411,46 @@ function printScholars(scholars: ScholarSummary[], subtitle: string, columnKeys:
 
 // --- Presentational pieces ---------------------------------------------
 
-function Avatar({ name, avatarUrl, size = 'md' }: { name: string; avatarUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
-  const [failed, setFailed] = useState(false);
-  const dims = size === 'lg' ? 'w-14 h-14 sm:w-16 sm:h-16 text-base sm:text-lg' : size === 'sm' ? 'w-8 h-8 text-[10px]' : 'w-9 h-9 sm:w-10 sm:h-10 text-[11px] sm:text-xs';
-
-  if (avatarUrl && !failed) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={name}
-        onError={() => setFailed(true)}
-        className={`${dims} rounded-full object-cover shrink-0 shadow-inner border border-emerald-100`}
-      />
-    );
-  }
-
-  return (
-    <div className={`${dims} rounded-full bg-brand-green text-white font-display font-bold flex items-center justify-center shrink-0 shadow-inner border border-emerald-100`}>
-      {initials(name)}
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: AppStatus }) {
-  const style = STATUS_STYLES[status] ?? STATUS_STYLES['Under Evaluation'];
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold whitespace-nowrap ${style.badge}`}>
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />
-      {status}
-    </span>
-  );
-}
-
 function CycleBadge({ cycle }: { cycle: string }) {
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">
-      {cycle}
-    </span>
-  );
-}
-
-function StatTile({ label, value, icon: Icon, accent }: { label: string; value: string | number; icon: React.ElementType; accent: string }) {
-  return (
-    <div className="p-3.5 sm:p-4 rounded-xl border border-slate-100 bg-white card-shadow min-w-0">
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{label}</p>
-        <div className={`p-1.5 rounded-md shrink-0 ${accent}`}><Icon className="w-3.5 h-3.5" /></div>
-      </div>
-      <h3 className="text-xl sm:text-2xl font-display font-extrabold text-brand-green">{value}</h3>
-    </div>
-  );
+  return <Tag>{cycle}</Tag>;
 }
 
 function MergedTimeline({ entries }: { entries: MergedHistoryEntry[] }) {
   if (entries.length === 0) {
-    return <p className="text-xs text-slate-400">No recorded history for this scholar yet.</p>;
+    return <p className="text-sm text-slate-500">No recorded history for this scholar yet.</p>;
   }
   return (
-    <div className="relative pl-6">
-      <div className="absolute left-[7px] top-1.5 bottom-1.5 w-px bg-slate-200" />
-      <div className="space-y-6">
-        {entries.map((entry, idx) => {
-          const style = TIMELINE_STYLES[entry.status] ?? TIMELINE_STYLES['Under Evaluation'];
-          const Icon = style.icon;
-          return (
-            <div key={`${entry.applicationId}-${idx}`} className="relative flex gap-3 min-w-0">
-              <div className={`absolute -left-6 top-0.5 w-3.5 h-3.5 rounded-full ring-4 ring-white flex items-center justify-center shrink-0 ${style.dot}`} />
-              <Icon className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <p className="text-sm font-bold text-slate-800">{entry.status}</p>
-                  <span className="text-[11px] text-slate-400">{formatDateTime(entry.changedAt)}</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                  <span className="text-[11px] text-slate-500 font-medium truncate">{entry.scholarshipName}</span>
-                  <CycleBadge cycle={entry.cycle} />
-                </div>
-                {entry.changedBy && (
-                  <p className="text-[11px] text-slate-400 mt-0.5">by {entry.changedBy === 'student' ? 'Student' : entry.changedBy}</p>
-                )}
-                {entry.note && (
-                  <p className="text-xs text-slate-600 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 leading-relaxed break-words">
-                    {entry.note}
-                  </p>
-                )}
+    <ol className="relative">
+      {entries.map((entry, idx) => {
+        const style = TIMELINE_STYLES[entry.status] ?? TIMELINE_STYLES['Under Evaluation'];
+        const Icon = style.icon;
+        const last = idx === entries.length - 1;
+        return (
+          <li key={`${entry.applicationId}-${idx}`} className="relative flex gap-3 pb-5 last:pb-0">
+            {!last && <span className="absolute left-3.5 top-8 bottom-0 w-px bg-slate-200" aria-hidden />}
+            <span className={`relative w-7 h-7 rounded-full flex items-center justify-center shrink-0 ring-4 ring-white ${style.dot}`}>
+              <Icon className="w-3.5 h-3.5 text-white" />
+            </span>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                <p className="text-sm font-medium text-slate-900">{entry.status}</p>
+                <time className="text-xs text-slate-400 tabular-nums">{formatDateTime(entry.changedAt)}</time>
               </div>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                <span className="text-xs text-slate-500 truncate">{entry.scholarshipName}</span>
+                <CycleBadge cycle={entry.cycle} />
+              </div>
+              {entry.changedBy && (
+                <p className="text-xs text-slate-400 mt-0.5">by {entry.changedBy === 'student' ? 'Student' : entry.changedBy}</p>
+              )}
+              {entry.note && (
+                <p className="text-sm text-slate-600 mt-2 bg-slate-50 ring-1 ring-inset ring-slate-200 rounded-lg px-3 py-2 wrap-break-word">{entry.note}</p>
+              )}
             </div>
-          );
-        })}
-      </div>
-    </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -521,58 +469,50 @@ function ColumnPickerModal({
   actionLabel: string;
 }) {
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4" onClick={onCancel}>
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" onClick={onCancel}>
       <div
-        className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full max-h-[85vh] flex flex-col overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="column-picker-title"
+        className="bg-white rounded-xl shadow-2xl ring-1 ring-slate-200 max-w-sm w-full max-h-[85vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <span className="font-display font-bold text-sm text-slate-800">Choose Columns</span>
-          <div className="flex gap-3 text-[11px] font-bold">
-            <button type="button" onClick={onSelectAll} className="text-brand-green hover:text-brand-green-dark">All</button>
-            <button type="button" onClick={onSelectNone} className="text-slate-400 hover:text-slate-600">None</button>
+          <div>
+            <h2 id="column-picker-title" className="text-sm font-semibold text-slate-900">Choose columns</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Pick what to include in the {actionLabel.toLowerCase()}.</p>
+          </div>
+          <div className="flex gap-1">
+            <Button size="sm" variant="ghost" onClick={onSelectAll}>All</Button>
+            <Button size="sm" variant="ghost" onClick={onSelectNone}>None</Button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-1">
+        <div className="flex-1 overflow-y-auto p-3 space-y-0.5">
           {EXPORT_COLUMNS.map(col => (
-            <label
-              key={col.key}
-              className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer text-sm text-slate-700 font-medium"
-            >
+            <label key={col.key} className="flex items-center gap-3 px-2.5 py-2 rounded-lg hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
               <input
                 type="checkbox"
                 checked={selected.has(col.key)}
                 onChange={() => onToggle(col.key)}
-                className="w-4 h-4 rounded border-slate-300 text-brand-green focus:ring-brand-green/30"
+                className="w-4 h-4 rounded border-slate-300 accent-brand-green"
               />
               {col.label}
             </label>
           ))}
         </div>
-        <div className="px-5 py-3.5 border-t border-slate-100 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={selected.size === 0}
-            onClick={onConfirm}
-            className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+        <div className="px-5 py-3.5 border-t border-slate-100 flex justify-end gap-2 bg-slate-50/60">
+          <Button onClick={onCancel}>Cancel</Button>
+          <Button variant="primary" disabled={selected.size === 0} onClick={onConfirm}>
             {actionLabel} ({selected.size})
-          </button>
+          </Button>
         </div>
       </div>
     </div>
   );
 }
 
-// Small reusable "Export" dropdown — CSV + Print/PDF options, both of
-// which now open the shared column picker rather than exporting directly.
+// "Export" dropdown — CSV + Print/PDF options, both of which open the
+// shared column picker rather than exporting directly.
 function ExportMenu({ onPickCsv, onPickPrint, disabled, isExporting }: {
   onPickCsv: () => void;
   onPickPrint: () => void;
@@ -589,37 +529,36 @@ function ExportMenu({ onPickCsv, onPickPrint, disabled, isExporting }: {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(false);
       }}
     >
-      <button
-        type="button"
+      <Button
+        icon={Download}
+        loading={isExporting}
         disabled={disabled}
         onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-1.5 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        iconRight={<ChevronDownIcon className="w-4 h-4 text-slate-400" />}
       >
-        {isExporting ? (
-          <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-        ) : (
-          <Download className="w-3.5 h-3.5" />
-        )}
-        <span>{isExporting ? 'Exporting...' : 'Export'}</span>
-        <ChevronDownIcon className="w-3.5 h-3.5" />
-      </button>
+        {isExporting ? 'Exporting…' : 'Export'}
+      </Button>
       {open && (
-        <div className="absolute right-0 mt-1.5 w-48 bg-white rounded-xl border border-slate-100 shadow-lg z-10 overflow-hidden">
+        <div role="menu" className="absolute right-0 mt-1.5 w-52 bg-white rounded-lg ring-1 ring-slate-200 shadow-lg z-10 py-1">
           <button
             type="button"
+            role="menuitem"
             onClick={() => { onPickCsv(); setOpen(false); }}
-            className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 text-left"
           >
-            <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <FileText className="w-4 h-4 text-slate-400 shrink-0" />
             Export as CSV (Excel)
           </button>
           <button
             type="button"
+            role="menuitem"
             onClick={() => { onPickPrint(); setOpen(false); }}
-            className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-left border-t border-slate-100"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 text-left"
           >
-            <Printer className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            Print / Save as PDF
+            <Printer className="w-4 h-4 text-slate-400 shrink-0" />
+            Print / save as PDF
           </button>
         </div>
       )}
@@ -630,7 +569,7 @@ function ExportMenu({ onPickCsv, onPickPrint, disabled, isExporting }: {
 type SortOption = 'recent' | 'most_applications' | 'name';
 type PendingExportAction = 'csv' | 'print' | null;
 
-export default function AdminScholars({ applications, isLoading, getToken, apiBaseUrl }: AdminScholarsProps) {
+export default function AdminScholars({ applications, isLoading, getToken, apiBaseUrl, onRefresh }: AdminScholarsProps) {
   const [search, setSearch] = useState('');
   const [renewalFilter, setRenewalFilter] = useState<'all' | 'renewing' | 'first_time'>('all');
   const [sort, setSort] = useState<SortOption>('recent');
@@ -711,242 +650,215 @@ export default function AdminScholars({ applications, isLoading, getToken, apiBa
     }
   };
 
+  const pager = usePagination(filtered, 15, `${search}|${renewalFilter}|${sort}`);
+
   // === Detail view: one scholar's full longitudinal record ================
   if (selected) {
+    const meta: [string, React.ReactNode][] = [
+      ['Student no.', selected.studentNumber],
+      ['Program', [selected.program, selected.yearLevel].filter(Boolean).join(' · ')],
+      ['Email', selected.email],
+      ['Mobile', selected.phone],
+      ['First submission', formatDate(selected.firstSubmission)],
+      ['Active cycles', selected.cycles.join(', ')]
+    ];
     return (
-      <div className="space-y-5 sm:space-y-6">
+      <div className="space-y-6">
         <div className="flex items-center justify-between gap-3">
           <button
             onClick={() => setSelectedStudentNumber(null)}
-            className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Scholars</span>
+            Back to scholars
           </button>
           {/* Detail view keeps a simple non-customized export — always
               the full per-application breakdown for this one scholar. */}
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => exportScholarApplicationsToCSV(selected)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-slate-50 transition-all"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              CSV
-            </button>
-            <button
-              type="button"
-              onClick={() => printScholars([selected], `${selected.name} · Student No. ${selected.studentNumber}`, DEFAULT_EXPORT_COLUMNS)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-slate-50 transition-all"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              Print
-            </button>
+            <Button icon={FileText} onClick={() => exportScholarApplicationsToCSV(selected)}>CSV</Button>
+            <Button icon={Printer} onClick={() => printScholars([selected], `${selected.name} · Student No. ${selected.studentNumber}`, DEFAULT_EXPORT_COLUMNS)}>Print</Button>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-100 p-5 sm:p-6 md:p-8 card-shadow">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-            <div className="flex items-center gap-4 sm:contents">
-              <Avatar name={selected.name} avatarUrl={selected.avatarUrl} size="lg" />
-              <div className="flex-1 min-w-0 sm:hidden">
-                <h2 className="font-display font-black text-lg text-slate-900 tracking-tight truncate">{selected.name}</h2>
-                {selected.isRenewing && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-brand-green">
-                    <Repeat className="w-3 h-3" /> Returning Scholar
-                  </span>
-                )}
-              </div>
-            </div>
+        <Panel>
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-5">
+            <AdminAvatar name={selected.name} avatarUrl={selected.avatarUrl} size="lg" />
             <div className="flex-1 min-w-0">
-              <div className="hidden sm:flex flex-wrap items-center gap-2.5">
-                <h2 className="font-display font-black text-xl md:text-2xl text-slate-900 tracking-tight truncate">{selected.name}</h2>
-                {selected.isRenewing && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-brand-green border border-emerald-200">
-                    <Repeat className="w-3 h-3" /> Returning Scholar
-                  </span>
-                )}
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">{selected.name}</h1>
+                <StatusBadge status={selected.latestStatus} />
+                {selected.isRenewing && <Tag tone="green"><Repeat className="w-3 h-3" /> Returning scholar</Tag>}
               </div>
-              <p className="text-xs text-slate-500 mt-2 sm:mt-1.5">Student No. {selected.studentNumber}</p>
-              <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-[11px] text-slate-400 font-semibold">
-                <span>First submission {formatDate(selected.firstSubmission)}</span>
-                <span>{selected.cycles.length} cycle{selected.cycles.length !== 1 ? 's' : ''} active: {selected.cycles.join(', ')}</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:flex sm:flex-col gap-2 sm:gap-1.5 sm:text-right shrink-0 pt-4 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 sm:justify-end min-w-0">
-                <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="truncate">{selected.email || '—'}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 sm:justify-end min-w-0">
-                <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="truncate">{selected.phone || '—'}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 sm:justify-end min-w-0">
-                <GraduationCap className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="truncate">{selected.program || '—'} &middot; {selected.yearLevel || '—'}</span>
-              </div>
+              <dl className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 mt-5 pt-5 border-t border-slate-100">
+                {meta.map(([label, value]) => <DetailField key={label} label={label} value={value} />)}
+              </dl>
             </div>
           </div>
+        </Panel>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard label="Applications" value={selected.totalApplications} icon={FileText} tone="slate" />
+          <KpiCard label="Approved" value={selected.approvedCount} icon={CheckCircle} tone="green" />
+          <KpiCard label="Rejected" value={selected.rejectedCount} icon={XCircle} tone="rose" />
+          <KpiCard label="Cycles" value={selected.cycles.length} icon={Clock} tone="amber" />
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <StatTile label="Total Applications" value={selected.totalApplications} icon={FileText} accent="bg-slate-50 text-slate-500" />
-          <StatTile label="Approved" value={selected.approvedCount} icon={CheckCircle} accent="bg-emerald-50 text-brand-green" />
-          <StatTile label="Rejected" value={selected.rejectedCount} icon={XCircle} accent="bg-rose-50 text-rose-600" />
-          <StatTile label="Current Status" value={selected.latestStatus} icon={Clock} accent="bg-amber-50 text-amber-600" />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6 items-start">
-          {/* Application-by-application list */}
-          <div className="lg:col-span-2 bg-white rounded-xl border border-slate-100 card-shadow p-4 sm:p-6">
-            <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider mb-4">Applications by Cycle</h3>
-            <div className="space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <Panel title="Applications" description="Every application this student has submitted, newest first" className="lg:col-span-2" bodyClassName="p-0">
+            <ul className="divide-y divide-slate-100">
               {selected.applications.map(app => (
-                <div key={app._id} className="p-3.5 sm:p-4 rounded-xl border border-slate-100 bg-slate-50/40">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                    <p className="text-sm font-bold text-slate-800 truncate">{app.scholarshipName}</p>
+                <li key={app._id} className="px-5 sm:px-6 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900">{app.scholarshipName}</p>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-slate-500">
+                        <CycleBadge cycle={academicYearOf(app.createdAt)} />
+                        <span>Submitted {formatDate(app.createdAt)}</span>
+                      </div>
+                    </div>
                     <StatusBadge status={app.status} />
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 font-semibold">
-                    <CycleBadge cycle={academicYearOf(app.createdAt)} />
-                    <span>Submitted {formatDate(app.createdAt)}</span>
-                    <span className="capitalize">{app.applicationFormType}</span>
-                  </div>
                   {app.reviewNote && (
-                    <p className="text-xs text-slate-600 mt-2 bg-white border border-slate-100 rounded-lg px-3 py-2 leading-relaxed break-words">
-                      {app.reviewNote}
-                    </p>
+                    <p className="text-sm text-slate-600 mt-2.5 bg-slate-50 ring-1 ring-inset ring-slate-200 rounded-lg px-3 py-2 wrap-break-word">{app.reviewNote}</p>
                   )}
-                </div>
+                </li>
               ))}
-            </div>
-          </div>
+            </ul>
+          </Panel>
 
-          {/* Merged longitudinal timeline */}
-          <div className="bg-white rounded-xl border border-slate-100 card-shadow p-4 sm:p-6 lg:sticky lg:top-24">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider">Full Timeline</h3>
-              <History className="w-4 h-4 text-slate-300 shrink-0" />
-            </div>
+          <Panel title="Full timeline" className="lg:sticky lg:top-24">
             <MergedTimeline entries={mergedHistory} />
-          </div>
+          </Panel>
         </div>
       </div>
     );
   }
 
   // === List view: all scholars ============================================
+  const filtersActive = search.trim() !== '' || renewalFilter !== 'all';
   return (
-    <div className="space-y-5 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="font-display font-black text-lg sm:text-xl md:text-2xl text-slate-900 tracking-tight">Scholar Lifecycle</h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">Track each student's applications and outcomes across every cycle.</p>
-        </div>
-        <ExportMenu
-          onPickCsv={() => setPendingAction('csv')}
-          onPickPrint={() => setPendingAction('print')}
-          disabled={isLoading || isExporting}
-          isExporting={isExporting}
-        />
-      </div>
-
-      {exportError && (
-        <div className="p-3 bg-rose-50 text-rose-700 rounded-lg border border-rose-100 text-xs font-bold flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{exportError}</span>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-        <StatTile label="Total Scholars" value={scholars.length} icon={Users} accent="bg-slate-50 text-slate-500" />
-        <StatTile label="Returning Scholars" value={renewingCount} icon={Repeat} accent="bg-emerald-50 text-brand-green" />
-        <StatTile label="First-Time Applicants" value={scholars.length - renewingCount} icon={Award} accent="bg-sky-50 text-sky-600" />
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-100 card-shadow">
-        <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center gap-3">
-          <div className="relative flex-1 min-w-0">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by name, student no., or program..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all placeholder:text-slate-300"
+    <div className="space-y-6">
+      <PageHeader
+        title="Scholars"
+        description="Every student's applications and outcomes across all scholarship cycles."
+        actions={
+          <>
+            {onRefresh && <Button icon={RefreshCw} onClick={onRefresh} disabled={isLoading}>Refresh</Button>}
+            <ExportMenu
+              onPickCsv={() => setPendingAction('csv')}
+              onPickPrint={() => setPendingAction('print')}
+              disabled={isLoading || isExporting}
+              isExporting={isExporting}
             />
-          </div>
-          <div className="flex gap-3">
-            <div className="relative flex-1 md:flex-none">
-              <select
-                value={renewalFilter}
-                onChange={e => setRenewalFilter(e.target.value as typeof renewalFilter)}
-                className="w-full appearance-none pl-3.5 pr-9 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all"
-              >
-                <option value="all">All Scholars</option>
-                <option value="renewing">Returning Only</option>
-                <option value="first_time">First-Time Only</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-            <div className="relative flex-1 md:flex-none">
-              <select
-                value={sort}
-                onChange={e => setSort(e.target.value as SortOption)}
-                className="w-full appearance-none pl-3.5 pr-9 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all"
-              >
-                <option value="recent">Most Recent Activity</option>
-                <option value="most_applications">Most Applications</option>
-                <option value="name">Name (A–Z)</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-          </div>
+          </>
+        }
+      />
+
+      <ErrorBanner message={exportError} />
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard label="Total scholars" value={scholars.length} hint="Students with at least one application" icon={Users} tone="slate" />
+        <KpiCard label="Returning" value={renewingCount} hint="Applied in more than one cycle" icon={Repeat} tone="green" />
+        <KpiCard label="First-time" value={scholars.length - renewingCount} hint="Single application on file" icon={Award} tone="sky" />
+      </div>
+
+      <section className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(16,24,40,0.04)] min-w-0">
+        <div className="p-4 flex flex-col md:flex-row gap-3 border-b border-slate-100">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search name, student no. or program…" className="flex-1" />
+          <SelectInput value={renewalFilter} onChange={v => setRenewalFilter(v as typeof renewalFilter)} className="md:w-48" ariaLabel="Filter scholars">
+            <option value="all">All scholars</option>
+            <option value="renewing">Returning only</option>
+            <option value="first_time">First-time only</option>
+          </SelectInput>
+          <SelectInput value={sort} onChange={v => setSort(v as SortOption)} className="md:w-56" ariaLabel="Sort scholars">
+            <option value="recent">Most recent activity</option>
+            <option value="most_applications">Most applications</option>
+            <option value="name">Name (A–Z)</option>
+          </SelectInput>
         </div>
 
         {isLoading ? (
-          <div className="p-12 text-center text-xs text-slate-400 font-semibold">Loading scholars...</div>
+          <SkeletonRows />
         ) : filtered.length === 0 ? (
-          <div className="p-12 text-center">
-            <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-            <p className="text-xs font-semibold text-slate-400">No scholars match your filters.</p>
-          </div>
+          <EmptyState
+            icon={Users}
+            title={filtersActive ? 'No scholars match your filters' : 'No scholars yet'}
+            description={filtersActive ? 'Try a different search term or filter.' : 'Students appear here once they submit an application.'}
+            action={filtersActive ? <Button size="sm" onClick={() => { setSearch(''); setRenewalFilter('all'); }}>Clear filters</Button> : undefined}
+          />
         ) : (
-          <div className="divide-y divide-slate-100">
-            {filtered.map(scholar => (
-              <button
-                key={scholar.studentNumber}
-                onClick={() => setSelectedStudentNumber(scholar.studentNumber)}
-                className="w-full flex items-center gap-3 sm:gap-4 p-3.5 sm:p-4 md:p-5 hover:bg-slate-50/60 transition-colors text-left group"
-              >
-                <Avatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-bold text-slate-800 truncate">{scholar.name}</p>
-                    {scholar.isRenewing && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-brand-green shrink-0">
-                        <Repeat className="w-3 h-3" /> Returning
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 truncate mt-0.5">
-                    Student No. {scholar.studentNumber} &middot; {scholar.program || 'Unspecified'}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    {scholar.cycles.map(cycle => <CycleBadge key={cycle} cycle={cycle} />)}
-                  </div>
-                </div>
-                <div className="hidden md:flex flex-col items-end text-right shrink-0 gap-1">
-                  <span className="text-xs font-bold text-slate-700">{scholar.totalApplications} application{scholar.totalApplications !== 1 ? 's' : ''}</span>
-                  <span className="text-[11px] text-slate-400">{scholar.approvedCount} approved</span>
-                </div>
-                <div className="shrink-0"><StatusBadge status={scholar.latestStatus} /></div>
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50/70 border-b border-slate-100">
+                  <tr>
+                    <Th>Scholar</Th>
+                    <Th>Program</Th>
+                    <Th>Cycles</Th>
+                    <Th className="text-right">Applications</Th>
+                    <Th>Latest status</Th>
+                    <Th className="w-10"><span className="sr-only">Open</span></Th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pager.pageItems.map(scholar => (
+                    <tr key={scholar.studentNumber} onClick={() => setSelectedStudentNumber(scholar.studentNumber)} className="group cursor-pointer hover:bg-slate-50/80 transition-colors">
+                      <Td>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <AdminAvatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="sm" />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setSelectedStudentNumber(scholar.studentNumber); }}
+                                className="text-sm font-medium text-slate-900 truncate hover:text-brand-green focus:outline-hidden focus-visible:underline text-left"
+                              >
+                                {scholar.name}
+                              </button>
+                              {scholar.isRenewing && <Tag tone="green"><Repeat className="w-3 h-3" /> Returning</Tag>}
+                            </div>
+                            <p className="text-xs text-slate-500 tabular-nums">{scholar.studentNumber}</p>
+                          </div>
+                        </div>
+                      </Td>
+                      <Td><span className="text-sm text-slate-700">{scholar.program || 'Unspecified'}</span></Td>
+                      <Td><div className="flex flex-wrap gap-1">{scholar.cycles.map(c => <CycleBadge key={c} cycle={c} />)}</div></Td>
+                      <Td className="text-right tabular-nums">
+                        <span className="text-slate-900 font-medium">{scholar.totalApplications}</span>
+                        <span className="text-xs text-slate-400 ml-1">({scholar.approvedCount} approved)</span>
+                      </Td>
+                      <Td><StatusBadge status={scholar.latestStatus} /></Td>
+                      <Td><ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600" /></Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <ul className="md:hidden divide-y divide-slate-100">
+              {pager.pageItems.map(scholar => (
+                <li key={scholar.studentNumber}>
+                  <button onClick={() => setSelectedStudentNumber(scholar.studentNumber)} className="w-full flex items-start gap-3 p-4 text-left hover:bg-slate-50">
+                    <AdminAvatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-900 truncate">{scholar.name}</p>
+                        <StatusBadge status={scholar.latestStatus} />
+                      </div>
+                      <p className="text-xs text-slate-500 truncate mt-0.5">{scholar.program || 'Unspecified'}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{scholar.totalApplications} application{scholar.totalApplications !== 1 ? 's' : ''} · {scholar.cycles.join(', ')}</p>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <div className="px-4 py-3 border-t border-slate-100">
+              <Pagination page={pager.page} pageCount={pager.pageCount} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} noun="scholars" />
+            </div>
+          </>
         )}
-      </div>
+      </section>
 
       {pendingAction && (
         <ColumnPickerModal

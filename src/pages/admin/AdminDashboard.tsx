@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth, useUser } from '@clerk/react';
 import {
-  Search, FileText, CheckCircle, XCircle, Clock, Eye, Download,
-  AlertCircle, ChevronDown, ArrowLeft, User, Menu,
-  MapPin, Users, PiggyBank, ClipboardCheck, Phone, Mail, GraduationCap,
-  RefreshCw
+  FileText, CheckCircle, XCircle, Clock, Eye, Download, AlertCircle, ArrowLeft, Menu, RefreshCw,
+  ChevronRight, Building2, ClipboardList, Paperclip, RotateCcw, Save, Inbox
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AdminAnalytics from './AdminAnalytics';
@@ -15,7 +13,12 @@ import { ApplicationFormAnswers, EvaluationSheetAnswers } from '../../components
 import PolcaAdminFieldsCard from '../../components/grant-forms/PolcaAdminFieldsCard';
 import { OFFICE_LABELS, mockScholarships, officeOf } from '../../data/scholarships';
 import { isGrantFormType, toGrantDetails } from '../../utils/grantForms';
-import { PolcaAdminFields } from '../../types';
+import { PolcaAdminFields, SfagApplicationDetails } from '../../types';
+import { SfagAnswers, StandardProfileAnswers } from '../../components/grant-forms/StandardAnswersView';
+import {
+  AdminAvatar, Button, DetailField, EmptyState, ErrorBanner, KpiCard, PageHeader, Pagination, Panel,
+  SearchInput, SelectInput, SkeletonRows, StatusBadge, TabBar, Tag, Td, Th, controlClass, usePagination
+} from './AdminUI';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -23,12 +26,6 @@ type AppStatus = 'Under Evaluation' | 'Approved' | 'Rejected' | 'Needs Revision'
 
 const STATUS_OPTIONS: AppStatus[] = ['Under Evaluation', 'Approved', 'Rejected', 'Needs Revision'];
 
-const STATUS_STYLES: Record<AppStatus, { badge: string; dot: string }> = {
-  'Under Evaluation': { badge: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
-  'Approved': { badge: 'bg-emerald-50 text-brand-green border-emerald-200', dot: 'bg-brand-green' },
-  'Rejected': { badge: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
-  'Needs Revision': { badge: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' }
-};
 
 // A history entry represents a single lifecycle event on an application:
 // initial submission, a student resubmission after revision was requested,
@@ -216,89 +213,12 @@ function documentUrl(fileId: string): string {
   return `${API_BASE_URL}/api/applications/documents/${fileId}`;
 }
 
-// --- Small presentational pieces ------------------------------------------
-
-// Mirrors the student portal's DashboardCard: icon chip top-right, big
-// number top-left, label above and description below — same shape and
-// hover-lift so the admin metrics read as the same design system.
-function StatCard({ label, value, icon: Icon, accent, description, onClick }: { label: string; value: string | number; icon: React.ElementType; accent: string; description?: string; onClick?: () => void }) {
-  return (
-    <motion.div
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.15 }}
-      onClick={onClick}
-      className={`p-3.5 sm:p-5 rounded-xl border border-slate-100 bg-white card-shadow transition-all min-w-0 flex flex-col justify-between ${onClick ? 'cursor-pointer hover:border-slate-200' : ''}`}
-    >
-      <div className="flex justify-between items-start mb-2.5 sm:mb-3 gap-2">
-        <div className="min-w-0">
-          <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{label}</p>
-          <h3 className="text-2xl sm:text-3xl font-display font-extrabold text-brand-green mt-1 sm:mt-1.5">{value}</h3>
-        </div>
-        <div className={`p-2 sm:p-2.5 rounded-lg shrink-0 ${accent}`}>
-          <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
-        </div>
-      </div>
-      {description && <p className="text-[11px] sm:text-xs text-slate-600 font-medium truncate">{description}</p>}
-    </motion.div>
-  );
-}
-
-// Same pill shape/weight as AnnouncementCard's category badges elsewhere
-// in the portal, reusing this file's own status palette.
-function StatusBadge({ status }: { status: AppStatus }) {
-  const style = STATUS_STYLES[status] ?? STATUS_STYLES['Under Evaluation'];
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold whitespace-nowrap ${style.badge}`}>
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />
-      {status}
-    </span>
-  );
-}
-
-// Same treatment as the profile avatar in Navbar: brand-green circle,
-// soft inner shadow, subtle emerald ring.
-function Avatar({ name, avatarUrl, size = 'md' }: { name: string; avatarUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
-  const [failed, setFailed] = useState(false);
-  const dims = size === 'lg' ? 'w-14 h-14 sm:w-16 sm:h-16 text-base sm:text-lg' : size === 'sm' ? 'w-8 h-8 text-[10px]' : 'w-9 h-9 sm:w-10 sm:h-10 text-[11px] sm:text-xs';
-
-  if (avatarUrl && !failed) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={name}
-        onError={() => setFailed(true)}
-        className={`${dims} rounded-full object-cover shrink-0 shadow-inner border border-emerald-100`}
-      />
-    );
-  }
-
-  return (
-    <div className={`${dims} rounded-full bg-brand-green text-white font-display font-bold flex items-center justify-center shrink-0 shadow-inner border border-emerald-100`}>
-      {initials(name)}
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value?: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>
-      <p className="text-sm text-slate-700 font-semibold wrap-break-word">{value || value === 0 ? value : <span className="text-slate-300 font-normal">—</span>}</p>
-    </div>
-  );
-}
-
-function SectionCard({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-xl border border-slate-100 card-shadow p-4 sm:p-6">
-      <div className="flex items-center gap-2 mb-5 pb-3 border-b border-slate-100">
-        <Icon className="w-4 h-4 text-brand-green shrink-0" />
-        <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider">{title}</h3>
-      </div>
-      {children}
-    </div>
-  );
-}
+const FORM_TYPE_LABELS: Record<string, string> = {
+  standard: 'Entrance form',
+  sfag: 'SFA Grant form',
+  polca: 'POLCA form',
+  alumni: 'Alumni form'
+};
 
 // --- Timeline ---------------------------------------------------------
 
@@ -311,85 +231,65 @@ const TIMELINE_STYLES: Record<HistoryStatus, { dot: string; icon: React.ElementT
   'Submitted': { dot: 'bg-slate-400', icon: FileText },
   'Resubmitted': { dot: 'bg-slate-400', icon: RefreshCw },
   'Under Evaluation': { dot: 'bg-amber-500', icon: Clock },
-  'Approved': { dot: 'bg-brand-green', icon: CheckCircle },
+  'Approved': { dot: 'bg-emerald-500', icon: CheckCircle },
   'Rejected': { dot: 'bg-rose-500', icon: XCircle },
   'Needs Revision': { dot: 'bg-sky-500', icon: AlertCircle }
 };
 
 function ApplicationTimeline({ history }: { history?: HistoryEntry[] }) {
   const entries = useMemo(
-    () =>
-      [...(history ?? [])].sort(
-        (a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime()
-      ),
+    () => [...(history ?? [])].sort((a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime()),
     [history]
   );
 
   if (entries.length === 0) {
-    return (
-      <p className="text-xs text-slate-400">
-        No history recorded for this application yet.
-      </p>
-    );
+    return <p className="text-sm text-slate-500">No history recorded for this application yet.</p>;
   }
 
   return (
-    <div className="relative pl-6">
-      <div className="absolute left-1.75 top-1.5 bottom-1.5 w-px bg-slate-200" />
-      <div className="space-y-6">
-        {entries.map((entry, idx) => {
-          const style = TIMELINE_STYLES[entry.status] ?? TIMELINE_STYLES['Under Evaluation'];
-          const Icon = style.icon;
-          return (
-            <div key={idx} className="relative flex gap-3 min-w-0">
-              <div className={`absolute -left-6 top-0.5 w-3.5 h-3.5 rounded-full ring-4 ring-white flex items-center justify-center shrink-0 ${style.dot}`} />
-              <Icon className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <p className="text-sm font-bold text-slate-800">{entry.status}</p>
-                  <span className="text-[11px] text-slate-400">{formatDateTime(entry.changedAt)}</span>
-                </div>
-                {entry.changedBy && (
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    by {entry.changedBy === 'student' ? 'Student' : entry.changedBy}
-                  </p>
-                )}
-                {entry.note && (
-                  <p className="text-xs text-slate-600 mt-1.5 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 leading-relaxed wrap-break-word">
-                    {entry.note}
-                  </p>
-                )}
+    <ol className="relative">
+      {entries.map((entry, idx) => {
+        const style = TIMELINE_STYLES[entry.status] ?? TIMELINE_STYLES['Under Evaluation'];
+        const Icon = style.icon;
+        const last = idx === entries.length - 1;
+        return (
+          <li key={idx} className="relative flex gap-3 pb-5 last:pb-0">
+            {!last && <span className="absolute left-3.5 top-8 bottom-0 w-px bg-slate-200" aria-hidden />}
+            <span className={`relative w-7 h-7 rounded-full flex items-center justify-center shrink-0 ring-4 ring-white ${style.dot}`}>
+              <Icon className="w-3.5 h-3.5 text-white" />
+            </span>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                <p className="text-sm font-medium text-slate-900">{entry.status}</p>
+                <time className="text-xs text-slate-400 tabular-nums">{formatDateTime(entry.changedAt)}</time>
               </div>
+              {entry.changedBy && (
+                <p className="text-xs text-slate-500 mt-0.5">by {entry.changedBy === 'student' ? 'Student' : entry.changedBy}</p>
+              )}
+              {entry.note && (
+                <p className="text-sm text-slate-600 mt-2 bg-slate-50 ring-1 ring-inset ring-slate-200 rounded-lg px-3 py-2 wrap-break-word">{entry.note}</p>
+              )}
             </div>
-          );
-        })}
-      </div>
-    </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
 // --- Document preview -------------------------------------------------------
 
-function DocumentThumb({ doc, onOpen }: { doc: AdminDocument; onOpen: () => void }) {
+function DocumentThumb({ doc }: { doc: AdminDocument }) {
   const [imgFailed, setImgFailed] = useState(false);
   const isImage = doc.mimetype?.startsWith('image/') && !imgFailed;
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg border border-slate-200 bg-white overflow-hidden shrink-0 flex items-center justify-center hover:ring-2 hover:ring-brand-green/30 transition-all"
-    >
+    <div className="w-12 h-12 rounded-md ring-1 ring-slate-200 bg-slate-50 overflow-hidden shrink-0 flex items-center justify-center">
       {isImage ? (
-        <img
-          src={documentUrl(doc.fileId)}
-          alt={doc.filename}
-          className="w-full h-full object-cover"
-          onError={() => setImgFailed(true)}
-        />
+        <img src={documentUrl(doc.fileId)} alt="" className="w-full h-full object-cover" onError={() => setImgFailed(true)} />
       ) : (
         <FileText className="w-5 h-5 text-slate-300" />
       )}
-    </button>
+    </div>
   );
 }
 
@@ -487,26 +387,9 @@ function DocumentPreviewModal({ doc, onClose }: { doc: AdminDocument; onClose: (
   );
 }
 
-// Tabs for the detail-view content pane. Timeline used to live here as a
-// tab; it now renders as its own sidebar card next to Review Decision
-// (see the "Sticky decision sidebar" block below), so it's no longer in
-// this list.
-const REVIEW_TABS = [
-  { key: 'personal', label: 'Personal', icon: User },
-  { key: 'contact', label: 'Contact & School', icon: MapPin },
-  { key: 'family', label: 'Parents & Guardian', icon: Users },
-  { key: 'financial', label: 'Assets & Expenses', icon: PiggyBank },
-  { key: 'documents', label: 'Documents', icon: ClipboardCheck }
-] as const;
-
-// Grant-form applications (POLCA / Alumni) render their answers grouped by
-// the form's own sections instead of the SFAG tabs above.
-const GRANT_REVIEW_TABS = [
-  { key: 'grant-form', label: 'Application Form', icon: User },
-  { key: 'grant-sheet', label: 'Evaluation Sheet', icon: PiggyBank },
-  { key: 'documents', label: 'Documents', icon: ClipboardCheck }
-] as const;
-type ReviewTabKey = typeof REVIEW_TABS[number]['key'] | typeof GRANT_REVIEW_TABS[number]['key'];
+// Detail-view tabs. Every form type shows its answers grouped by section
+// on "form"; POLCA adds the evaluation sheet.
+type ReviewTabKey = 'form' | 'sheet' | 'documents';
 
 // Top-level view: the applications list/review flow, the analytics
 // dashboard, the scholar lifecycle view, or announcements. Kept separate
@@ -537,7 +420,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [scholarshipFilter, setScholarshipFilter] = useState<string>('All');
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<ReviewTabKey>('personal');
+  const [activeTab, setActiveTab] = useState<ReviewTabKey>('form');
   const [isUpdating, setIsUpdating] = useState(false);
   const [pendingAction, setPendingAction] = useState<AppStatus | 'note' | null>(null);
   const [reviewNote, setReviewNote] = useState('');
@@ -629,11 +512,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     });
   }, [applications, search, statusFilter, scholarshipFilter]);
 
+  const pager = usePagination(filtered, 15, `${search}|${statusFilter}|${scholarshipFilter}`);
+
   const selected = applications.find(a => a._id === selectedId) ?? null;
 
   const openApplication = (app: AdminApplication) => {
     setSelectedId(app._id);
-    setActiveTab(isGrantFormType(app.applicationFormType) ? 'grant-form' : 'personal');
+    setActiveTab('form');
     setReviewNote('');
     setJustUpdatedStatus(null);
     setNoteJustSaved(false);
@@ -720,772 +605,448 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     }
   };
 
-  // Page title shown in the top bar — mirrors the student portal's Navbar,
-  // which shows only a hamburger (mobile) + the current page title. Logout
-  // now lives in the sidebar footer instead of up here, same as the
-  // student side, so this bar stays minimal.
-  const pageTitle = selectedId
-    ? 'Application Review'
-    : mainView === 'analytics' ? 'Statistics & Trends'
-    : mainView === 'lifecycle' ? 'Scholar Lifecycle'
-    : mainView === 'announcements' ? 'Announcements'
-    : 'Scholarship Applications';
+  const officeLabel = adminOffice
+    ? (OFFICE_LABELS[adminOffice as keyof typeof OFFICE_LABELS] ?? adminOffice)
+    : 'LSO · all offices';
+
+  const VIEW_TITLES: Record<MainView, string> = {
+    applications: 'Applications',
+    analytics: 'Statistics',
+    lifecycle: 'Scholars',
+    announcements: 'Announcements'
+  };
 
   const TopBar = (
-    <header className="h-16 glass-header px-3 sm:px-4 md:px-6 lg:px-10 flex items-center justify-between sticky top-0 z-20">
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-        <motion.button
-          whileTap={{ scale: 0.9 }}
+    <header className="h-16 bg-white/90 backdrop-blur border-b border-slate-200 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 sticky top-0 z-20">
+      <div className="flex items-center gap-2 min-w-0">
+        <button
           onClick={() => setIsSidebarOpen(true)}
-          className="p-2 -ml-1 sm:-ml-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 md:hidden focus:outline-hidden shrink-0"
-          aria-label="Toggle sidebar"
+          className="p-2 -ml-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 md:hidden focus:outline-hidden shrink-0"
+          aria-label="Open navigation"
         >
           <Menu className="w-5 h-5" />
-        </motion.button>
-        <h1 className="font-display font-bold text-base sm:text-lg md:text-xl text-slate-800 tracking-tight truncate">{pageTitle}</h1>
+        </button>
+        <nav className="flex items-center gap-1.5 text-sm min-w-0" aria-label="Breadcrumb">
+          {selected ? (
+            <>
+              <button onClick={() => setSelectedId(null)} className="text-slate-500 hover:text-slate-900 font-medium shrink-0">
+                {VIEW_TITLES[mainView]}
+              </button>
+              <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+              <span className="font-semibold text-slate-900 truncate">{applicantName(selected)}</span>
+            </>
+          ) : (
+            <span className="font-semibold text-slate-900 truncate">{VIEW_TITLES[mainView]}</span>
+          )}
+        </nav>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-xs font-medium text-slate-600">
+          <Building2 className="w-3.5 h-3.5 text-slate-400" />
+          {officeLabel}
+        </span>
       </div>
     </header>
   );
 
-  const Sidebar = (
-    <AdminSidebar
-      currentView={mainView}
-      onNavigate={view => { setMainView(view); setSelectedId(null); }}
-      isOpen={isSidebarOpen}
-      onClose={() => setIsSidebarOpen(false)}
-      onLogout={onLogout}
-    />
+  const renderShell = (children: React.ReactNode) => (
+    <div className="min-h-screen bg-slate-50 flex">
+      <AdminSidebar
+        currentView={mainView}
+        onNavigate={view => { setMainView(view); setSelectedId(null); }}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        onLogout={onLogout}
+        adminEmail={user?.primaryEmailAddress?.emailAddress}
+        officeLabel={officeLabel}
+        pendingCount={stats.pending}
+      />
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        {TopBar}
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 max-w-7xl mx-auto w-full min-w-0">
+          {children}
+        </main>
+      </div>
+    </div>
   );
 
   // === Detail / review view ================================================
   if (selected) {
-    const isSfag = selected.applicationFormType === 'sfag';
     const isGrant = isGrantFormType(selected.applicationFormType);
     const grantScholarship = isGrant ? mockScholarships.find(s => s.id === selected.scholarshipId) : undefined;
     const grantDetails = grantScholarship ? toGrantDetails(selected, grantScholarship) : null;
     const name = applicantName(selected);
-    const tabs: readonly { key: ReviewTabKey; label: string; icon: React.ElementType }[] = isGrant
-      ? GRANT_REVIEW_TABS.filter(t => t.key !== 'grant-sheet' || !!grantDetails?.evaluationSheet)
-      : isSfag
-      ? REVIEW_TABS
-      : REVIEW_TABS.filter(t => t.key === 'personal' || t.key === 'documents');
+    const tabs: { key: ReviewTabKey; label: string; icon: React.ElementType; count?: number }[] = [
+      { key: 'form', label: 'Application form', icon: FileText },
+      ...(grantDetails?.evaluationSheet ? [{ key: 'sheet' as const, label: 'Evaluation sheet', icon: ClipboardList }] : []),
+      { key: 'documents', label: 'Documents', icon: Paperclip, count: selected.documents.length }
+    ];
+    const meta: [string, React.ReactNode][] = [
+      ['Reference', <span className="font-mono text-[13px]">{selected.referenceCode}</span>],
+      ['Student no.', selected.studentNumber],
+      ['Submitted', formatDate(selected.createdAt)],
+      ['Program', [applicantProgram(selected), applicantYearLevel(selected)].filter(Boolean).join(' · ')],
+      ['Email', applicantEmail(selected)],
+      ['Mobile', applicantPhone(selected)]
+    ];
+
+    const decisionStyles: Record<AppStatus, { variant: 'success' | 'info' | 'danger'; icon: React.ElementType; action: string; done: string }> = {
+      'Approved': { variant: 'success', icon: CheckCircle, action: 'Approve', done: 'Approved' },
+      'Needs Revision': { variant: 'info', icon: RotateCcw, action: 'Request revision', done: 'Revision requested' },
+      'Rejected': { variant: 'danger', icon: XCircle, action: 'Reject', done: 'Rejected' },
+      'Under Evaluation': { variant: 'info', icon: Clock, action: '', done: '' }
+    };
 
     return (
-      <div className="min-h-screen bg-[#f1f5f9] flex">
-        {Sidebar}
-        <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        {TopBar}
-        <main className="flex-1 px-4 sm:px-6 lg:px-10 py-5 sm:py-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
-          <button
-            onClick={() => setSelectedId(null)}
-            className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Applications</span>
-          </button>
+      renderShell(<>
+        <button
+          onClick={() => setSelectedId(null)}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to applications
+        </button>
 
-          {/* Applicant summary header */}
-          <div className="bg-white rounded-xl border border-slate-100 p-5 sm:p-6 md:p-8 card-shadow">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-              <div className="flex items-center gap-4 sm:contents">
-                <Avatar name={name} avatarUrl={selected.avatarUrl} size="lg" />
-                <div className="flex-1 min-w-0 sm:hidden">
-                  <h2 className="font-display font-black text-lg text-slate-900 tracking-tight truncate">{name}</h2>
-                  <StatusBadge status={selected.status} />
-                </div>
+        {/* Applicant header */}
+        <Panel bodyClassName="p-5 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-5">
+            <AdminAvatar name={name} avatarUrl={selected.avatarUrl} size="lg" />
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">{name}</h1>
+                <StatusBadge status={selected.status} />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="hidden sm:flex flex-wrap items-center gap-2.5">
-                  <h2 className="font-display font-black text-xl md:text-2xl text-slate-900 tracking-tight truncate">{name}</h2>
-                  <StatusBadge status={selected.status} />
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                    {selected.applicationFormType}
-                  </span>
-                </div>
-                <span className="sm:hidden inline-block mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                  {selected.applicationFormType}
-                </span>
-                <p className="text-xs text-slate-500 mt-2 sm:mt-1.5 truncate">{selected.scholarshipName}</p>
-                <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-[11px] text-slate-400 font-semibold">
-                  <span>Student No. {selected.studentNumber}</span>
-                  <span>Ref. {selected.referenceCode}</span>
-                  <span>Submitted {formatDate(selected.createdAt)}</span>
-                </div>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <span className="text-sm text-slate-600">{selected.scholarshipName}</span>
+                <Tag>{FORM_TYPE_LABELS[selected.applicationFormType] ?? selected.applicationFormType}</Tag>
+                {selected.office && selected.office !== 'LSO' && <Tag tone="blue">{selected.office}</Tag>}
               </div>
-              <div className="grid grid-cols-1 sm:flex sm:flex-col gap-2 sm:gap-1.5 sm:text-right shrink-0 pt-4 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                <div className="flex items-center gap-1.5 text-xs text-slate-600 sm:justify-end min-w-0">
-                  <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span className="truncate">{applicantEmail(selected) || '—'}</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-slate-600 sm:justify-end min-w-0">
-                  <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span className="truncate">{applicantPhone(selected) || '—'}</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-slate-600 sm:justify-end min-w-0">
-                  <GraduationCap className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span className="truncate">{applicantProgram(selected) || '—'} &middot; {applicantYearLevel(selected) || '—'}</span>
-                </div>
-              </div>
+              <dl className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 mt-5 pt-5 border-t border-slate-100">
+                {meta.map(([label, value]) => <DetailField key={label} label={label} value={value} />)}
+              </dl>
             </div>
           </div>
+        </Panel>
 
-          {loadError && (
-            <div className="p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-100 text-xs font-bold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{loadError}</span>
-            </div>
-          )}
+        <ErrorBanner message={loadError} />
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6 items-start">
-            <div className="lg:col-span-2 space-y-5 sm:space-y-6 min-w-0">
-              {/* Tabs */}
-              <div className="bg-white rounded-xl border border-slate-100 card-shadow overflow-hidden">
-                <div className="flex overflow-x-auto border-b border-slate-100 scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                  {tabs.map(tab => {
-                    const isActive = activeTab === tab.key;
-                    return (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        onClick={() => setActiveTab(tab.key)}
-                        className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-3.5 sm:py-4 text-[11px] sm:text-xs font-bold whitespace-nowrap border-b-2 transition-colors shrink-0 ${
-                          isActive
-                            ? 'border-brand-green text-brand-green bg-brand-green/5'
-                            : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        <tab.icon className="w-3.5 h-3.5 shrink-0" />
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="p-5 sm:p-6 md:p-8 space-y-6">
-                  {/* --- Personal --- */}
-                  {activeTab === 'personal' && (
-                    isSfag && selected.personalInfo ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-5">
-                        <Field label="Last Name" value={selected.personalInfo.lastName} />
-                        <Field label="First Name" value={selected.personalInfo.firstName} />
-                        <Field label="M.I. / Suffix" value={[selected.personalInfo.middleInitial, selected.personalInfo.suffix].filter(Boolean).join(' / ')} />
-                        <Field label="Student No." value={selected.personalInfo.studentNumber} />
-                        <Field label="Course" value={selected.personalInfo.course} />
-                        <Field label="Year Level" value={selected.personalInfo.yearLevel} />
-                        <Field label="Place of Birth" value={selected.personalInfo.placeOfBirth} />
-                        <Field label="Date of Birth" value={formatDate(selected.personalInfo.dateOfBirth)} />
-                        <Field label="Age" value={selected.personalInfo.age} />
-                        <Field label="Civil Status" value={selected.personalInfo.civilStatus} />
-                        <Field label="Gender" value={selected.personalInfo.gender} />
-                        <Field label="Nationality" value={selected.personalInfo.nationality} />
-                        <Field label="PWD" value={selected.personalInfo.isPwd ? 'Yes' : 'No'} />
-                        <Field
-                          label="Religion"
-                          value={selected.personalInfo.religion === 'OTHERS' ? selected.personalInfo.specifyReligion : selected.personalInfo.religion}
-                        />
-                      </div>
-                    ) : selected.standardInfo ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-5">
-                        <Field label="First Name" value={selected.standardInfo.firstName} />
-                        <Field label="Last Name" value={selected.standardInfo.lastName} />
-                        <Field label="Email" value={selected.standardInfo.email} />
-                        <Field label="Phone" value={selected.standardInfo.phone} />
-                        <Field label="Student No." value={selected.standardInfo.studentNumber} />
-                        <Field label="Program" value={selected.standardInfo.program} />
-                        <Field label="Year Level" value={selected.standardInfo.yearLevel} />
-                        <Field label="GPA" value={selected.standardInfo.gpa} />
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400">No personal information on file.</p>
-                    )
-                  )}
-
-                  {/* --- Contact & School (SFAG only) --- */}
-                  {activeTab === 'contact' && selected.contactSchool && (
-                    <div className="space-y-6">
-                      <div>
-                        <p className="text-[11px] font-bold text-brand-green uppercase tracking-wider mb-3">Home Address</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-5">
-                          <Field label="Street / Subdivision / Brgy." value={selected.contactSchool.streetAddress} />
-                          <Field label="Municipality / City" value={selected.contactSchool.municipality} />
-                          <Field label="Province" value={selected.contactSchool.province} />
-                          <Field label="Country" value={selected.contactSchool.country} />
-                        </div>
-                      </div>
-                      <div className="border-t border-slate-100 pt-6">
-                        <p className="text-[11px] font-bold text-brand-green uppercase tracking-wider mb-3">Contact Details</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-5">
-                          <Field label="Mobile No." value={selected.contactSchool.mobileNo} />
-                          <Field label="Landline No." value={selected.contactSchool.landlineNo} />
-                          <Field label="Email" value={selected.contactSchool.email} />
-                        </div>
-                      </div>
-                      <div className="border-t border-slate-100 pt-6">
-                        <p className="text-[11px] font-bold text-brand-green uppercase tracking-wider mb-3">Secondary School</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-5">
-                          <Field label="School Attended" value={selected.contactSchool.secondarySchool} />
-                          <Field label="School Address" value={selected.contactSchool.schoolAddress} />
-                          <Field label="Type" value={selected.contactSchool.schoolType} />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* --- Parents & Guardian --- */}
-                  {activeTab === 'family' && selected.parentsGuardian && (
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {(['father', 'mother'] as const).map(key => {
-                          const p = selected.parentsGuardian![key];
-                          return (
-                            <div key={key} className="rounded-xl border border-slate-200 overflow-hidden">
-                              <div className="bg-brand-green text-white px-4 py-2.5 font-display font-bold text-xs uppercase tracking-wider flex items-center justify-between gap-2">
-                                <span>{key}</span>
-                                {p.isSoloParent && (
-                                  <span className="text-[10px] font-semibold bg-white/15 px-2 py-0.5 rounded-full normal-case tracking-normal shrink-0">Solo Parent</span>
-                                )}
-                              </div>
-                              <div className="p-4 grid grid-cols-2 gap-x-3 gap-y-4">
-                                <Field label="Full Name" value={p.fullName} />
-                                <Field label="Occupation" value={p.occupation} />
-                                <Field label="Company" value={p.company} />
-                                <Field label="Company Tel." value={p.companyTel} />
-                                <Field label="Monthly Income" value={p.monthlyIncome} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {selected.parentsGuardian.guardian?.fullName && (
-                        <div className="border-t border-slate-100 pt-6">
-                          <p className="text-[11px] font-bold text-brand-green uppercase tracking-wider mb-3">Guardian</p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-5">
-                            <Field label="Full Name" value={selected.parentsGuardian.guardian.fullName} />
-                            <Field label="Occupation" value={selected.parentsGuardian.guardian.occupation} />
-                            <Field label="Monthly Income" value={selected.parentsGuardian.guardian.monthlyIncome} />
-                            <Field label="Relationship" value={selected.parentsGuardian.guardian.relationship} />
-                            <Field label="Contact No." value={selected.parentsGuardian.guardian.contactNo} />
-                          </div>
-                        </div>
-                      )}
-
-                      {(selected.siblings?.length ?? 0) > 0 && (
-                        <div className="border-t border-slate-100 pt-6">
-                          <p className="text-[11px] font-bold text-brand-green uppercase tracking-wider mb-3">Siblings</p>
-                          <div className="overflow-x-auto rounded-xl border border-slate-200 -mx-5 sm:mx-0 px-5 sm:px-0">
-                            <table className="w-full text-xs min-w-180">
-                              <thead>
-                                <tr className="bg-emerald-50 text-left text-slate-700">
-                                  <th className="p-3 font-bold">Name</th>
-                                  <th className="p-3 font-bold">Status</th>
-                                  <th className="p-3 font-bold">Civil</th>
-                                  <th className="p-3 font-bold">Age</th>
-                                  <th className="p-3 font-bold">School/Company</th>
-                                  <th className="p-3 font-bold">Type</th>
-                                  <th className="p-3 font-bold">Tuition/Salary</th>
-                                  <th className="p-3 font-bold">DLSU-D</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {selected.siblings!.map(sib => (
-                                  <tr key={sib.id}>
-                                    <td className="p-3 font-semibold text-slate-800">{sib.fullName}</td>
-                                    <td className="p-3 text-slate-600">{sib.socialStatus}</td>
-                                    <td className="p-3 text-slate-600">{sib.civilStatus}</td>
-                                    <td className="p-3 text-slate-600">{sib.age}</td>
-                                    <td className="p-3 text-slate-600">{sib.schoolOrCompany}</td>
-                                    <td className="p-3 text-slate-600">{sib.schoolType}</td>
-                                    <td className="p-3 text-slate-600">{sib.tuitionOrIncome}</td>
-                                    <td className="p-3 text-slate-600">{sib.isDlsudScholar ? 'Yes' : 'No'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* --- Assets & Expenses / Agreement --- */}
-                  {activeTab === 'financial' && selected.assetsExpenses && (
-                    <div className="space-y-6">
-                      <div>
-                        <p className="text-[11px] font-bold text-brand-green uppercase tracking-wider mb-3">Market Value of Assets</p>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-                          <Field label="House and Lot" value={selected.assetsExpenses.houseAndLot} />
-                          <Field label="Automobile" value={selected.assetsExpenses.automobile} />
-                        </div>
-                      </div>
-                      <div className="border-t border-slate-100 pt-6">
-                        <p className="text-[11px] font-bold text-brand-green uppercase tracking-wider mb-3">Income</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-5">
-                          <Field label="Income Sources" value={selected.assetsExpenses.incomeSources} />
-                          <Field label="Combined Non-Taxable Income" value={selected.assetsExpenses.combinedNonTaxableIncome} />
-                          <Field label="Affidavit of Non-Filing" value={selected.assetsExpenses.affidavitNonFilingIncomeTax} />
-                        </div>
-                      </div>
-                      <div className="border-t border-slate-100 pt-6">
-                        <p className="text-[11px] font-bold text-brand-green uppercase tracking-wider mb-3">Latest Monthly Bills</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-5">
-                          <Field label="Water" value={selected.assetsExpenses.waterBill} />
-                          <Field label="Electricity" value={selected.assetsExpenses.electricityBill} />
-                          <Field label="Telephone" value={selected.assetsExpenses.telephoneBill} />
-                          <Field label="Mobile Phone" value={selected.assetsExpenses.mobilePhoneBill} />
-                          <Field label="Internet" value={selected.assetsExpenses.internetBill} />
-                          <Field label="Amortization (House)" value={selected.assetsExpenses.amortizationHouse} />
-                          <Field label="Amortization (Auto)" value={selected.assetsExpenses.amortizationAuto} />
-                        </div>
-                      </div>
-                      {selected.agreement && (
-                        <div className="border-t border-slate-100 pt-6">
-                          <p className="text-[11px] font-bold text-brand-green uppercase tracking-wider mb-3">Certifications</p>
-                          <div className="space-y-2">
-                            <div className={`flex items-start gap-2 text-xs font-semibold ${selected.agreement.certifyConsulted ? 'text-brand-green' : 'text-rose-500'}`}>
-                              {selected.agreement.certifyConsulted ? <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" /> : <XCircle className="w-4 h-4 shrink-0 mt-0.5" />}
-                              <span>Consulted family members on the information provided</span>
-                            </div>
-                            <div className={`flex items-start gap-2 text-xs font-semibold ${selected.agreement.certifyAccuracy ? 'text-brand-green' : 'text-rose-500'}`}>
-                              {selected.agreement.certifyAccuracy ? <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" /> : <XCircle className="w-4 h-4 shrink-0 mt-0.5" />}
-                              <span>Certifies veracity and completeness of the form</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* --- Grant forms (POLCA / Alumni) --- */}
-                  {activeTab === 'grant-form' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          {/* Answers */}
+          <div className="lg:col-span-2 min-w-0">
+            <section className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <div className="px-3 sm:px-4">
+                <TabBar<ReviewTabKey> tabs={tabs} value={activeTab} onChange={setActiveTab} className="border-slate-100" />
+              </div>
+              <div className="p-5 sm:p-6">
+                {activeTab === 'form' && (
+                  isGrant ? (
                     grantDetails
                       ? <ApplicationFormAnswers details={grantDetails} scholarship={grantScholarship} />
-                      : <p className="text-xs text-slate-400">This scholarship is no longer in the registry, so its form can't be displayed.</p>
-                  )}
-                  {activeTab === 'grant-sheet' && grantDetails?.evaluationSheet && (
-                    <EvaluationSheetAnswers sheet={grantDetails.evaluationSheet} />
-                  )}
-
-                  {/* --- Documents --- */}
-                  {activeTab === 'documents' && (
-                    <div className="space-y-2">
-                      {selected.documents.length === 0 && (
-                        <p className="text-xs text-slate-400">No documents uploaded.</p>
-                      )}
+                      : <EmptyState title="Form unavailable" description="This scholarship is no longer in the registry, so its form can't be displayed." />
+                  ) : selected.applicationFormType === 'sfag' && selected.personalInfo ? (
+                    <SfagAnswers details={{
+                      personalInfo: selected.personalInfo,
+                      contactSchool: selected.contactSchool,
+                      parentsGuardian: selected.parentsGuardian,
+                      siblings: selected.siblings ?? [],
+                      assetsExpenses: selected.assetsExpenses,
+                      agreement: selected.agreement
+                    } as unknown as SfagApplicationDetails} />
+                  ) : selected.standardInfo ? (
+                    <StandardProfileAnswers info={selected.standardInfo} />
+                  ) : (
+                    <EmptyState title="No form answers on file" />
+                  )
+                )}
+                {activeTab === 'sheet' && grantDetails?.evaluationSheet && (
+                  <EvaluationSheetAnswers sheet={grantDetails.evaluationSheet} />
+                )}
+                {activeTab === 'documents' && (
+                  selected.documents.length === 0 ? (
+                    <EmptyState icon={Paperclip} title="No documents uploaded" />
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {selected.documents.map(doc => (
-                        <div
+                        <button
                           key={doc.fileId}
-                          className="flex items-center justify-between gap-3 p-3 sm:p-3.5 bg-slate-50/60 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer"
+                          type="button"
                           onClick={() => setPreviewDoc(doc)}
+                          className="group flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-left transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green/40"
                         >
-                          <div className="flex items-center gap-3 truncate min-w-0">
-                            <DocumentThumb doc={doc} onOpen={() => setPreviewDoc(doc)} />
-                            <div className="truncate min-w-0">
-                              <p className="text-xs font-semibold text-slate-800 truncate">{doc.docType}</p>
-                              {doc.variant && <p className="text-[10px] font-bold text-brand-green truncate">{doc.variant}</p>}
-                              <p className="text-[10px] text-slate-400 truncate">{doc.filename} {doc.size ? `· ${formatBytes(doc.size)}` : ''}</p>
-                            </div>
+                          <DocumentThumb doc={doc} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-slate-900 line-clamp-2">{doc.docType}</p>
+                            {doc.variant && <p className="text-xs text-brand-green mt-0.5 truncate">{doc.variant}</p>}
+                            <p className="text-xs text-slate-500 mt-0.5 truncate">{doc.filename}{doc.size ? ` · ${formatBytes(doc.size)}` : ''}</p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={e => { e.stopPropagation(); setPreviewDoc(doc); }}
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-green hover:text-brand-green-dark shrink-0"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Preview</span>
-                          </button>
-                        </div>
+                          <Eye className="w-4 h-4 text-slate-300 group-hover:text-slate-600 shrink-0" />
+                        </button>
                       ))}
                     </div>
-                  )}
-                </div>
+                  )
+                )}
               </div>
-            </div>
+            </section>
+          </div>
 
-            {/* Sticky decision sidebar */}
-            <div className="space-y-5 sm:space-y-6 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto min-w-0">
-              {selected.applicationFormType === 'polca' && (
-                <PolcaAdminFieldsCard
-                  applicationId={selected._id}
-                  fields={selected.adminFields}
-                  getToken={() => getToken()}
-                  apiBaseUrl={API_BASE_URL}
-                  onSaved={adminFields => setApplications(prev => prev.map(a => (a._id === selected._id ? { ...a, adminFields } : a)))}
-                />
-              )}
-              <div className="bg-white rounded-xl border border-slate-100 p-5 sm:p-6 card-shadow space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider">Review Decision</h3>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">
-                    Current: <span className="text-slate-600">{selected.status}</span>
-                  </span>
-                </div>
-
+          {/* Decision sidebar */}
+          <div className="space-y-6 lg:sticky lg:top-24 min-w-0">
+            <Panel title="Review decision" description={`Current status: ${selected.status}`}>
+              <div className="space-y-4">
                 {justUpdatedStatus && (
-                  <div className="p-3 bg-emerald-50 text-brand-green rounded-lg border border-emerald-100 text-xs font-bold flex items-center gap-2">
+                  <div className="p-3 bg-emerald-50 text-emerald-800 rounded-lg ring-1 ring-inset ring-emerald-200 text-sm flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 shrink-0" />
-                    <span>Marked as {justUpdatedStatus}.</span>
+                    Marked as {justUpdatedStatus}.
                   </div>
                 )}
 
                 <div>
-                  <label className="flex items-center gap-1 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Note (optional)
+                  <label htmlFor="review-note" className="block text-xs font-medium text-slate-700 mb-1.5">
+                    Note to applicant <span className="text-slate-400 font-normal">(optional)</span>
                   </label>
                   <textarea
+                    id="review-note"
                     value={reviewNote}
                     onChange={e => {
                       setReviewNote(e.target.value);
                       setNoteJustSaved(false);
                       setNoteSaveError('');
-                      if (pendingAction === 'note') setPendingAction(null); // editing after arming re-disarms it
+                      if (pendingAction === 'note') setPendingAction(null);
                     }}
                     rows={3}
-                    placeholder="Reason for revision or rejection, or internal remarks..."
-                    className="block w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50/50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all resize-none"
+                    placeholder="Reason for revision or rejection, or internal remarks…"
+                    className={`${controlClass} px-3 py-2 resize-none`}
                   />
-
-                  {pendingAction === 'note' ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50/60">
-                      <span className="flex-1 min-w-20t-[11px] font-bold text-slate-600 pl-1">Save this note?</span>
-                      <button
-                        type="button"
-                        disabled={isSavingNote}
-                        onClick={async () => { await saveNote(); setPendingAction(null); }}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-3 py-1.5 rounded-lg transition-all disabled:opacity-50"
-                      >
-                        {isSavingNote ? (
-                          <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          <CheckCircle className="w-3.5 h-3.5" />
-                        )}
-                        Confirm
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isSavingNote}
-                        onClick={() => setPendingAction(null)}
-                        className="text-[11px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600 px-2 py-1.5"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 gap-y-1.5">
-                      <button
-                        type="button"
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    {pendingAction === 'note' ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-600">Save without changing status?</span>
+                        <Button size="sm" variant="primary" loading={isSavingNote} onClick={async () => { await saveNote(); setPendingAction(null); }}>Save</Button>
+                        <Button size="sm" variant="ghost" disabled={isSavingNote} onClick={() => setPendingAction(null)}>Cancel</Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={Save}
                         onClick={() => setPendingAction('note')}
                         disabled={isSavingNote || isUpdating || reviewNote.trim() === ''}
-                        className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-brand-green hover:text-brand-green-dark disabled:text-slate-300 disabled:cursor-not-allowed transition-colors"
+                        className="-ml-2.5"
                       >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        Save Note
-                      </button>
-                      {noteJustSaved && !isSavingNote && (
-                        <span className="text-[11px] font-bold text-brand-green flex items-center gap-1">
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          Note saved
-                        </span>
-                      )}
-                      {noteSaveError && (
-                        <span className="text-[11px] font-bold text-rose-500 flex items-center gap-1 text-right">
-                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                          {noteSaveError}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                        Save note only
+                      </Button>
+                    )}
+                    {noteJustSaved && !isSavingNote && <span className="text-xs font-medium text-emerald-700 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Note saved</span>}
+                    {noteSaveError && <span className="text-xs font-medium text-rose-600 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5 shrink-0" /> {noteSaveError}</span>}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {(['Approved', 'Needs Revision', 'Rejected'] as AppStatus[]).map(status => {
-                    const isArmed = pendingAction === status;
-                    const isCurrent = selected.status === status;
-                    const styleMap: Record<AppStatus, string> = {
-                      'Approved': 'text-white bg-brand-green hover:bg-brand-green-dark shadow-md shadow-emerald-900/10',
-                      'Needs Revision': 'text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200',
-                      'Rejected': 'text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200',
-                      'Under Evaluation': ''
-                    };
-                    const iconMap: Record<AppStatus, React.ElementType> = {
-                      'Approved': CheckCircle,
-                      'Needs Revision': AlertCircle,
-                      'Rejected': XCircle,
-                      'Under Evaluation': Clock
-                    };
-                    const labelMap: Record<AppStatus, string> = {
-                      'Approved': 'Already Approved',
-                      'Needs Revision': 'Revision Requested',
-                      'Rejected': 'Already Rejected',
-                      'Under Evaluation': ''
-                    };
-                    const actionLabelMap: Record<AppStatus, string> = {
-                      'Approved': 'Approve',
-                      'Needs Revision': 'Request Revision',
-                      'Rejected': 'Reject',
-                      'Under Evaluation': ''
-                    };
-                    const Icon = iconMap[status];
 
-                    if (isArmed) {
+                <div className="space-y-2 pt-4 border-t border-slate-100">
+                  {(['Approved', 'Needs Revision', 'Rejected'] as AppStatus[]).map(status => {
+                    const s = decisionStyles[status];
+                    const isCurrent = selected.status === status;
+                    if (pendingAction === status) {
                       return (
-                        <div key={status} className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50/60">
-                          <span className="flex-1 min-w-20 text-[11px] font-bold text-slate-600 pl-1">
-                            Confirm {actionLabelMap[status].toLowerCase()}?
-                          </span>
-                          <button
-                            type="button"
-                            disabled={isUpdating || isSavingNote}
-                            onClick={() => { updateStatus(selected._id, status); setPendingAction(null); }}
-                            className={`inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg transition-all disabled:opacity-50 ${styleMap[status]}`}
-                          >
-                            {isUpdating ? <span className="w-3 h-3 border-2 border-current/40 border-t-current rounded-full animate-spin" /> : <Icon className="w-3.5 h-3.5" />}
+                        <div key={status} className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg bg-slate-50 ring-1 ring-inset ring-slate-200">
+                          <span className="flex-1 min-w-24 text-sm text-slate-700 pl-1">{s.action}?</span>
+                          <Button size="sm" variant={s.variant} icon={s.icon} loading={isUpdating} disabled={isSavingNote} onClick={() => { updateStatus(selected._id, status); setPendingAction(null); }}>
                             Confirm
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isUpdating}
-                            onClick={() => setPendingAction(null)}
-                            className="text-[11px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600 px-2 py-1.5"
-                          >
-                            Cancel
-                          </button>
+                          </Button>
+                          <Button size="sm" variant="ghost" disabled={isUpdating} onClick={() => setPendingAction(null)}>Cancel</Button>
                         </div>
                       );
                     }
-
                     return (
-                      <button
+                      <Button
                         key={status}
-                        type="button"
+                        variant={s.variant}
+                        icon={s.icon}
                         disabled={isUpdating || isSavingNote || isCurrent}
                         onClick={() => setPendingAction(status)}
-                        className={`w-full inline-flex items-center justify-center gap-1.5 font-display font-bold uppercase text-xs tracking-wider px-4 py-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${styleMap[status]}`}
+                        className="w-full"
                       >
-                        <Icon className="w-4 h-4" />
-                        {isCurrent ? labelMap[status] : actionLabelMap[status]}
-                      </button>
+                        {isCurrent ? s.done : s.action}
+                      </Button>
                     );
                   })}
                 </div>
+
                 {selected.reviewNote && (
-                  <div className="pt-3 border-t border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Last Note {selected.reviewedBy ? `— ${selected.reviewedBy}` : ''}{selected.reviewedAt ? ` · ${formatDate(selected.reviewedAt)}` : ''}
+                  <div className="pt-4 border-t border-slate-100">
+                    <p className="text-xs text-slate-500">
+                      Last note{selected.reviewedBy ? ` · ${selected.reviewedBy}` : ''}{selected.reviewedAt ? ` · ${formatShortDate(selected.reviewedAt)}` : ''}
                     </p>
-                    <p className="text-xs text-slate-600 leading-relaxed wrap-break-word">{selected.reviewNote}</p>
+                    <p className="text-sm text-slate-700 mt-1 wrap-break-word">{selected.reviewNote}</p>
                   </div>
                 )}
               </div>
+            </Panel>
 
-              {/* Timeline card — same shell/styling as Review Decision above,
-                  just below it in the sidebar, instead of living inside the
-                  tab strip on the left. */}
-              <div className="bg-white rounded-xl border border-slate-100 p-5 sm:p-6 card-shadow space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider">Timeline</h3>
-                  <Clock className="w-4 h-4 text-slate-300 shrink-0" />
-                </div>
-                <ApplicationTimeline history={selected.history} />
-              </div>
-            </div>
+            {selected.applicationFormType === 'polca' && (
+              <PolcaAdminFieldsCard
+                applicationId={selected._id}
+                fields={selected.adminFields}
+                getToken={() => getToken()}
+                apiBaseUrl={API_BASE_URL}
+                onSaved={adminFields => setApplications(prev => prev.map(a => (a._id === selected._id ? { ...a, adminFields } : a)))}
+              />
+            )}
+
+            <Panel title="Activity">
+              <ApplicationTimeline history={selected.history} />
+            </Panel>
           </div>
-        </main>
         </div>
 
         <AnimatePresence>
-          {previewDoc && (
-            <DocumentPreviewModal doc={previewDoc} onClose={() => setPreviewDoc(null)} />
-          )}
+          {previewDoc && <DocumentPreviewModal doc={previewDoc} onClose={() => setPreviewDoc(null)} />}
         </AnimatePresence>
-      </div>
+      </>)
     );
   }
 
-  // === List / overview view =================================================
+  // === Other sections ======================================================
+  if (mainView === 'analytics') {
+    return renderShell(<><ErrorBanner message={loadError} /><AdminAnalytics applications={applications} isLoading={isLoading} onRefresh={fetchApplications} /></>);
+  }
+  if (mainView === 'lifecycle') {
+    return renderShell(<><ErrorBanner message={loadError} /><AdminScholars applications={applications} isLoading={isLoading} getToken={getToken} apiBaseUrl={API_BASE_URL} onRefresh={fetchApplications} /></>);
+  }
+  if (mainView === 'announcements') {
+    return renderShell(<><AdminAnnouncements /></>);
+  }
+
+  // === Applications list ===================================================
+  const statusTabs: { key: AppStatus | 'All'; label: string; count: number }[] = [
+    { key: 'All', label: 'All', count: stats.total },
+    { key: 'Under Evaluation', label: 'Awaiting review', count: stats.pending },
+    { key: 'Needs Revision', label: 'Needs revision', count: stats.revision },
+    { key: 'Approved', label: 'Approved', count: stats.approved },
+    { key: 'Rejected', label: 'Rejected', count: stats.rejected }
+  ];
+  const decided = stats.approved + stats.rejected;
+  const approvalRate = decided > 0 ? Math.round((stats.approved / decided) * 100) : null;
+  const filtersActive = search.trim() !== '' || scholarshipFilter !== 'All' || statusFilter !== 'All';
+
   return (
-    <div className="min-h-screen bg-[#f1f5f9] flex">
-      {Sidebar}
-      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-      {TopBar}
-      <main className="flex-1 px-4 sm:px-6 lg:px-10 py-5 sm:py-8 space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
-        {/* Same hero-placeholder treatment as the student portal's welcome
-            banner, so the admin's landing view opens with the same signature
-            moment instead of a plain white card. Page title now lives in the
-            top bar, so this just carries the descriptive subtitle. */}
-        <div className="hero-placeholder min-h-30 sm:h-auto sm:min-h-0 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-5 py-5 sm:px-8 md:px-10 text-white card-shadow shrink-0 relative overflow-hidden">
-          <div className="relative z-10 min-w-0">
-            <h2 className="text-lg sm:text-xl md:text-2xl font-display font-extrabold tracking-tight leading-tight">
-              {mainView === 'analytics' ? 'Statistics & Trends' : mainView === 'lifecycle' ? 'Scholar Lifecycle' : mainView === 'announcements' ? 'Announcements' : 'Scholarship Applications'}
-            </h2>
-            <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed font-normal mt-1.5 max-w-xl">
-              {mainView === 'analytics'
-                ? 'Volume, outcomes, and processing performance across every scholarship.'
-                : mainView === 'lifecycle'
-                ? 'Follow each scholar\'s applications and outcomes across every cycle.'
-                : mainView === 'announcements'
-                ? 'Post and manage official updates shown to applicants.'
-                : 'Review submissions, verify documents, and update application status for every applicant.'}
-            </p>
-            {adminOffice && (
-              <span className="inline-block mt-2.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/15 border border-white/20">
-                {OFFICE_LABELS[adminOffice as keyof typeof OFFICE_LABELS] ?? adminOffice} view
-              </span>
-            )}
-          </div>
-          {mainView !== 'announcements' && (
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={fetchApplications}
-              disabled={isLoading}
-              className="relative z-10 inline-flex items-center justify-center gap-1.5 text-xs font-bold text-white bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl px-4 py-2.5 transition-colors disabled:opacity-50 shrink-0 self-start"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </motion.button>
-          )}
+    renderShell(<>
+      <PageHeader
+        title="Applications"
+        description="Review submissions, verify documents, and record a decision for each applicant."
+        actions={<Button icon={RefreshCw} onClick={fetchApplications} disabled={isLoading}>Refresh</Button>}
+      />
+
+      <ErrorBanner message={loadError} />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard label="Total applications" value={stats.total} hint="All submissions on file" icon={Inbox} tone="slate" />
+        <KpiCard label="Awaiting review" value={stats.pending} hint="Under evaluation" icon={Clock} tone="amber" active={statusFilter === 'Under Evaluation'} onClick={() => setStatusFilter(statusFilter === 'Under Evaluation' ? 'All' : 'Under Evaluation')} />
+        <KpiCard label="Needs revision" value={stats.revision} hint="Waiting on applicants" icon={RotateCcw} tone="sky" active={statusFilter === 'Needs Revision'} onClick={() => setStatusFilter(statusFilter === 'Needs Revision' ? 'All' : 'Needs Revision')} />
+        <KpiCard label="Approval rate" value={approvalRate === null ? '—' : `${approvalRate}%`} hint={`${stats.approved} approved of ${decided} decided`} icon={CheckCircle} tone="green" />
+      </div>
+
+      <section className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(16,24,40,0.04)] min-w-0">
+        <div className="px-3 sm:px-4">
+          <TabBar<AppStatus | 'All'> tabs={statusTabs} value={statusFilter} onChange={setStatusFilter} className="border-slate-100" />
+        </div>
+        <div className="p-4 flex flex-col md:flex-row gap-3 border-b border-slate-100">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search name, student no., scholarship or reference…" className="flex-1" />
+          <SelectInput value={scholarshipFilter} onChange={setScholarshipFilter} className="md:w-72" ariaLabel="Filter by scholarship">
+            <option value="All">All scholarships</option>
+            {scholarshipOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+          </SelectInput>
         </div>
 
-        {loadError && (
-          <div className="p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-100 text-xs font-bold flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            <span>{loadError}</span>
-          </div>
-        )}
-
-        {mainView === 'analytics' ? (
-          <AdminAnalytics applications={applications} isLoading={isLoading} />
-        ) : mainView === 'lifecycle' ? (
-          <AdminScholars applications={applications} isLoading={isLoading} getToken={getToken} apiBaseUrl={API_BASE_URL} />
-        ) : mainView === 'announcements' ? (
-          <AdminAnnouncements />
+        {isLoading ? (
+          <SkeletonRows />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            title={filtersActive ? 'No applications match your filters' : 'No applications yet'}
+            description={filtersActive ? 'Try a different search term, status or scholarship.' : 'New submissions will appear here as students apply.'}
+            action={filtersActive ? <Button size="sm" onClick={() => { setSearch(''); setStatusFilter('All'); setScholarshipFilter('All'); }}>Clear filters</Button> : undefined}
+          />
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-              <StatCard
-                label="Total Applications"
-                value={stats.total}
-                description="All submissions on file"
-                icon={Users}
-                accent="bg-slate-50 text-slate-500"
-                onClick={() => setStatusFilter('All')}
-              />
-              <StatCard
-                label="Under Evaluation"
-                value={stats.pending}
-                description="Awaiting your review"
-                icon={Clock}
-                accent="bg-amber-50 text-amber-600"
-                onClick={() => setStatusFilter('Under Evaluation')}
-              />
-              <StatCard
-                label="Needs Revision"
-                value={stats.revision}
-                description="Sent back to applicants"
-                icon={AlertCircle}
-                accent="bg-sky-50 text-sky-600"
-                onClick={() => setStatusFilter('Needs Revision')}
-              />
-              <StatCard
-                label="Approved"
-                value={stats.approved}
-                description="Granted scholarships"
-                icon={CheckCircle}
-                accent="bg-emerald-50 text-brand-green"
-                onClick={() => setStatusFilter('Approved')}
-              />
-              <StatCard
-                label="Rejected"
-                value={stats.rejected}
-                description="Did not qualify"
-                icon={XCircle}
-                accent="bg-rose-50 text-rose-600"
-                onClick={() => setStatusFilter('Rejected')}
-              />
-            </div>
-
-            <div className="bg-white rounded-xl border border-slate-100 card-shadow">
-              <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center gap-3">
-                <div className="relative flex-1 min-w-0">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search by name, student no., scholarship, or ref. code..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    className="w-full pl-10 pr-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all placeholder:text-slate-300"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <div className="relative min-w-35 flex-1 sm:flex-none">
-                    <select
-                      value={statusFilter}
-                      onChange={e => setStatusFilter(e.target.value as AppStatus | 'All')}
-                      className="w-full appearance-none pl-3.5 pr-9 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all"
-                    >
-                      <option value="All">All Statuses</option>
-                      {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                  {scholarshipOptions.length > 0 && (
-                    <div className="relative min-w-35 flex-1 sm:flex-none">
-                      <select
-                        value={scholarshipFilter}
-                        onChange={e => setScholarshipFilter(e.target.value)}
-                        className="w-full appearance-none pl-3.5 pr-9 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all md:max-w-45"
-                      >
-                        <option value="All">All Scholarships</option>
-                        {scholarshipOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-                      </select>
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {isLoading ? (
-                <div className="p-12 text-center text-xs text-slate-400 font-semibold">Loading applications...</div>
-              ) : filtered.length === 0 ? (
-                <div className="p-12 text-center">
-                  <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs font-semibold text-slate-400">No applications match your filters.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {filtered.map(app => {
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50/70 border-b border-slate-100">
+                  <tr>
+                    <Th>Applicant</Th>
+                    <Th>Scholarship</Th>
+                    <Th>Reference</Th>
+                    <Th>Submitted</Th>
+                    <Th>Status</Th>
+                    <Th className="w-10"><span className="sr-only">Open</span></Th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {pager.pageItems.map(app => {
                     const name = applicantName(app);
                     return (
-                      <button
+                      <tr
                         key={app._id}
                         onClick={() => openApplication(app)}
-                        className="w-full flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 sm:gap-4 p-3.5 sm:p-4 md:p-5 hover:bg-slate-50/60 transition-colors text-left group"
+                        className="group cursor-pointer hover:bg-slate-50/80 transition-colors"
                       >
-                        <Avatar name={name} avatarUrl={app.avatarUrl} size="sm" />
-                        <div className="flex-1 min-w-35">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-bold text-slate-800 truncate">{name}</p>
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 shrink-0">
-                              {app.applicationFormType}
-                            </span>
+                        <Td>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <AdminAvatar name={name} avatarUrl={app.avatarUrl} size="sm" />
+                            <div className="min-w-0">
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); openApplication(app); }}
+                                className="text-sm font-medium text-slate-900 truncate hover:text-brand-green focus:outline-hidden focus-visible:underline text-left"
+                              >
+                                {name}
+                              </button>
+                              <p className="text-xs text-slate-500 tabular-nums">{app.studentNumber}</p>
+                            </div>
                           </div>
-                          <p className="text-xs text-slate-500 truncate mt-0.5">
-                            {app.scholarshipName} &middot; Student No. {app.studentNumber}
-                          </p>
-                          <p className="text-[11px] text-slate-400 mt-0.5 md:hidden">{formatShortDate(app.createdAt)}</p>
-                        </div>
-                        <div className="hidden md:block text-xs text-slate-400 shrink-0 w-32">{formatDate(app.createdAt)}</div>
-                        <div className="shrink-0"><StatusBadge status={app.status} /></div>
-                        <Eye className="hidden sm:block w-4 h-4 text-slate-300 group-hover:text-brand-green transition-colors shrink-0" />
-                      </button>
+                        </Td>
+                        <Td>
+                          <p className="text-sm text-slate-700 truncate max-w-64">{app.scholarshipName}</p>
+                          <p className="text-xs text-slate-400">{FORM_TYPE_LABELS[app.applicationFormType] ?? app.applicationFormType}</p>
+                        </Td>
+                        <Td><span className="font-mono text-xs text-slate-500">{app.referenceCode}</span></Td>
+                        <Td className="whitespace-nowrap tabular-nums">{formatShortDate(app.createdAt)}</Td>
+                        <Td><StatusBadge status={app.status} /></Td>
+                        <Td><ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600" /></Td>
+                      </tr>
                     );
                   })}
-                </div>
-              )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile list */}
+            <ul className="md:hidden divide-y divide-slate-100">
+              {pager.pageItems.map(app => {
+                const name = applicantName(app);
+                return (
+                  <li key={app._id}>
+                    <button onClick={() => openApplication(app)} className="w-full flex items-start gap-3 p-4 text-left hover:bg-slate-50">
+                      <AdminAvatar name={name} avatarUrl={app.avatarUrl} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-medium text-slate-900 truncate">{name}</p>
+                          <StatusBadge status={app.status} />
+                        </div>
+                        <p className="text-xs text-slate-500 truncate mt-0.5">{app.scholarshipName}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{app.studentNumber} · {formatShortDate(app.createdAt)}</p>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="px-4 py-3 border-t border-slate-100">
+              <Pagination page={pager.page} pageCount={pager.pageCount} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} noun="applications" />
             </div>
           </>
         )}
-      </main>
-      </div>
-    </div>
+      </section>
+    </>)
   );
 }

@@ -197,34 +197,47 @@ export function SelectField({ path, label, required, hint, className, disabled, 
 }
 
 // Single choice rendered as pill buttons — Yes/No, Public/Private, etc.
+// Presentational; ChoiceField below binds it to the form context.
+export function ChoicePills({ value, onChange, options, disabled, invalid }: {
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  disabled?: boolean;
+  invalid?: boolean;
+}) {
+  return (
+    <div role="radiogroup" className="flex flex-wrap gap-2">
+      {options.map(option => {
+        const active = value === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={disabled}
+            onClick={() => onChange(option)}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition-colors focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 disabled:opacity-50 disabled:cursor-not-allowed ${
+              active
+                ? 'bg-brand-green text-white border-brand-green shadow-sm'
+                : invalid
+                ? 'bg-rose-50/60 text-slate-600 border-rose-300 hover:bg-rose-50'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-brand-green/40 hover:bg-brand-green/5'
+            }`}
+          >
+            {option}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ChoiceField({ path, label, required, hint, className, disabled, options }: BaseProps & { options: readonly string[] }) {
   const [value, setValue, error] = useField<string>(path);
   return (
     <Labelled label={label} required={required} error={error} hint={hint} className={className}>
-      <div role="radiogroup" className="flex flex-wrap gap-2">
-        {options.map(option => {
-          const active = value === option;
-          return (
-            <button
-              key={option}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              disabled={disabled}
-              onClick={() => setValue(option)}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition-colors focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 ${
-                active
-                  ? 'bg-brand-green text-white border-brand-green shadow-sm'
-                  : error
-                  ? 'bg-rose-50/60 text-slate-600 border-rose-300 hover:bg-rose-50'
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-brand-green/40 hover:bg-brand-green/5'
-              }`}
-            >
-              {option}
-            </button>
-          );
-        })}
-      </div>
+      <ChoicePills value={value ?? ''} onChange={setValue} options={options} disabled={disabled} invalid={!!error} />
     </Labelled>
   );
 }
@@ -340,23 +353,36 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-// One document slot: picker (single or multiple JPGs), optional document-type
-// selector for multi-type slots, the selected files, and what's on record.
-export function FileSlotField({ slot, required, compact }: { slot: DocumentSlot; required: boolean; compact?: boolean }) {
-  const { files, storedDocs, variants, addFiles, removeFile, setVariant, errors } = useGrantForm();
-  const [localError, setLocalError] = useState('');
-  const selected = files[slot.key] ?? [];
-  const onRecord = storedDocs[slot.key] ?? [];
-  const error = localError || errors[`doc.${slot.key}`];
-  const variantError = errors[`docVariant.${slot.key}`];
-  const max = slot.multiple ? (slot.maxFiles ?? 10) : 1;
+// One document requirement: picker (single or multiple JPGs), optional
+// document-type selector, the selected files, and how many are already on
+// record. Presentational; FileSlotField below binds it to the form context.
+export function FileSlotView({
+  label, hint, required, compact, multiple, maxFiles = 10, selected, onRecordCount, onPick, onRemove,
+  variants, variant, onVariantChange, error, variantError
+}: {
+  label: string;
+  hint?: string;
+  required: boolean;
+  compact?: boolean;
+  multiple?: boolean;
+  maxFiles?: number;
+  selected: File[];
+  onRecordCount: number;
+  onPick: (files: File[]) => void;
+  onRemove: (index: number) => void;
+  variants?: string[];
+  variant?: string;
+  onVariantChange?: (variant: string) => void;
+  error?: string;
+  variantError?: string;
+}) {
+  const max = multiple ? maxFiles : 1;
   const canAdd = selected.length < max;
 
-  const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!picked.length) return;
-    setLocalError(addFiles(slot, picked) ?? '');
+    if (picked.length) onPick(picked);
   };
 
   return (
@@ -364,27 +390,27 @@ export function FileSlotField({ slot, required, compact }: { slot: DocumentSlot;
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-bold text-slate-700 leading-snug">
-            {slot.label} {required ? <Req /> : <span className="text-[10px] font-semibold text-slate-400">(optional)</span>}
+            {label} {required ? <Req /> : <span className="text-[10px] font-semibold text-slate-400">(optional)</span>}
           </p>
-          {!compact && slot.hint && <p className="text-[11px] text-slate-400 mt-0.5">{slot.hint}</p>}
+          {!compact && hint && <p className="text-[11px] text-slate-400 mt-0.5">{hint}</p>}
         </div>
-        {onRecord.length > 0 && selected.length === 0 && (
+        {onRecordCount > 0 && selected.length === 0 && (
           <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
-            {onRecord.length > 1 ? `${onRecord.length} on file` : 'On file'}
+            {onRecordCount > 1 ? `${onRecordCount} on file` : 'On file'}
           </span>
         )}
       </div>
 
-      {slot.variants && (
+      {variants && onVariantChange && (
         <div>
           <select
-            value={variants[slot.key] ?? ''}
-            onChange={e => setVariant(slot.key, e.target.value)}
+            value={variant ?? ''}
+            onChange={e => onVariantChange(e.target.value)}
             className={`${variantError ? errorInputClass : inputClass} py-2 text-xs`}
-            aria-label={`Document type for ${slot.label}`}
+            aria-label={`Document type for ${label}`}
           >
             <option value="" disabled>Which document are you uploading?</option>
-            {slot.variants.map(v => <option key={v} value={v}>{v}</option>)}
+            {variants.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
           <FieldError message={variantError} />
         </div>
@@ -401,7 +427,7 @@ export function FileSlotField({ slot, required, compact }: { slot: DocumentSlot;
           </div>
           <button
             type="button"
-            onClick={() => removeFile(slot.key, index)}
+            onClick={() => onRemove(index)}
             className="p-1.5 text-rose-500 hover:bg-rose-100 rounded-md transition-colors"
             title="Remove file"
           >
@@ -416,17 +442,41 @@ export function FileSlotField({ slot, required, compact }: { slot: DocumentSlot;
           <span>
             {selected.length > 0
               ? `Add another JPG (${selected.length}/${max})`
-              : onRecord.length > 0
+              : onRecordCount > 0
               ? 'Replace file(s) (optional)'
-              : slot.multiple ? `Select JPG files (up to ${max})` : 'Select JPG file'}
+              : multiple ? `Select JPG files (up to ${max})` : 'Select JPG file'}
           </span>
-          <input type="file" accept=".jpg,.jpeg,image/jpeg" multiple={!!slot.multiple} onChange={onPick} className="hidden" />
+          <input type="file" accept=".jpg,.jpeg,image/jpeg" multiple={!!multiple} onChange={handleChange} className="hidden" />
         </label>
       )}
-      {!canAdd && slot.multiple && (
+      {!canAdd && multiple && (
         <p className="text-[11px] text-slate-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Maximum of {max} files reached.</p>
       )}
       <FieldError message={error} />
     </div>
+  );
+}
+
+export function FileSlotField({ slot, required, compact }: { slot: DocumentSlot; required: boolean; compact?: boolean }) {
+  const { files, storedDocs, variants, addFiles, removeFile, setVariant, errors } = useGrantForm();
+  const [localError, setLocalError] = useState('');
+  return (
+    <FileSlotView
+      label={slot.label}
+      hint={slot.hint}
+      required={required}
+      compact={compact}
+      multiple={slot.multiple}
+      maxFiles={slot.maxFiles}
+      selected={files[slot.key] ?? []}
+      onRecordCount={storedDocs[slot.key]?.length ?? 0}
+      onPick={picked => setLocalError(addFiles(slot, picked) ?? '')}
+      onRemove={index => removeFile(slot.key, index)}
+      variants={slot.variants}
+      variant={variants[slot.key]}
+      onVariantChange={v => setVariant(slot.key, v)}
+      error={localError || errors[`doc.${slot.key}`]}
+      variantError={errors[`docVariant.${slot.key}`]}
+    />
   );
 }

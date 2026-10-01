@@ -1,13 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { motion } from 'motion/react';
 import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend
 } from 'recharts';
-import {
-  TrendingUp, TrendingDown, Users, CheckCircle, XCircle, Clock, AlertCircle,
-  Percent, Timer, ChevronDown
-} from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, Clock, Percent, Timer, RefreshCw, BarChart3 } from 'lucide-react';
+import { Button, EmptyState, KpiCard, PageHeader, Panel, SelectInput, SkeletonRows, Tone } from './AdminUI';
 
 // --- Types (mirror AdminDashboard.tsx) -------------------------------------
 
@@ -36,6 +33,7 @@ interface AdminApplication {
 interface AdminAnalyticsProps {
   applications: AdminApplication[];
   isLoading?: boolean;
+  onRefresh?: () => void;
   id?: string;
 }
 
@@ -218,43 +216,59 @@ function buildTrend(current: number | null, previous: number | null, opts?: { su
 }
 
 function MetricTile({
-  label, value, sub, icon: Icon, accent, trend, trendGoodDirection = 'up'
+  label, value, sub, icon, tone, trend, trendGoodDirection = 'up'
 }: {
-  label: string; value: string; sub?: string; icon: React.ElementType; accent: string;
+  label: string; value: string; sub?: string; icon: React.ElementType; tone: Tone;
   trend?: Trend;
   trendGoodDirection?: 'up' | 'down';
 }) {
-  const isGood = trend && (trend.direction === trendGoodDirection);
+  const isGood = trend && trend.direction === trendGoodDirection;
   const isBad = trend && trend.direction !== 'flat' && trend.direction !== trendGoodDirection;
   return (
-    <motion.div
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.15 }}
-      className="p-4 sm:p-5 rounded-xl border border-slate-100 bg-white card-shadow min-w-0 flex flex-col justify-between"
-    >
-      <div className="flex justify-between items-start gap-2 mb-2.5">
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{label}</p>
-          <h3 className="text-2xl sm:text-3xl font-display font-extrabold text-brand-green mt-1">{value}</h3>
-        </div>
-        <div className={`p-2.5 rounded-lg shrink-0 ${accent}`}>
-          <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
-        </div>
-      </div>
-      {sub && <p className="text-[11px] sm:text-xs text-slate-500 font-medium">{sub}</p>}
-      {trend && (
-        <span className={`inline-flex items-center gap-1 mt-2 text-[11px] font-bold ${
-          isGood ? 'text-brand-green' : isBad ? 'text-rose-500' : 'text-slate-400'
-        }`}>
+    <KpiCard
+      label={label}
+      value={value}
+      hint={sub}
+      icon={icon}
+      tone={tone}
+      footer={trend && (
+        <span className={`inline-flex items-center gap-1 text-xs font-medium ${isGood ? 'text-emerald-700' : isBad ? 'text-rose-600' : 'text-slate-500'}`}>
           {trend.direction === 'up' ? <TrendingUp className="w-3.5 h-3.5" /> : trend.direction === 'down' ? <TrendingDown className="w-3.5 h-3.5" /> : null}
           {trend.text}
         </span>
       )}
-    </motion.div>
+    />
   );
 }
 
-export default function AdminAnalytics({ applications, isLoading, id }: AdminAnalyticsProps) {
+// Ranked horizontal bars as plain HTML: full labels (no axis truncation),
+// right-aligned counts, and a share-of-total bar.
+function RankedBars({ rows, color, total }: { rows: { name: string; count: number }[]; color: string; total: number }) {
+  if (rows.length === 0) return <p className="text-sm text-slate-500">No data for this period.</p>;
+  const max = Math.max(...rows.map(r => r.count));
+  return (
+    <ol className="space-y-3.5">
+      {rows.map((row, i) => (
+        <li key={row.name}>
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="text-slate-700 min-w-0"><span className="text-slate-400 tabular-nums mr-2">{i + 1}</span>{row.name}</span>
+            <span className="shrink-0 tabular-nums font-medium text-slate-900">
+              {row.count}<span className="text-slate-400 font-normal ml-1.5 text-xs">{total ? Math.round((row.count / total) * 100) : 0}%</span>
+            </span>
+          </div>
+          <div className="mt-1.5 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+            <div className="h-full rounded-full" style={{ width: `${(row.count / max) * 100}%`, backgroundColor: color }} />
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+const TOOLTIP_STYLE = { borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(15,23,42,0.08)' };
+const AXIS_TICK = { fontSize: 11, fill: '#94a3b8' };
+
+export default function AdminAnalytics({ applications, isLoading, onRefresh, id }: AdminAnalyticsProps) {
   // Default range now adapts to the data: if submissions cluster into a
   // short burst (e.g. a single active month), open on the window that
   // actually contains that burst instead of a static 90-day default that
@@ -350,208 +364,126 @@ export default function AdminAnalytics({ applications, isLoading, id }: AdminAna
   }, [scoped]);
 
   return (
-    <div id={id} className="space-y-5 sm:space-y-6">
-      {/* Header + range selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="font-display font-black text-lg sm:text-xl md:text-2xl text-slate-900 tracking-tight">Statistics & Trends</h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">Overall application volume, outcomes, and processing performance.</p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {usedSmartDefault && (
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">
-              Auto-selected
-            </span>
-          )}
-          <div className="relative">
-            <select
-              value={effectiveRange}
-              onChange={e => setRange(e.target.value as RangeOption)}
-              className="w-full sm:w-auto appearance-none pl-3.5 pr-9 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all"
-            >
-              {RANGE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
-        </div>
-      </div>
+    <div id={id} className="space-y-6">
+      <PageHeader
+        title="Statistics"
+        description="Application volume, outcomes, and processing performance across every scholarship."
+        actions={
+          <>
+            <SelectInput value={effectiveRange} onChange={v => setRange(v as RangeOption)} className="w-52" ariaLabel="Date range">
+              {RANGE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.label}{usedSmartDefault && r.key === effectiveRange ? ' (auto)' : ''}</option>)}
+            </SelectInput>
+            {onRefresh && <Button icon={RefreshCw} onClick={onRefresh} disabled={isLoading}>Refresh</Button>}
+          </>
+        }
+      />
 
       {isLoading ? (
-        <div className="p-12 text-center text-xs text-slate-400 font-semibold bg-white rounded-xl border border-slate-100 card-shadow">
-          Loading statistics...
-        </div>
+        <Panel><SkeletonRows rows={4} /></Panel>
       ) : scoped.length === 0 ? (
-        <div className="p-12 text-center bg-white rounded-xl border border-slate-100 card-shadow">
-          <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-          <p className="text-xs font-semibold text-slate-400">No applications submitted in this period.</p>
-        </div>
+        <Panel bodyClassName="p-0">
+          <EmptyState icon={BarChart3} title="No applications in this period" description="Try a longer date range." />
+        </Panel>
       ) : (
         <>
-          {/* Key metric tiles */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <MetricTile label="Submissions" value={String(stats.total)} sub={rangeConfig.label} icon={Users} tone="slate" trend={submissionTrend} />
             <MetricTile
-              label="Total Submissions"
-              value={String(stats.total)}
-              sub={rangeConfig.label}
-              icon={Users}
-              accent="bg-slate-50 text-slate-500"
-              trend={submissionTrend}
-            />
-            <MetricTile
-              label="Approval Rate"
+              label="Approval rate"
               value={stats.approvalRate !== null ? `${stats.approvalRate.toFixed(0)}%` : '—'}
               sub={`${stats.approved} approved of ${stats.approved + stats.rejected} decided`}
               icon={Percent}
-              accent="bg-emerald-50 text-brand-green"
+              tone="green"
               trend={approvalRateTrend}
             />
             <MetricTile
-              label="Avg. Processing Time"
-              value={avgProcessingDays !== null ? `${avgProcessingDays.toFixed(1)}d` : '—'}
-              sub={avgRevisionCycles !== null && avgRevisionCycles > 0
-                ? `Submission to final decision · ${avgRevisionCycles.toFixed(1)} revision cycles avg`
-                : 'Submission to final decision'}
+              label="Avg. time to decision"
+              value={avgProcessingDays !== null ? `${avgProcessingDays.toFixed(1)} days` : '—'}
+              sub={avgRevisionCycles !== null && avgRevisionCycles > 0 ? `${avgRevisionCycles.toFixed(1)} revision cycles on average` : 'Submission to final decision'}
               icon={Timer}
-              accent="bg-sky-50 text-sky-600"
+              tone="sky"
               trend={processingTimeTrend}
               trendGoodDirection="down"
             />
             <MetricTile
-              label="Still Pending"
+              label="Still open"
               value={String(stats.pending + stats.revision)}
-              sub={`${stats.pending} evaluating · ${stats.revision} needs revision`}
+              sub={`${stats.pending} awaiting review · ${stats.revision} needs revision`}
               icon={Clock}
-              accent="bg-amber-50 text-amber-600"
+              tone="amber"
               trend={pendingTrend}
               trendGoodDirection="down"
             />
           </div>
 
-          {/* Submission trend + status breakdown */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
-            <div className="lg:col-span-2 bg-white rounded-xl border border-slate-100 card-shadow p-4 sm:p-6 min-w-0">
-              <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider mb-4">Weekly Submission Volume</h3>
-              <div className="h-64 sm:h-72">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Panel title="Weekly submissions" description="New applications received each week" className="lg:col-span-2">
+              <div className="h-64 sm:h-72 -ml-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={trendData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <AreaChart data={trendData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
                     <defs>
                       <linearGradient id="submittedGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#059669" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="#059669" stopOpacity={0} />
+                        <stop offset="0%" stopColor="#047857" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#047857" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <Tooltip
-                      contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }}
-                      labelStyle={{ fontWeight: 700, color: '#0f172a' }}
-                    />
-                    <Area type="monotone" dataKey="submitted" name="Submitted" stroke="#059669" strokeWidth={2} fill="url(#submittedGradient)" />
+                    <CartesianGrid stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={16} />
+                    <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ fontWeight: 600, color: '#0f172a' }} />
+                    <Area type="monotone" dataKey="submitted" name="Submitted" stroke="#047857" strokeWidth={2} fill="url(#submittedGradient)" dot={false} activeDot={{ r: 4 }} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+            </Panel>
 
-            <div className="bg-white rounded-xl border border-slate-100 card-shadow p-4 sm:p-6 min-w-0">
-              <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider mb-4">Status Breakdown</h3>
-              <div className="h-52 sm:h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={statusBreakdown}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius="55%"
-                      outerRadius="85%"
-                      paddingAngle={2}
-                    >
-                      {statusBreakdown.map(entry => <Cell key={entry.name} fill={entry.color} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="space-y-1.5 mt-2">
+            <Panel title="Status breakdown" description={`${stats.total} applications in this period`}>
+              <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100">
                 {statusBreakdown.map(entry => (
-                  <div key={entry.name} className="flex items-center justify-between text-[11px]">
-                    <span className="flex items-center gap-1.5 text-slate-600 font-medium min-w-0 truncate">
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                      {entry.name}
-                    </span>
-                    <span className="font-bold text-slate-800 shrink-0">{entry.value}</span>
-                  </div>
+                  <div key={entry.name} style={{ width: `${(entry.value / stats.total) * 100}%`, backgroundColor: entry.color }} title={`${entry.name}: ${entry.value}`} />
                 ))}
               </div>
-            </div>
+              <ul className="mt-5 divide-y divide-slate-100">
+                {statusBreakdown.map(entry => (
+                  <li key={entry.name} className="flex items-center justify-between py-2.5 text-sm">
+                    <span className="flex items-center gap-2 text-slate-700">
+                      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: entry.color }} />
+                      {entry.name}
+                    </span>
+                    <span className="tabular-nums font-medium text-slate-900">
+                      {entry.value}
+                      <span className="text-slate-400 font-normal text-xs ml-1.5">{Math.round((entry.value / stats.total) * 100)}%</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
           </div>
 
-          {/* Decision outcomes over time */}
-          <div className="bg-white rounded-xl border border-slate-100 card-shadow p-4 sm:p-6 min-w-0">
-            <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider mb-4">Weekly Decisions</h3>
-            <div className="h-64 sm:h-72">
+          <Panel title="Weekly decisions" description="Approvals, rejections and revision requests recorded each week">
+            <div className="h-64 sm:h-72 -ml-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trendData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }} labelStyle={{ fontWeight: 700, color: '#0f172a' }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" />
-                  <Bar dataKey="approved" name="Approved" fill={STATUS_COLORS.Approved} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="rejected" name="Rejected" fill={STATUS_COLORS.Rejected} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="revision" name="Needs Revision" fill={STATUS_COLORS['Needs Revision']} radius={[4, 4, 0, 0]} />
+                <BarChart data={trendData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }} barCategoryGap="30%">
+                  <CartesianGrid stroke="#f1f5f9" vertical={false} />
+                  <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={16} />
+                  <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ fontWeight: 600, color: '#0f172a' }} cursor={{ fill: '#f8fafc' }} />
+                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} iconType="square" iconSize={10} />
+                  <Bar dataKey="approved" name="Approved" stackId="d" fill={STATUS_COLORS.Approved} />
+                  <Bar dataKey="revision" name="Needs revision" stackId="d" fill={STATUS_COLORS['Needs Revision']} />
+                  <Bar dataKey="rejected" name="Rejected" stackId="d" fill={STATUS_COLORS.Rejected} radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </Panel>
 
-          {/* Scholarship + program breakdowns */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
-            <div className="bg-white rounded-xl border border-slate-100 card-shadow p-4 sm:p-6 min-w-0">
-              <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider mb-4">Top Scholarships by Volume</h3>
-              <div className="h-64 sm:h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={scholarshipBreakdown} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      width={120}
-                      tick={{ fontSize: 10, fill: '#475569' }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v: string) => (v.length > 18 ? `${v.slice(0, 18)}…` : v)}
-                    />
-                    <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                    <Bar dataKey="count" name="Applications" fill="#059669" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-slate-100 card-shadow p-4 sm:p-6 min-w-0">
-              <h3 className="font-display font-bold text-sm text-slate-900 uppercase tracking-wider mb-4">Top Programs / Courses</h3>
-              <div className="h-64 sm:h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={programBreakdown} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      width={120}
-                      tick={{ fontSize: 10, fill: '#475569' }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v: string) => (v.length > 18 ? `${v.slice(0, 18)}…` : v)}
-                    />
-                    <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                    <Bar dataKey="count" name="Applications" fill="#0ea5e9" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Panel title="Applications by scholarship">
+              <RankedBars rows={scholarshipBreakdown} color="#047857" total={stats.total} />
+            </Panel>
+            <Panel title="Applications by program">
+              <RankedBars rows={programBreakdown} color="#0284c7" total={stats.total} />
+            </Panel>
           </div>
         </>
       )}

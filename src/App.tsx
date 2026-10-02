@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride } from './types';
-import { applyScholarshipOverrides, mockScholarships } from './data/scholarships';
+import { acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships } from './data/scholarships';
 import { mockAnnouncements } from './data/announcements';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
 
@@ -517,7 +517,9 @@ export default function App() {
     }
     setSelectedScholarshipId(id);
     setResubmitApplication(null);
-    setCurrentPage('apply-scholarship');
+    // Info-only scholarships have no application form; show their details.
+    const target = scholarships.find(s => s.id === id);
+    setCurrentPage(target && !acceptsOnlineApplications(target) ? 'scholarship-details' : 'apply-scholarship');
   };
 
   // Entry point for "Resubmit Documents" in ScholarshipDetails. Fetches the

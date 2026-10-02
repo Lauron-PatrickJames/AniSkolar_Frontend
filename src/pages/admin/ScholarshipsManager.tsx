@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/react';
 import { AlertTriangle, Award, Calendar, CircleCheck, CircleDot, CircleOff, Pencil, RefreshCw } from 'lucide-react';
 import { Scholarship, ScholarshipOverride } from '../../types';
-import { OFFICE_LABELS, applyScholarshipOverrides, mockScholarships, officeOf } from '../../data/scholarships';
+import { OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships, officeOf } from '../../data/scholarships';
 import { API_BASE_URL, authHeaders, formatDateTime } from './adminData';
 import {
   Alert, Badge, Button, Card, EmptyState, ErrorState, Field, KpiCard, KpiGrid, Modal, PageHeader, SegmentedControl,
@@ -248,7 +248,7 @@ export default function ScholarshipsManager() {
   };
 
   const stats = useMemo(() => ({
-    open: rows.filter(r => r.scholarship.status !== 'Closed').length,
+    open: rows.filter(r => r.scholarship.status !== 'Closed' && acceptsOnlineApplications(r.scholarship)).length,
     closed: rows.filter(r => r.scholarship.status === 'Closed').length,
     applications: rows.reduce((sum, r) => sum + r.applications.total, 0),
     awaiting: rows.reduce((sum, r) => sum + (r.applications.byStatus['Under Evaluation'] ?? 0), 0)
@@ -274,7 +274,7 @@ export default function ScholarshipsManager() {
       {savedName && <Alert tone="success" onDismiss={() => setSavedName('')}>Saved changes to {savedName}.</Alert>}
 
       <KpiGrid>
-        <KpiCard label="Accepting applications" value={kpi(stats.open)} hint="Open or closing soon" icon={CircleCheck} tone="success" loading={firstLoad} />
+        <KpiCard label="Accepting applications" value={kpi(stats.open)} hint="Open online applications" icon={CircleCheck} tone="success" loading={firstLoad} />
         <KpiCard label="Closed" value={kpi(stats.closed)} hint="Hidden from students" icon={CircleOff} tone="danger" loading={firstLoad} />
         <KpiCard label="Applications" value={kpi(stats.applications)} hint="Across every office" icon={Award} tone="accent" loading={firstLoad} />
         <KpiCard label="Under evaluation" value={kpi(stats.awaiting)} hint="Waiting for a decision" icon={AlertTriangle} tone="warning" loading={firstLoad} />
@@ -294,6 +294,7 @@ export default function ScholarshipsManager() {
               const meta = STATUS_META[s.status] ?? STATUS_META.Open;
               const counts = row.applications.byStatus;
               const office = officeOf(s);
+              const infoOnly = !acceptsOnlineApplications(s);
               const edited = Object.keys(row.overrides).some(k => !['id', 'updatedAt', 'updatedBy'].includes(k));
               return (
                 <li key={s.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:gap-4">
@@ -302,17 +303,22 @@ export default function ScholarshipsManager() {
                       <h3 className="mr-1 text-sm font-medium text-ink">{s.name}</h3>
                       <Badge tone={meta.tone} icon={meta.icon}>{s.status}</Badge>
                       <Badge>{OFFICE_LABELS[office]}</Badge>
+                      {infoOnly && <Badge>Info only</Badge>}
                       {edited && <Badge tone="accent">Edited</Badge>}
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{s.description}</p>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-subtle">
                       <span className="flex items-center gap-1"><Calendar className="size-3.5" aria-hidden />{s.deadline}</span>
+                      {infoOnly ? (
+                        <span>No online applications — listed for information</span>
+                      ) : (
                       <span className="tabular-nums">
                         {row.applications.total} application{row.applications.total === 1 ? '' : 's'}
                         {row.applications.total > 0 && (
                           <> · {counts['Under Evaluation'] ?? 0} under evaluation · {counts['Approved'] ?? 0} approved · {counts['Needs Revision'] ?? 0} needs revision · {counts['Rejected'] ?? 0} rejected</>
                         )}
                       </span>
+                      )}
                       {row.overrides.updatedAt && (
                         <span>Updated {formatDateTime(row.overrides.updatedAt)}{row.overrides.updatedBy ? ` by ${row.overrides.updatedBy}` : ''}</span>
                       )}

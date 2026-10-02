@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { CheckCircle2, ChevronRight, Clock, Inbox, RefreshCw, RotateCcw, Send, ShieldCheck } from 'lucide-react';
-import { mockScholarships, officeOf } from '../../data/scholarships';
+import { acceptsOnlineApplications, mockScholarships, officeOf } from '../../data/scholarships';
 import {
   AdminApplication, AppStatus, applicantName, formTypeLabel,
   formatShortDate, isOfficeApp, officeName
@@ -51,7 +51,7 @@ export default function ApplicationsList({
     // Every scholarship this admin's office handles, even before it has
     // any applications, plus anything else that shows up in the data.
     mockScholarships
-      .filter(s => !adminOffice || officeOf(s) === adminOffice)
+      .filter(s => acceptsOnlineApplications(s) && (!adminOffice || officeOf(s) === adminOffice))
       .forEach(s => map.set(s.id, s.name));
     applications.forEach(a => map.set(a.scholarshipId, a.scholarshipName));
     return Array.from(map.entries());

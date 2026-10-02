@@ -29,6 +29,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     ? (OFFICE_LABELS[adminOffice as keyof typeof OFFICE_LABELS] ?? adminOffice)
     : adminOfficeRaw === 'ADSO' ? OFFICE_SHORT_LABELS.LSO : 'No office assigned';
 
+  // Announcements are the AdSO's alone; the server enforces the same rule.
+  const canManageAnnouncements = adminOfficeRaw === 'ADSO';
+  const hiddenViews: MainView[] = canManageAnnouncements ? [] : ['announcements'];
+
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -81,6 +85,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   };
 
   const navigate = (view: MainView) => {
+    if (hiddenViews.includes(view)) return;
     setMainView(view);
     setSelectedId(null);
     setSelectedScholar(null);
@@ -116,7 +121,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onSelectStudent={setSelectedScholar}
       />
     );
-  } else if (mainView === 'announcements') {
+  } else if (mainView === 'announcements' && canManageAnnouncements) {
     page = <AdminAnnouncements />;
   } else if (selected) {
     page = (
@@ -154,6 +159,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       adminEmail={user?.primaryEmailAddress?.emailAddress}
       officeLabel={officeLabel}
       pendingCount={pendingCount}
+      hiddenViews={hiddenViews}
       breadcrumbs={breadcrumbs}
       pageKey={`${mainView}:${selectedId ?? ''}:${selectedScholar ?? ''}`}
     >

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
 import {
-  AlertCircle, Award, Bell, Calendar, Clock, ExternalLink, Facebook, FileEdit, Megaphone, Pencil, Pin, PinOff, Plus,
-  RefreshCw, RotateCw, Send, Trash2
+  AlertCircle, Award, Bell, Calendar, Clock, ExternalLink, Facebook, FileEdit, ImagePlus, Megaphone, Pencil, Pin, PinOff,
+  Plus, RefreshCw, RotateCw, Send, Trash2, X
 } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatDateTime } from './adminData';
 import {
@@ -15,30 +15,14 @@ const CATEGORIES = ['General', 'Update', 'Deadline', 'Event'] as const;
 type Category = typeof CATEGORIES[number];
 type AnnouncementStatus = 'draft' | 'published';
 
-// Lifecycle of the Facebook cross-post, independent of the announcement's
-// own draft/published status:
-//   none    — never requested
-//   pending — request sent to the backend, waiting on the Graph API call
-//   posted  — live on the Page, facebookPostUrl is populated
-//   failed  — Graph API call errored, facebookError has the reason
-type FacebookStatus = 'none' | 'pending' | 'posted' | 'failed';
+// Facebook Page cross-post state, owned by the backend (services/facebook.js):
+//   not_posted — not on the Page (draft, or "Also post to Facebook" off)
+//   posted     — live on the Page; fbPermalink links to it
+//   failed     — the last publish / edit / delete failed; fbError says why
+// The post exists while the announcement is published and fbEnabled is on.
+type FbStatus = 'not_posted' | 'posted' | 'failed';
 
-// Shape returned by GET /api/announcements: the frontend Announcement type
-// plus admin-only fields (status, isPinned, publishedAt, createdBy, ...)
-// and the Facebook cross-post fields.
-//
-// BACKEND CONTRACT for Facebook cross-posting (not yet implemented server-side):
-//   - Announcement documents gain: facebookStatus, facebookPostId,
-//     facebookPostUrl, facebookError, facebookPostedAt.
-//   - POST /api/announcements/:id/facebook triggers (or retries) the
-//     cross-post for a published announcement and returns the updated
-//     announcement. Calling it again after 'posted' should return the
-//     existing post unless the body has { force: true }.
-//   - POST /api/announcements and PATCH /api/announcements/:id accept an
-//     optional `crosspostToFacebook: boolean`; when true and status is being
-//     set to 'published', the backend cross-posts right after saving.
-//   - DELETE /api/announcements/:id does NOT delete the Facebook post
-//     (surfaced in the delete confirmation).
+// Shape returned by GET /api/announcements (Announcement.toClientShape).
 interface AdminAnnouncement {
   id: string;
   title: string;
@@ -52,13 +36,29 @@ interface AdminAnnouncement {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-  facebookStatus: FacebookStatus;
-  facebookPostUrl: string | null;
-  facebookError: string | null;
-  facebookPostedAt: string | null;
+  imageUrl: string | null;
+  fbEnabled: boolean;
+  fbStatus: FbStatus;
+  fbPostId: string | null;
+  fbPermalink: string | null;
+  fbError: string | null;
+  fbLastSyncedAt: string | null;
 }
 
-const FACEBOOK_DEFAULTS = { facebookStatus: 'none' as FacebookStatus, facebookPostUrl: null, facebookError: null, facebookPostedAt: null };
+// Result of the Facebook step returned alongside a saved announcement.
+interface FacebookResult {
+  ok: boolean;
+  error?: string;
+  tokenExpired?: boolean;
+}
+
+const FB_DEFAULTS: Pick<AdminAnnouncement, 'imageUrl' | 'fbEnabled' | 'fbStatus' | 'fbPostId' | 'fbPermalink' | 'fbError' | 'fbLastSyncedAt'> = {
+  imageUrl: null, fbEnabled: false, fbStatus: 'not_posted', fbPostId: null, fbPermalink: null, fbError: null, fbLastSyncedAt: null
+};
+
+const normalize = (raw: Partial<AdminAnnouncement>): AdminAnnouncement => ({ ...FB_DEFAULTS, ...raw } as AdminAnnouncement);
+
+const imageSrc = (url: string | null) => (url ? `${API_BASE_URL}${url}` : null);
 
 const CATEGORY_ICONS: Record<Category, React.ElementType> = {
   General: Megaphone,
@@ -67,48 +67,88 @@ const CATEGORY_ICONS: Record<Category, React.ElementType> = {
   Event: Calendar
 };
 
-const FACEBOOK_BADGE: Record<Exclude<FacebookStatus, 'none'>, { label: string; tone: Tone; icon: React.ElementType }> = {
-  pending: { label: 'Posting to Facebook…', tone: 'neutral', icon: Clock },
-  posted: { label: 'On Facebook', tone: 'info', icon: Facebook },
-  failed: { label: 'Facebook post failed', tone: 'danger', icon: AlertCircle }
+const FB_BADGE: Record<FbStatus, { label: string; tone: Tone }> = {
+  posted: { label: 'Posted', tone: 'info' },
+  not_posted: { label: 'Not posted', tone: 'neutral' },
+  failed: { label: 'Failed', tone: 'danger' }
 };
+
+// The Facebook post text: title, blank line, body. Must match
+// composeMessage() in the backend's services/facebook.js.
+function facebookMessage(title: string, content: string): string {
+  return `${title.trim()}\n\n${content.trim()}`.trim();
+}
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 // --- Editor (create + edit share one form) -----------------------------------
 
 interface EditorState {
   id?: string;
+  status?: AnnouncementStatus;   // current status when editing
   title: string;
   description: string;
   content: string;
   category: Category;
   isPinned: boolean;
-  crosspostToFacebook: boolean;
+  fbEnabled: boolean;
+  existingImageUrl: string | null;  // image already saved on the announcement
+}
+
+interface ImageChange {
+  file: File | null;   // newly picked image
+  remove: boolean;     // remove the saved image
 }
 
 const BLANK_FORM: EditorState = {
-  title: '', description: '', content: '', category: 'General', isPinned: false, crosspostToFacebook: false
+  title: '', description: '', content: '', category: 'General', isPinned: false, fbEnabled: true, existingImageUrl: null
 };
 
 const LIMITS = { title: 150, description: 500, content: 8000 };
 type TextField = keyof typeof LIMITS;
-const FIELD_LABELS: Record<TextField, string> = { title: 'Title', description: 'Summary', content: 'Full content' };
+const FIELD_LABELS: Record<TextField, string> = { title: 'Title', description: 'Summary', content: 'Body' };
 
 function validate(form: EditorState): Partial<Record<TextField, string>> {
   const errors: Partial<Record<TextField, string>> = {};
   if (!form.title.trim()) errors.title = 'Enter a title.';
   if (!form.description.trim()) errors.description = 'Enter a short summary.';
-  if (!form.content.trim()) errors.content = 'Enter the full announcement.';
+  if (!form.content.trim()) errors.content = 'Enter the announcement body.';
   return errors;
+}
+
+// How the post will read on the Page. Plain, Facebook-like layout using the
+// admin tokens; no attempt to imitate Facebook's own styling.
+function FacebookPreview({ title, content, imageUrl }: { title: string; content: string; imageUrl: string | null }) {
+  const message = facebookMessage(title, content);
+  return (
+    <div className="overflow-hidden rounded-control bg-surface ring-1 ring-line" aria-label="Facebook post preview">
+      <div className="flex items-center gap-2.5 px-4 pt-3.5">
+        <span className="flex size-9 items-center justify-center rounded-full bg-info-bg text-info-fg">
+          <Facebook className="size-4" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink">AdSO Facebook Page</p>
+          <p className="text-xs text-ink-subtle">Just now · Public</p>
+        </div>
+      </div>
+      <p className="whitespace-pre-line px-4 py-3 text-sm text-ink wrap-break-word">
+        {message || <span className="text-ink-subtle">Your title and body will appear here.</span>}
+      </p>
+      {imageUrl && <img src={imageUrl} alt="" className="max-h-72 w-full border-t border-line object-cover" />}
+    </div>
+  );
 }
 
 function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
   initial: EditorState;
   onClose: () => void;
-  onSave: (form: EditorState, publish: boolean) => void;
+  onSave: (form: EditorState, image: ImageChange, publish: boolean) => void;
   isSaving: boolean;
   error: string;
 }) {
   const [form, setForm] = useState<EditorState>(initial);
+  const [image, setImage] = useState<ImageChange>({ file: null, remove: false });
+  const [imageError, setImageError] = useState('');
   // Errors stay hidden until the first save attempt, then update live.
   const [attempted, setAttempted] = useState(false);
   const [savingAs, setSavingAs] = useState<'draft' | 'publish' | null>(null);
@@ -117,13 +157,44 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
     description: useRef<HTMLTextAreaElement>(null),
     content: useRef<HTMLTextAreaElement>(null)
   };
+  const fileInput = useRef<HTMLInputElement>(null);
   const isEdit = !!initial.id;
+  const isLive = initial.status === 'published';
   const errors = attempted ? validate(form) : {};
   const errorFields = Object.keys(errors) as TextField[];
 
+  // Object URL for a newly picked image, released when it changes.
+  const [pickedUrl, setPickedUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!image.file) { setPickedUrl(null); return; }
+    const url = URL.createObjectURL(image.file);
+    setPickedUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [image.file]);
+  const previewImage = pickedUrl ?? (image.remove ? null : imageSrc(form.existingImageUrl));
+
   const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setForm(f => ({ ...f, [key]: value }));
 
+  const pickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!(file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name))) {
+      setImageError('Use a JPG image.');
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageError('The image must be under 10MB.');
+      return;
+    }
+    setImageError('');
+    setImage({ file, remove: false });
+  };
+
+  const removeImage = () => setImage({ file: null, remove: !!form.existingImageUrl });
+
   const submit = (publish: boolean) => {
+    if (isSaving) return;
     setAttempted(true);
     const found = validate(form);
     const first = (['title', 'description', 'content'] as TextField[]).find(k => found[k]);
@@ -132,10 +203,16 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
       return;
     }
     setSavingAs(publish ? 'publish' : 'draft');
-    onSave(form, publish);
+    onSave(form, image, publish);
   };
 
   const counter = (key: TextField) => `${form[key].length}/${LIMITS[key]}`;
+  const primaryLabel = isEdit && isLive
+    ? 'Save changes'
+    : form.fbEnabled ? 'Publish and post to Facebook' : 'Publish';
+  const fbHelp = isLive && form.fbEnabled
+    ? 'Saving updates the Facebook post. Turning this off deletes it from the Page.'
+    : 'Posts to the Page when you publish. Saving a draft never posts.';
 
   return (
     <Modal
@@ -144,98 +221,114 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
       onClose={onClose}
       dismissible={!isSaving}
       initialFocusRef={refs.title}
+      size="lg"
       footer={
         <>
           <Button onClick={onClose} disabled={isSaving}>Cancel</Button>
           <Button icon={FileEdit} loading={isSaving && savingAs === 'draft'} disabled={isSaving} onClick={() => submit(false)}>
-            Save as draft
+            {isLive ? 'Unpublish to draft' : 'Save as draft'}
           </Button>
           <Button variant="primary" icon={Send} loading={isSaving && savingAs === 'publish'} disabled={isSaving} onClick={() => submit(true)}>
-            {form.crosspostToFacebook ? 'Publish and post to Facebook' : 'Publish'}
+            {primaryLabel}
           </Button>
         </>
       }
     >
-      <form className="space-y-5" onSubmit={e => { e.preventDefault(); submit(true); }} noValidate>
-        {error && <Alert tone="danger" title="Couldn't save the announcement">{error}</Alert>}
-        {errorFields.length > 0 && (
-          <Alert tone="danger" title={`Fix ${errorFields.length === 1 ? 'this field' : `these ${errorFields.length} fields`} before saving`}>
-            {errorFields.map(k => FIELD_LABELS[k]).join(', ')}
-          </Alert>
-        )}
+      <form className="grid grid-cols-1 gap-6 lg:grid-cols-5" onSubmit={e => { e.preventDefault(); submit(true); }} noValidate>
+        <div className="space-y-5 lg:col-span-3">
+          {error && <Alert tone="danger" title="Couldn't save the announcement">{error}</Alert>}
+          {errorFields.length > 0 && (
+            <Alert tone="danger" title={`Fix ${errorFields.length === 1 ? 'this field' : `these ${errorFields.length} fields`} before saving`}>
+              {errorFields.map(k => FIELD_LABELS[k]).join(', ')}
+            </Alert>
+          )}
 
-        <Field label="Title" error={errors.title} labelAside={counter('title')}>
-          <TextInput
-            ref={refs.title}
-            value={form.title}
-            onChange={e => set('title', e.target.value)}
-            maxLength={LIMITS.title}
-            placeholder="e.g. 1st Semester Scholarship Application Window Now Open"
-            disabled={isSaving}
-          />
-        </Field>
-
-        <Field
-          label="Summary"
-          helper="Shown on the collapsed card and used as the Facebook post text."
-          error={errors.description}
-          labelAside={counter('description')}
-        >
-          <Textarea
-            ref={refs.description}
-            value={form.description}
-            onChange={e => set('description', e.target.value)}
-            rows={2}
-            maxLength={LIMITS.description}
-            placeholder="One or two sentences summarizing the announcement…"
-            className="resize-none"
-            disabled={isSaving}
-          />
-        </Field>
-
-        <Field
-          label="Full content"
-          helper="Shown when a student expands the announcement."
-          error={errors.content}
-          labelAside={counter('content')}
-        >
-          <Textarea
-            ref={refs.content}
-            value={form.content}
-            onChange={e => set('content', e.target.value)}
-            rows={8}
-            maxLength={LIMITS.content}
-            placeholder="Write the full announcement…"
-            className="resize-y"
-            disabled={isSaving}
-          />
-        </Field>
-
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Field label="Category">
-            <Select value={form.category} onChange={v => set('category', v as Category)} disabled={isSaving}>
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </Select>
-          </Field>
-          <div className="sm:pt-7">
-            <Checkbox
-              checked={form.isPinned}
-              onChange={v => set('isPinned', v)}
+          <Field label="Title" error={errors.title} labelAside={counter('title')}>
+            <TextInput
+              ref={refs.title}
+              value={form.title}
+              onChange={e => set('title', e.target.value)}
+              maxLength={LIMITS.title}
+              placeholder="e.g. 1st Semester Scholarship Application Window Now Open"
               disabled={isSaving}
-              label="Pin to top of feed"
-              description="Pinned announcements stay above newer ones."
             />
+          </Field>
+
+          <Field label="Summary" helper="Shown on the collapsed card in the student portal." error={errors.description} labelAside={counter('description')}>
+            <Textarea
+              ref={refs.description}
+              value={form.description}
+              onChange={e => set('description', e.target.value)}
+              rows={2}
+              maxLength={LIMITS.description}
+              placeholder="One or two sentences summarizing the announcement…"
+              className="resize-none"
+              disabled={isSaving}
+            />
+          </Field>
+
+          <Field label="Body" helper="Shown when a student expands the announcement, and posted to Facebook under the title." error={errors.content} labelAside={counter('content')}>
+            <Textarea
+              ref={refs.content}
+              value={form.content}
+              onChange={e => set('content', e.target.value)}
+              rows={8}
+              maxLength={LIMITS.content}
+              placeholder="Write the full announcement…"
+              className="resize-y"
+              disabled={isSaving}
+            />
+          </Field>
+
+          <Field label="Image" optional helper="One JPG, up to 10MB. Changing the image replaces the Facebook post." error={imageError || undefined}>
+            <div className="flex items-center gap-3">
+              {previewImage && (
+                <img src={previewImage} alt="Selected announcement image" className="size-16 shrink-0 rounded-control object-cover ring-1 ring-line" />
+              )}
+              <input ref={fileInput} type="file" accept=".jpg,.jpeg,image/jpeg" className="hidden" onChange={pickImage} disabled={isSaving} />
+              <Button size="sm" icon={ImagePlus} onClick={() => fileInput.current?.click()} disabled={isSaving}>
+                {previewImage ? 'Replace image' : 'Add image'}
+              </Button>
+              {previewImage && (
+                <Button size="sm" variant="ghost" icon={X} onClick={removeImage} disabled={isSaving}>Remove</Button>
+              )}
+            </div>
+          </Field>
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <Field label="Category">
+              <Select value={form.category} onChange={v => set('category', v as Category)} disabled={isSaving}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </Select>
+            </Field>
+            <div className="sm:pt-7">
+              <Checkbox
+                checked={form.isPinned}
+                onChange={v => set('isPinned', v)}
+                disabled={isSaving}
+                label="Pin to top of feed"
+                description="Pinned announcements stay above newer ones."
+              />
+            </div>
           </div>
         </div>
 
-        <div className="rounded-control bg-surface-muted p-4 ring-1 ring-inset ring-line">
-          <Checkbox
-            checked={form.crosspostToFacebook}
-            onChange={v => set('crosspostToFacebook', v)}
-            disabled={isSaving}
-            label="Also post to the AniSkolar Facebook Page"
-            description="Uses the title, summary, and a link back to this announcement. Only happens when you publish; saving a draft never posts."
-          />
+        <div className="space-y-3 lg:col-span-2">
+          <div className="rounded-control bg-surface-muted p-4 ring-1 ring-inset ring-line">
+            <Checkbox
+              checked={form.fbEnabled}
+              onChange={v => set('fbEnabled', v)}
+              disabled={isSaving}
+              label="Also post to Facebook"
+              description={fbHelp}
+            />
+          </div>
+          {form.fbEnabled && (
+            <>
+              <p className="text-xs font-medium text-ink-muted">Preview on Facebook</p>
+              <FacebookPreview title={form.title} content={form.content} imageUrl={previewImage} />
+            </>
+          )}
         </div>
       </form>
     </Modal>
@@ -250,12 +343,14 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
   const [announcements, setAnnouncements] = useState<AdminAnnouncement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  // Failures of row actions (pin, Facebook) that don't invalidate the list.
+  // Failures of row actions (pin, retry) that don't invalidate the list.
   const [actionError, setActionError] = useState('');
+  // Saved-but-Facebook-failed outcomes, or delete warnings.
+  const [facebookNotice, setFacebookNotice] = useState<{ title: string; message: string } | null>(null);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<AnnouncementStatus | 'All'>('All');
-  const [facebookFilter, setFacebookFilter] = useState<FacebookStatus | 'All'>('All');
+  const [facebookFilter, setFacebookFilter] = useState<FbStatus | 'All'>('All');
 
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -266,17 +361,28 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
   const [deleteError, setDeleteError] = useState('');
 
   const [togglingPinId, setTogglingPinId] = useState<string | null>(null);
-  const [postingFacebookId, setPostingFacebookId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const upsert = (saved: AdminAnnouncement) =>
+    setAnnouncements(prev => (prev.some(a => a.id === saved.id) ? prev.map(a => (a.id === saved.id ? saved : a)) : [saved, ...prev]));
+
+  const reportFacebook = (title: string, result: FacebookResult | null | undefined) => {
+    if (result && !result.ok) {
+      setFacebookNotice({
+        title: result.tokenExpired ? `${title} — the Facebook Page token needs renewing` : `${title}, but Facebook wasn't updated`,
+        message: result.error || 'Facebook returned an error.'
+      });
+    }
+  };
 
   const fetchAnnouncements = async () => {
     setIsLoading(true);
     setLoadError('');
     try {
       const response = await fetch(`${API_BASE_URL}/api/announcements`, { headers: await authHeaders(getToken) });
-      if (!response.ok) throw new Error('The server returned an error while loading announcements.');
-      const body = await response.json();
-      // Facebook fields are additive; default them so older records render.
-      setAnnouncements((body.announcements ?? []).map((a: Partial<AdminAnnouncement>) => ({ ...FACEBOOK_DEFAULTS, ...a })));
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'The server returned an error while loading announcements.');
+      setAnnouncements((body.announcements ?? []).map(normalize));
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Something went wrong loading announcements.');
     } finally {
@@ -293,7 +399,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
     const q = search.trim().toLowerCase();
     return announcements.filter(a => {
       if (statusFilter !== 'All' && a.status !== statusFilter) return false;
-      if (facebookFilter !== 'All' && a.facebookStatus !== facebookFilter) return false;
+      if (facebookFilter !== 'All' && a.fbStatus !== facebookFilter) return false;
       if (q && !a.title.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -304,7 +410,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
     published: announcements.filter(a => a.status === 'published').length,
     draft: announcements.filter(a => a.status === 'draft').length,
     pinned: announcements.filter(a => a.isPinned).length,
-    onFacebook: announcements.filter(a => a.facebookStatus === 'posted').length
+    onFacebook: announcements.filter(a => a.fbStatus === 'posted').length
   }), [announcements]);
 
   const openCreate = () => { setSaveError(''); setEditorState({ ...BLANK_FORM }); };
@@ -312,41 +418,48 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
     setSaveError('');
     setEditorState({
       id: a.id,
+      status: a.status,
       title: a.title,
       description: a.description,
       content: a.content,
       category: a.category,
       isPinned: a.isPinned,
-      // Never pre-checked, so editing a live post doesn't re-trigger it.
-      crosspostToFacebook: false
+      fbEnabled: a.fbEnabled,
+      existingImageUrl: a.imageUrl
     });
   };
 
-  const saveAnnouncement = async (form: EditorState, publish: boolean) => {
+  // Multipart so the optional image travels with the fields. The backend
+  // saves first, then publishes/updates the Facebook post, and reports the
+  // Facebook outcome separately so a Facebook failure never loses the save.
+  const saveAnnouncement = async (form: EditorState, image: ImageChange, publish: boolean) => {
+    if (isSaving) return;
     setIsSaving(true);
     setSaveError('');
+    setFacebookNotice(null);
     try {
-      const payload = {
-        title: form.title.trim(),
-        description: form.description.trim(),
-        content: form.content.trim(),
-        category: form.category,
-        isPinned: form.isPinned,
-        status: publish ? 'published' : 'draft',
-        // The backend only acts on this when publishing in this request.
-        crosspostToFacebook: publish && form.crosspostToFacebook
-      };
+      const data = new FormData();
+      data.append('title', form.title.trim());
+      data.append('description', form.description.trim());
+      data.append('content', form.content.trim());
+      data.append('category', form.category);
+      data.append('isPinned', String(form.isPinned));
+      data.append('status', publish ? 'published' : 'draft');
+      data.append('fbEnabled', String(form.fbEnabled));
+      if (image.file) data.append('image', image.file, image.file.name);
+      else if (image.remove) data.append('removeImage', 'true');
+
       const isEdit = !!form.id;
       const response = await fetch(`${API_BASE_URL}/api/announcements${isEdit ? `/${form.id}` : ''}`, {
         method: isEdit ? 'PATCH' : 'POST',
-        headers: await authHeaders(getToken, true),
-        body: JSON.stringify(payload)
+        headers: await authHeaders(getToken),
+        body: data
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'Failed to save announcement.');
-      const saved: AdminAnnouncement = { ...FACEBOOK_DEFAULTS, ...body.announcement };
-      setAnnouncements(prev => (prev.some(a => a.id === saved.id) ? prev.map(a => (a.id === saved.id ? saved : a)) : [saved, ...prev]));
+      upsert(normalize(body.announcement));
       setEditorState(null);
+      reportFacebook('Announcement saved', body.facebook);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save announcement.');
     } finally {
@@ -365,7 +478,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       });
       if (!response.ok) throw new Error();
       const body = await response.json();
-      setAnnouncements(prev => prev.map(x => (x.id === a.id ? { ...x, ...body.announcement } : x)));
+      upsert(normalize(body.announcement));
     } catch {
       setActionError(`Couldn't ${a.isPinned ? 'unpin' : 'pin'} "${a.title}". Please try again.`);
     } finally {
@@ -373,43 +486,45 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
     }
   };
 
-  // Posts (or retries) the Facebook cross-post for a published announcement.
-  // The row flips to 'pending' so repeated clicks are visibly blocked.
-  const postToFacebook = async (a: AdminAnnouncement, force = false) => {
-    setPostingFacebookId(a.id);
-    setAnnouncements(prev => prev.map(x => (x.id === a.id ? { ...x, facebookStatus: 'pending', facebookError: null } : x)));
+  // Retries the last failed Facebook publish / edit / delete.
+  const retryFacebook = async (a: AdminAnnouncement) => {
+    if (retryingId) return;
+    setRetryingId(a.id);
+    setActionError('');
+    setFacebookNotice(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/announcements/${a.id}/facebook`, {
+      const response = await fetch(`${API_BASE_URL}/api/announcements/${a.id}/facebook/retry`, {
         method: 'POST',
-        headers: await authHeaders(getToken, true),
-        body: JSON.stringify({ force })
+        headers: await authHeaders(getToken)
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'Facebook post failed.');
-      setAnnouncements(prev => prev.map(x => (x.id === a.id ? { ...x, ...body.announcement } : x)));
+      if (!response.ok) throw new Error(body.error || 'Retry failed.');
+      upsert(normalize(body.announcement));
+      reportFacebook('Retried', body.facebook);
     } catch (err) {
-      setAnnouncements(prev => prev.map(x => (x.id === a.id
-        ? { ...x, facebookStatus: 'failed', facebookError: err instanceof Error ? err.message : 'Facebook post failed.' }
-        : x)));
+      setActionError(err instanceof Error ? err.message : 'Retry failed.');
     } finally {
-      setPostingFacebookId(null);
+      setRetryingId(null);
     }
   };
 
   const confirmDelete = async () => {
-    if (!pendingDelete) return;
+    if (!pendingDelete || isDeleting) return;
     setIsDeleting(true);
     setDeleteError('');
+    setFacebookNotice(null);
     try {
       const response = await fetch(`${API_BASE_URL}/api/announcements/${pendingDelete.id}`, {
         method: 'DELETE',
-        headers: await authHeaders(getToken, true)
+        headers: await authHeaders(getToken)
       });
-      if (!response.ok) throw new Error();
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Couldn't delete the announcement. Please try again.");
       setAnnouncements(prev => prev.filter(a => a.id !== pendingDelete.id));
       setPendingDelete(null);
-    } catch {
-      setDeleteError("Couldn't delete the announcement. Please try again.");
+      if (body.facebookWarning) setFacebookNotice({ title: 'Announcement deleted, but the Facebook post is still up', message: body.facebookWarning });
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Couldn't delete the announcement. Please try again.");
     } finally {
       setIsDeleting(false);
     }
@@ -430,7 +545,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
     <div id={id} className="space-y-6">
       <PageHeader
         title="Announcements"
-        description="Post and manage the official updates students see on their dashboard."
+        description="Post and manage the official updates students see on their dashboard and on the Facebook Page."
         actions={
           <>
             <Button icon={RefreshCw} loading={isLoading} onClick={fetchAnnouncements}>Refresh</Button>
@@ -444,13 +559,16 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
           {loadError} Showing the last loaded list.
         </Alert>
       )}
+      {facebookNotice && (
+        <Alert tone="warning" title={facebookNotice.title} onDismiss={() => setFacebookNotice(null)}>{facebookNotice.message}</Alert>
+      )}
       {actionError && <Alert tone="danger" onDismiss={() => setActionError('')}>{actionError}</Alert>}
 
       <KpiGrid>
         <KpiCard label="Published" value={kpiValue(stats.published)} hint="Visible to students" icon={Send} tone="success" loading={firstLoad} />
         <KpiCard label="Drafts" value={kpiValue(stats.draft)} hint="Not yet visible" icon={FileEdit} tone="warning" loading={firstLoad} />
         <KpiCard label="Pinned" value={kpiValue(stats.pinned)} hint="Shown at the top" icon={Pin} tone="accent" loading={firstLoad} />
-        <KpiCard label="On Facebook" value={kpiValue(stats.onFacebook)} hint="Cross-posted to the Page" icon={Facebook} tone="info" loading={firstLoad} />
+        <KpiCard label="On Facebook" value={kpiValue(stats.onFacebook)} hint="Posted to the Page" icon={Facebook} tone="info" loading={firstLoad} />
       </KpiGrid>
 
       <Card
@@ -460,12 +578,11 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
             <Tabs<AnnouncementStatus | 'All'> tabs={statusTabs} value={statusFilter} onChange={setStatusFilter} label="Filter by status" />
             <Toolbar>
               <SearchInput value={search} onChange={setSearch} label="Search announcements" placeholder="Search title or summary…" className="flex-1" />
-              <Select value={facebookFilter} onChange={v => setFacebookFilter(v as FacebookStatus | 'All')} className="md:w-56" label="Filter by Facebook status">
+              <Select value={facebookFilter} onChange={v => setFacebookFilter(v as FbStatus | 'All')} className="md:w-56" label="Filter by Facebook status">
                 <option value="All">Any Facebook status</option>
-                <option value="posted">On Facebook</option>
-                <option value="pending">Posting…</option>
+                <option value="posted">Posted</option>
+                <option value="not_posted">Not posted</option>
                 <option value="failed">Failed</option>
-                <option value="none">Not cross-posted</option>
               </Select>
             </Toolbar>
           </>
@@ -495,20 +612,26 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
           <ul className="divide-y divide-line">
             {filtered.map(a => {
               const CategoryIcon = CATEGORY_ICONS[a.category] ?? Bell;
-              const fb = a.facebookStatus !== 'none' ? FACEBOOK_BADGE[a.facebookStatus] : null;
-              const canPostToFacebook = a.status === 'published' && a.facebookStatus !== 'posted' && a.facebookStatus !== 'pending';
+              const fb = FB_BADGE[a.fbStatus] ?? FB_BADGE.not_posted;
+              const thumb = imageSrc(a.imageUrl);
               return (
                 <li key={a.id} className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-surface-muted sm:flex-row sm:items-start sm:gap-4">
-                  <span className={`hidden size-9 shrink-0 items-center justify-center rounded-control sm:flex ${a.isPinned ? 'bg-accent-subtle text-accent' : 'bg-neutral-bg text-ink-muted'}`}>
-                    {a.isPinned ? <Pin className="size-4" aria-label="Pinned" /> : <CategoryIcon className="size-4" aria-hidden />}
-                  </span>
+                  {thumb ? (
+                    <img src={thumb} alt="" className="hidden size-9 shrink-0 rounded-control object-cover ring-1 ring-line sm:block" />
+                  ) : (
+                    <span className={`hidden size-9 shrink-0 items-center justify-center rounded-control sm:flex ${a.isPinned ? 'bg-accent-subtle text-accent' : 'bg-neutral-bg text-ink-muted'}`}>
+                      {a.isPinned ? <Pin className="size-4" aria-label="Pinned" /> : <CategoryIcon className="size-4" aria-hidden />}
+                    </span>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <h3 className="mr-1 text-sm font-medium text-ink wrap-break-word">{a.title}</h3>
                       {a.status === 'published' ? <Badge tone="success" dot>Published</Badge> : <Badge dot>Draft</Badge>}
                       <Badge icon={CategoryIcon}>{a.category}</Badge>
                       {a.isPinned && <Badge tone="accent" icon={Pin}>Pinned</Badge>}
-                      {fb && <Badge tone={fb.tone} icon={fb.icon}>{fb.label}</Badge>}
+                      <Badge tone={fb.tone} icon={Facebook}>
+                        <span className="sr-only">Facebook: </span>{fb.label}
+                      </Badge>
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-ink-muted wrap-break-word">{a.description}</p>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-subtle">
@@ -516,26 +639,30 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
                         <Clock className="size-3.5" aria-hidden />
                         {a.status === 'published' ? `Published ${formatDateTime(a.publishedAt)}` : `Updated ${formatDateTime(a.updatedAt)}`}
                       </span>
-                      {a.facebookStatus === 'posted' && a.facebookPostUrl && (
-                        <a href={a.facebookPostUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-badge font-medium text-info-fg hover:underline">
+                      {a.fbPostId && a.fbPermalink && (
+                        <a href={a.fbPermalink} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-badge font-medium text-info-fg hover:underline">
                           <ExternalLink className="size-3.5" aria-hidden /> View on Facebook
                         </a>
                       )}
-                      {a.facebookStatus === 'failed' && a.facebookError && (
-                        <span className="flex items-center gap-1 text-danger wrap-break-word">
-                          <AlertCircle className="size-3.5 shrink-0" aria-hidden /> {a.facebookError}
+                      {a.fbStatus === 'failed' && a.fbError && (
+                        <span className="flex items-start gap-1 text-danger wrap-break-word">
+                          <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden /> {a.fbError}
                         </span>
                       )}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1 self-start">
-                    {canPostToFacebook && (
-                      <IconButton
-                        icon={a.facebookStatus === 'failed' ? RotateCw : Facebook}
-                        label={a.facebookStatus === 'failed' ? `Retry posting "${a.title}" to Facebook` : `Post "${a.title}" to Facebook`}
-                        loading={postingFacebookId === a.id}
-                        onClick={() => postToFacebook(a, a.facebookStatus === 'failed')}
-                      />
+                    {a.fbStatus === 'failed' && (
+                      <Button
+                        size="sm"
+                        icon={RotateCw}
+                        loading={retryingId === a.id}
+                        disabled={!!retryingId}
+                        onClick={() => retryFacebook(a)}
+                        aria-label={`Retry Facebook for "${a.title}"`}
+                      >
+                        Retry
+                      </Button>
                     )}
                     <IconButton
                       icon={a.isPinned ? PinOff : Pin}
@@ -543,11 +670,12 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
                       loading={togglingPinId === a.id}
                       onClick={() => togglePin(a)}
                     />
-                    <IconButton icon={Pencil} label={`Edit "${a.title}"`} onClick={() => openEdit(a)} />
+                    <IconButton icon={Pencil} label={`Edit "${a.title}"`} onClick={() => openEdit(a)} disabled={retryingId === a.id} />
                     <IconButton
                       icon={Trash2}
                       label={`Delete "${a.title}"`}
                       onClick={() => { setDeleteError(''); setPendingDelete(a); }}
+                      disabled={retryingId === a.id}
                       className="hover:bg-danger-bg hover:text-danger"
                     />
                   </div>
@@ -573,15 +701,15 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
           tone="danger"
           title="Delete announcement?"
           description={<>"{pendingDelete.title}" will be permanently removed for everyone. This can't be undone.</>}
-          confirmLabel="Delete"
+          confirmLabel={pendingDelete.fbPostId ? 'Delete here and on Facebook' : 'Delete'}
           confirmIcon={Trash2}
           onConfirm={confirmDelete}
           onCancel={() => setPendingDelete(null)}
           busy={isDeleting}
           error={deleteError}
         >
-          {pendingDelete.facebookStatus === 'posted' && (
-            <Alert tone="warning">This won't remove the linked Facebook post. Take that down separately on the Page if needed.</Alert>
+          {pendingDelete.fbPostId && (
+            <Alert tone="warning">This also deletes the post from the Facebook Page.</Alert>
           )}
         </ConfirmDialog>
       )}

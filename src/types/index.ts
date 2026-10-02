@@ -88,6 +88,10 @@ export interface Announcement {
   description: string;
   content: string;
   category: 'General' | 'Update' | 'Deadline' | 'Event';
+  // From GET /api/announcements/feed: the announcement's image (a path on
+  // the API server) and, when it was posted to the Facebook Page, its link.
+  imageUrl?: string | null;
+  fbPermalink?: string | null;
 }
 
 // --- Detailed SFA Grant application schema ------------------------------

@@ -14,6 +14,11 @@ export const OFFICE_SHORT_LABELS: Record<ScholarshipOffice, string> = {
   ALUMNI: 'Alumni Office'
 };
 
+// Info-only scholarships are listed but can't be applied for online.
+export function acceptsOnlineApplications(scholarship: Pick<Scholarship, 'applicationMode'>): boolean {
+  return (scholarship.applicationMode ?? 'online') === 'online';
+}
+
 export function officeOf(scholarship: Pick<Scholarship, 'office'>): ScholarshipOffice {
   return scholarship.office ?? 'LSO';
 }
@@ -255,6 +260,214 @@ export const mockScholarships: Scholarship[] = [
     deadline: 'Before scheduled enrollment, SY 2026–2027',
     status: 'Open',
     applicationFormType: 'alumni'
+  },
+  {
+    id: 's5',
+    name: 'Academic Scholarship',
+    category: 'Academic',
+    provider: SCHOLARSHIP_OFFICE_PROVIDER,
+    applicationMode: 'info',
+    availNote: 'Awarded automatically by academic ranking each semester. There is no application — qualified students are identified from their grades.',
+    targetApplicants: 'Upperclassmen',
+    description: 'The Academic Scholarship recognizes upperclassmen whose GPA ranks in the top 30% of their college. Discounts are allocated by rank, both overall and per college.',
+    benefits: [
+      'Top 5 overall: 100% tuition discount',
+      'Per college — Top 1: 75% tuition discount',
+      'Per college — Top 2–3: 50% tuition discount',
+      'Per college — Top 4–5: 25% tuition discount',
+      'Per college — Top 6: 10% tuition discount',
+      'Tuition discounts exclude miscellaneous, laboratory, and other fees.'
+    ],
+    eligibilityCriteria: { applicantType: 'continuing' },
+    eligibility: [
+      'GPA within the top 30% of upperclassmen',
+      'No grade lower than 3.25',
+      'Enrolled in a minimum of 18 units',
+      'At least one (1) semester of residency at DLSU-D'
+    ],
+    requirements: [],
+    process: [
+      'Step 1: Keep your grades up — rankings are computed from your GPA at the end of each semester.',
+      'Step 2: Qualified students are identified and notified by the AdSO. No application is needed.'
+    ],
+    deadline: 'Contact the AdSO for the current schedule',
+    status: 'Open'
+  },
+  {
+    id: 's6',
+    name: 'Employee Benefit Privilege Scholarship Program (EBPSP)',
+    category: 'Others',
+    provider: SCHOLARSHIP_OFFICE_PROVIDER,
+    targetApplicants: 'Legal dependents of DLSU-D and DLSMHSI employees',
+    description: 'The Employee Benefit Privilege Scholarship Program grants tuition discounts to the legal dependents of De La Salle University-Dasmariñas (DLSU-D) and De La Salle Medical and Health Sciences Institute (DLSMHSI) employees.',
+    benefits: [
+      '1st availment: 100% tuition discount',
+      '2nd availment: 75% tuition discount',
+      '3rd availment: 50% tuition discount',
+      '4th availment: 25% tuition discount',
+      'Includes waivers for some miscellaneous fees (e.g. medical, dental, and air-conditioning fees)'
+    ],
+    eligibilityCriteria: { applicantType: 'any' },
+    eligibility: [
+      'Must be a legal dependent of a DLSU-D or DLSMHSI employee',
+      'Must maintain satisfactory academic progress'
+    ],
+    retentionConditions: [
+      'Satisfactory academic progress every semester',
+      'The privilege is non-transferable and cannot be deferred'
+    ],
+    // Assumed — the official page doesn't list the documents. The AdSO
+    // should confirm these.
+    requirements: [
+      'Certificate of employment of the parent/guardian from DLSU-D or DLSMHSI',
+      'PSA birth certificate showing your relationship to the employee',
+      'Latest report card or certificate of grades'
+    ],
+    process: [
+      'Step 1: Confirm that your parent/guardian is a DLSU-D or DLSMHSI employee.',
+      'Step 2: Fill out the online application and upload the required documents as JPG files.',
+      'Step 3: Wait for your application status notification via the Student Portal. If approved, the discount is applied upon enrollment.'
+    ],
+    deadline: 'Before scheduled enrollment',
+    status: 'Open',
+    applicationFormType: 'standard'
+  },
+  {
+    id: 's7',
+    name: 'Athletic Scholarship',
+    category: 'Athletic',
+    provider: SCHOLARSHIP_OFFICE_PROVIDER,
+    applicationMode: 'info',
+    availNote: 'Awarded to recruited varsity players. Players are evaluated by their coach and approved by the Sports Development Office (SDO) Director — there is no online application.',
+    targetApplicants: 'Recruited varsity players',
+    description: 'The Athletic Scholarship supports varsity players who represent DLSU-D in Basketball, Volleyball, Athletics, Badminton, Table Tennis, Swimming, and Chess.',
+    benefits: [
+      'Tuition fee discount',
+      'Full matriculation fee discount',
+      'Free food and accommodation for recruited athletes'
+    ],
+    eligibilityCriteria: { applicantType: 'any' },
+    eligibility: [
+      'Must be a recruited varsity player in Basketball, Volleyball, Athletics, Badminton, Table Tennis, Swimming, or Chess',
+      'Evaluated by the coach and approved by the SDO Director'
+    ],
+    requirements: [],
+    process: [
+      'Step 1: Try out for or get recruited into a DLSU-D varsity team.',
+      'Step 2: Your coach evaluates your performance and endorses you.',
+      'Step 3: The SDO Director approves the scholarship.'
+    ],
+    deadline: 'Contact the AdSO for the current schedule',
+    status: 'Open'
+  },
+  {
+    id: 's8',
+    name: 'Vicissitude Scholarship Program',
+    category: 'Leadership',
+    provider: SCHOLARSHIP_OFFICE_PROVIDER,
+    applicationMode: 'info',
+    availNote: 'Granted to members of the Vicissitude Editorial Board and Staff based on their performance rating — there is no online application.',
+    targetApplicants: 'Vicissitude Editorial Board and Staff',
+    description: 'The Vicissitude Scholarship Program grants tuition discounts to members of the Vicissitude Editorial Board and Staff.',
+    benefits: [
+      'Editorial Board, rating 4.75–5.00: 100% tuition discount',
+      'Editorial Board, rating 4.50–4.74: 75% tuition discount',
+      'Editorial Board, rating 4.25–4.49: 50% tuition discount',
+      'Editorial Board, rating 4.24 and below: 25% tuition discount',
+      'Editorial Staff: 25% tuition discount',
+      'Training, a pictorial, a graduation picture, and a copy of the yearbook'
+    ],
+    eligibilityCriteria: { applicantType: 'any' },
+    eligibility: [
+      'Must be a member of the Vicissitude Editorial Board or Editorial Staff'
+    ],
+    requirements: [],
+    process: [
+      'Step 1: Join the Vicissitude Editorial Board or Staff.',
+      'Step 2: Your discount is based on your performance rating for the term.'
+    ],
+    deadline: 'Contact the AdSO for the current schedule',
+    status: 'Open'
+  },
+  {
+    id: 's9',
+    name: 'Performing Arts Group (PAG) Scholarship',
+    category: 'Others',
+    provider: SCHOLARSHIP_OFFICE_PROVIDER,
+    applicationMode: 'info',
+    availNote: 'Granted to active members of the university\'s performing arts groups — there is no online application.',
+    targetApplicants: 'Members of DLSU-D performing arts groups',
+    description: 'The Performing Arts Group Scholarship supports talented students in singing, dancing, acting, and playing musical instruments who perform for the university.',
+    benefits: [
+      'Tuition discount for active members of a performing arts group'
+    ],
+    eligibilityCriteria: { applicantType: 'any' },
+    eligibility: [
+      'Must be an active member of a DLSU-D performing arts group (singing, dancing, acting, or instruments)'
+    ],
+    requirements: [],
+    process: [
+      'Step 1: Audition for and join a DLSU-D performing arts group.',
+      'Step 2: Active members are endorsed for the scholarship by their group.'
+    ],
+    deadline: 'Contact the AdSO for the current schedule',
+    status: 'Open'
+  },
+  {
+    id: 's10',
+    name: '267th NROTC Scholarship',
+    category: 'Leadership',
+    provider: SCHOLARSHIP_OFFICE_PROVIDER,
+    applicationMode: 'info',
+    availNote: 'Granted to officers of the 267th NROTC unit on the recommendation of the Commandant and the ROTC Coordinator — there is no online application.',
+    targetApplicants: 'Officers of the 267th NROTC unit',
+    description: 'The 267th NROTC Scholarship gives financial assistance to officers of the university\'s Naval Reserve Officers Training Corps unit, subject to the availability of the ROTC fund.',
+    benefits: [
+      'Corps Commander: ₱30,000',
+      'Vice Corps Commander: ₱20,000',
+      '2nd and 3rd Class officers: ₱10,000',
+      '4th Class officers: ₱5,000',
+      'Amounts are subject to the availability of the ROTC fund.'
+    ],
+    eligibilityCriteria: { applicantType: 'continuing' },
+    eligibility: [
+      'GPA of at least 2.0 with no failing grade',
+      'Good moral character',
+      'Earned rank and on active duty',
+      'Renders at least 20 hours of duty a week',
+      'Recommended by the Commandant and the ROTC Coordinator'
+    ],
+    requirements: [],
+    process: [
+      'Step 1: Earn your rank and stay on active duty in the 267th NROTC unit.',
+      'Step 2: The Commandant and the ROTC Coordinator recommend qualified officers.'
+    ],
+    deadline: 'Contact the AdSO for the current schedule',
+    status: 'Open'
+  },
+  {
+    id: 's11',
+    name: 'KALINGA Scholarship Initiatives',
+    category: 'Financial',
+    provider: SCHOLARSHIP_OFFICE_PROVIDER,
+    applicationMode: 'info',
+    availNote: 'Externally funded. Grants are given through partner programs, not through AniSkolar — contact the AdSO to learn how to qualify.',
+    description: 'KALINGA brings together externally funded scholarship initiatives that support DLSU-D students, including The Lasallian SPOON, the One Dasma Dormitory Scholarship Grant, and Alumni Legacy Night.',
+    benefits: [
+      'The Lasallian SPOON',
+      'One Dasma Dormitory Scholarship Grant',
+      'Alumni Legacy Night'
+    ],
+    eligibilityCriteria: { applicantType: 'any' },
+    eligibility: [
+      'Set by each partner program — contact the AdSO for details'
+    ],
+    requirements: [],
+    process: [
+      'Step 1: Contact the AdSO to ask which KALINGA initiatives are open and how to qualify.'
+    ],
+    deadline: 'Contact the AdSO for the current schedule',
+    status: 'Open'
   }
 ];
 

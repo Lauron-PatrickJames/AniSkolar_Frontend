@@ -2,7 +2,7 @@ import React from 'react';
 import { Scholarship, Application } from '../../types';
 import { ArrowLeft, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info } from 'lucide-react';
 import { motion } from 'motion/react';
-import { OFFICE_SHORT_LABELS, officeOf } from '../../data/scholarships';
+import { OFFICE_SHORT_LABELS, acceptsOnlineApplications, officeOf } from '../../data/scholarships';
 
 interface ScholarshipDetailsProps {
   scholarship: Scholarship;
@@ -79,6 +79,8 @@ export default function ScholarshipDetails({
   const status = (existingApplication?.status as AppStatus) ?? 'Under Evaluation';
   // Status copy names the LSO; swap in whichever office reviews this grant.
   const officeShort = OFFICE_SHORT_LABELS[officeOf(scholarship)];
+  const isInfoOnly = !acceptsOnlineApplications(scholarship);
+  const hasDocuments = Boolean(scholarship.documentSlots?.length || scholarship.requirements.length);
   const baseMeta = STATUS_META[status] ?? STATUS_META['Under Evaluation'];
   const meta = { ...baseMeta, description: baseMeta.description.replace(/\b([Tt])he AdSO\b/, (_, t) => `${t}he ${officeShort}`) };
   const StatusIcon = meta.icon;
@@ -122,20 +124,38 @@ export default function ScholarshipDetails({
             (label reflects current review state); the status card below
             carries the detail, note, and any resubmit action. */}
         <div className="w-full md:w-auto shrink-0">
-          <button
-            onClick={() => onApply(scholarship.id)}
-            disabled={isApplied || scholarship.status === 'Closed'}
-            className={`w-full md:w-auto font-display font-bold uppercase text-xs tracking-wider px-8 py-3.5 rounded-xl transition-all shadow-sm focus:outline-hidden text-center inline-flex items-center justify-center gap-2 ${
-              isApplied
-                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                : 'bg-brand-green text-white hover:bg-brand-green-dark hover:shadow-md'
-            }`}
-          >
-            {isApplied && <StatusIcon className="w-4 h-4" />}
-            {isApplied ? meta.label : 'Apply For This Scholarship'}
-          </button>
+          {isInfoOnly ? (
+            <span className="w-full md:w-auto px-5 py-3 rounded-xl bg-slate-100 text-slate-500 border border-slate-200 font-display font-bold uppercase text-xs tracking-wider inline-flex items-center justify-center gap-2">
+              <Info className="w-4 h-4" />
+              No Online Application
+            </span>
+          ) : (
+            <button
+              onClick={() => onApply(scholarship.id)}
+              disabled={isApplied || scholarship.status === 'Closed'}
+              className={`w-full md:w-auto font-display font-bold uppercase text-xs tracking-wider px-8 py-3.5 rounded-xl transition-all shadow-sm focus:outline-hidden text-center inline-flex items-center justify-center gap-2 ${
+                isApplied
+                  ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                  : 'bg-brand-green text-white hover:bg-brand-green-dark hover:shadow-md'
+              }`}
+            >
+              {isApplied && <StatusIcon className="w-4 h-4" />}
+              {isApplied ? meta.label : 'Apply For This Scholarship'}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Info-only scholarships: how they're awarded instead of an Apply flow. */}
+      {isInfoOnly && (
+        <div className="p-4 rounded-xl bg-sky-50 border border-sky-100 flex items-start gap-2.5">
+          <Info className="w-4.5 h-4.5 text-sky-700 shrink-0 mt-0.5" />
+          <div className="text-xs text-sky-900 leading-relaxed">
+            <p className="font-bold mb-0.5">How this scholarship is awarded</p>
+            <p>{scholarship.availNote ?? 'This scholarship doesn\'t take online applications.'} For questions, contact the {officeShort}.</p>
+          </div>
+        </div>
+      )}
 
       {/* Status Card — replaces the old inline badge once an application exists.
           Shows the current review state, a one-line explainer, and (for
@@ -306,6 +326,7 @@ export default function ScholarshipDetails({
           )}
 
           {/* Document Requirements Checklist */}
+          {(hasDocuments || scholarship.submissionNote) && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
             <h3 className="font-display font-extrabold text-base text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
               <FileCheck className="w-4.5 h-4.5 text-brand-green" />
@@ -348,6 +369,7 @@ export default function ScholarshipDetails({
               </p>
             )}
           </div>
+          )}
 
           {/* LSO Integrity Notice */}
           <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-2.5">

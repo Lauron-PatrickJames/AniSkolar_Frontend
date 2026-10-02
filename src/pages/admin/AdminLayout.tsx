@@ -31,6 +31,8 @@ interface AdminLayoutProps {
   adminEmail?: string;
   officeLabel: string;
   pendingCount?: number;
+  // Views this admin can't open (e.g. announcements for office admins).
+  hiddenViews?: MainView[];
   breadcrumbs: Crumb[];
   // Changes whenever the visible page changes; scrolls content to the top.
   pageKey: string;
@@ -41,7 +43,7 @@ interface AdminLayoutProps {
 // and table headers (sticky top-topbar) stay pinned while pages scroll.
 // Sidebar: full width from lg, an icon rail from md to lg, a drawer below md.
 export default function AdminLayout({
-  currentView, onNavigate, onLogout, adminEmail, officeLabel, pendingCount, breadcrumbs, pageKey, children
+  currentView, onNavigate, onLogout, adminEmail, officeLabel, pendingCount, hiddenViews = [], breadcrumbs, pageKey, children
 }: AdminLayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
@@ -70,6 +72,7 @@ export default function AdminLayout({
           adminEmail={adminEmail}
           officeLabel={officeLabel}
           pendingCount={pendingCount}
+          hiddenViews={hiddenViews}
         />
 
         <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
@@ -124,7 +127,7 @@ function Breadcrumbs({ items }: { items: Crumb[] }) {
   );
 }
 
-function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail, officeLabel, pendingCount }: {
+function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail, officeLabel, pendingCount, hiddenViews }: {
   currentView: MainView;
   onNavigate: (view: MainView) => void;
   open: boolean;
@@ -133,7 +136,11 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
   adminEmail?: string;
   officeLabel: string;
   pendingCount?: number;
+  hiddenViews: MainView[];
 }) {
+  const sections = SECTIONS
+    .map(section => ({ ...section, items: section.items.filter(item => !hiddenViews.includes(item.id)) }))
+    .filter(section => section.items.length > 0);
   const closeRef = useRef<HTMLButtonElement>(null);
   const displayName = adminEmail?.split('@')[0].replace(/[._-]+/g, ' ') || 'Administrator';
 
@@ -175,7 +182,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
         </div>
 
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4 md:max-lg:overflow-visible md:max-lg:px-2">
-          {SECTIONS.map(section => (
+          {sections.map(section => (
             <div key={section.title}>
               <p className="mb-1 px-2.5 text-xs font-medium text-ink-subtle md:max-lg:sr-only">{section.title}</p>
               <ul className="space-y-0.5">

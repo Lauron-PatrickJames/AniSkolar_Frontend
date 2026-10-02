@@ -140,7 +140,7 @@ export const mockScholarships: Scholarship[] = [
       'Step 1: Confirm your slot, then accomplish the online scholarship application on the date specified by the office, attaching all required documents in JPEG format.',
       'Step 2: Await notification of your application status via the DLSU-D Student Portal, email, or Schoolbook.'
     ],
-    deadline: 'Applications open June 15, 2026',
+    deadline: 'Applications open June 1–20, 2026',
     status: 'Open',
     applicationFormType: 'sfag'
   },
@@ -169,11 +169,11 @@ export const mockScholarships: Scholarship[] = [
     ],
     process: [
       'Step 1: Check your eligibility — confirm your rank and your batch\'s graduate count.',
-      'Step 2: Accomplish the Online Scholarship Form, available on the DLSU-D website starting June 1, 2026, and submit it before your scheduled enrollment.',
+      'Step 2: Accomplish the Online Scholarship Form on the DLSU-D website between June 1 and 20, 2026.',
       'Step 3: Submit the required documents alongside your accomplished online application form.',
       'Step 4: Wait for your application status notification via the DLSU-D Student Portal. If approved, the scholarship is applied to your tuition fee upon enrollment. If disapproved, you may still enroll but will not receive the entrance scholarship discount.'
     ],
-    deadline: 'Before scheduled enrollment (form available June 1, 2026)',
+    deadline: 'Applications open June 1–20, 2026',
     status: 'Open',
     applicationFormType: 'standard'
   },

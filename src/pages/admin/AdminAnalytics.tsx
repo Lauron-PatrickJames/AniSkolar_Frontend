@@ -5,7 +5,7 @@ import {
 import { ArrowDown, ArrowUp, BarChart3, Download, Info } from 'lucide-react';
 import { ScholarshipOffice } from '../../types';
 import { OFFICE_LABELS, mockScholarships, officeOf } from '../../data/scholarships';
-import { AdminApplication, AppStatus, STATUS_OPTIONS } from './adminData';
+import { AdminApplication, AppStatus, CYCLE_START_MONTH, STATUS_OPTIONS } from './adminData';
 import {
   Alert, Button, Card, EmptyState, ErrorState, KpiCard, KpiGrid, PageHeader, STATUS_META, Select, Skeleton,
   Table, Td, TextInput, Th, Tooltip, Tr, RowLink, tokenColor
@@ -79,9 +79,11 @@ const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
   { key: 'custom', label: 'Custom' }
 ];
 
-// DLSU-D academic calendar, by month (0 = January). The school year starts
-// in August: 1st semester Aug–Dec, 2nd semester Jan–May, midyear Jun–Jul.
-const SCHOOL_YEAR_START_MONTH = 7;
+// DLSU-D academic calendar, by month (0 = January): 1st semester Aug–Dec,
+// 2nd semester Jan–May, midyear Jun–Jul. "This school year" follows the
+// scholarship cycle (CYCLE_START_MONTH, June) rather than the August class
+// start, so it includes the June 1–20 application window for that year.
+const SCHOOL_YEAR_START_MONTH = CYCLE_START_MONTH;
 const TERMS: { startMonth: number; endMonth: number }[] = [
   { startMonth: 7, endMonth: 11 },
   { startMonth: 0, endMonth: 4 },

@@ -255,11 +255,16 @@ export function documentUrl(fileId: string): string {
 // Philippine academic-year convention: June through May. A submission in
 // March 2026 falls in AY 2025–2026; one in September 2026 in AY 2026–2027.
 // Derived from createdAt, since Application has no separate cycle field.
-// Mirrored in the backend's utils/academicYear.js (used by the CSV export).
+// Scholarship cycles. DLSU-D's academic year starts in August, but its
+// applications (Entrance, SFA Grant) open June 1–20 for the coming year,
+// so a cycle runs June through May: an application in June 2026 belongs
+// to AY 2026–2027. Mirrored in the backend's utils/academicYear.js.
+export const CYCLE_START_MONTH = 5; // June (0 = January)
+
 export function academicYearOf(iso: string): string {
   const d = parse(iso);
   if (!d) return 'Unknown';
-  const startYear = d.getMonth() >= 5 ? d.getFullYear() : d.getFullYear() - 1;
+  const startYear = d.getMonth() >= CYCLE_START_MONTH ? d.getFullYear() : d.getFullYear() - 1;
   return `AY ${startYear}–${startYear + 1}`;
 }
 

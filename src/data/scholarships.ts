@@ -19,6 +19,14 @@ export function acceptsOnlineApplications(scholarship: Pick<Scholarship, 'applic
   return (scholarship.applicationMode ?? 'online') === 'online';
 }
 
+// How an office is named next to a person or in a sentence: "AdSO",
+// "POLCA Office", "Alumni Office". The single source for office names in
+// activity history; never build them from stored codes.
+export function officeDisplayName(office: string | null | undefined): string {
+  if (!office || office === 'LSO') return OFFICE_SHORT_LABELS.LSO;
+  return OFFICE_LABELS[office as ScholarshipOffice] ?? office;
+}
+
 export function officeOf(scholarship: Pick<Scholarship, 'office'>): ScholarshipOffice {
   return scholarship.office ?? 'LSO';
 }

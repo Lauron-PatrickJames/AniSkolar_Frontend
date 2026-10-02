@@ -5,7 +5,7 @@ import {
   AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock,
   FileText, Inbox, Info, MoreHorizontal, RefreshCw, RotateCcw, RotateCw, Search, Send, X, XCircle
 } from 'lucide-react';
-import { AppStatus, HistoryStatus, historyLabel } from './adminData';
+import { AppStatus, HistoryStatus } from './adminData';
 
 // The admin console's component library. Pages compose these and use only
 // the semantic tokens from index.css (bg-surface, text-ink-muted,
@@ -61,7 +61,7 @@ export const STATUS_META: Record<AppStatus, { tone: Tone; icon: ElementType; tok
   'Rejected': { tone: 'danger', icon: XCircle, token: 'danger-solid' }
 };
 
-const HISTORY_META: Record<HistoryStatus, { tone: Tone; icon: ElementType }> = {
+export const HISTORY_META: Record<HistoryStatus, { tone: Tone; icon: ElementType }> = {
   'Submitted': { tone: 'neutral', icon: FileText },
   'Resubmitted': { tone: 'neutral', icon: RefreshCw },
   'Forwarded to LSO': { tone: 'accent', icon: Send },
@@ -212,12 +212,14 @@ export function IconButton({ icon: Icon, label, variant = 'ghost', size = 'sm', 
 
 // --- Layout ------------------------------------------------------------------
 
-export function PageHeader({ title, description, actions, back, meta }: {
+export function PageHeader({ title, description, actions, back, meta, leading }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
   back?: { label: string; onClick: () => void };
   meta?: React.ReactNode;
+  // Shown before the title, e.g. a person's photo.
+  leading?: React.ReactNode;
 }) {
   return (
     <div className="space-y-3">
@@ -232,10 +234,13 @@ export function PageHeader({ title, description, actions, back, meta }: {
         </button>
       )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-title font-semibold tracking-tight text-ink">{title}</h1>
-          {description && <p className="mt-1 max-w-2xl text-sm text-ink-muted">{description}</p>}
-          {meta && <div className="mt-2 flex flex-wrap items-center gap-2">{meta}</div>}
+        <div className="flex min-w-0 items-start gap-4">
+          {leading && <div className="shrink-0">{leading}</div>}
+          <div className="min-w-0">
+            <h1 className="text-title font-semibold tracking-tight text-ink">{title}</h1>
+            {description && <p className="mt-1 max-w-2xl text-sm text-ink-muted">{description}</p>}
+            {meta && <div className="mt-2 flex flex-wrap items-center gap-2">{meta}</div>}
+          </div>
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2 sm:shrink-0">{actions}</div>}
       </div>
@@ -277,7 +282,7 @@ export function Card({ title, description, actions, children, footer, flush, cla
 
 // Filter/search row placed directly under a card's header or tabs.
 export function Toolbar({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-col gap-3 border-b border-line p-4 md:flex-row md:items-center">{children}</div>;
+  return <div className="flex flex-col gap-3 border-b border-line p-4 md:flex-row md:flex-wrap md:items-center">{children}</div>;
 }
 
 export function KpiCard({ label, value, hint, icon: Icon, tone = 'neutral', active, onClick, footer, loading }: {
@@ -497,15 +502,18 @@ export function Checkbox({ checked, onChange, label, description, disabled }: {
 
 // Two-or-more option toggle (e.g. New / Old applicant). Clicking the active
 // option clears it when `allowEmpty` is set.
-export function SegmentedControl<K extends string>({ options, value, onChange, label, allowEmpty }: {
+export function SegmentedControl<K extends string>({ options, value, onChange, label, allowEmpty, renderLabel, className = '' }: {
   options: readonly K[];
   value: K | '';
   onChange: (value: K | '') => void;
   label: string;
   allowEmpty?: boolean;
+  // Custom option content, e.g. a label with a count.
+  renderLabel?: (option: K, active: boolean) => React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex w-full rounded-control bg-neutral-bg p-0.5">
+    <div role="group" aria-label={label} className={`inline-flex w-full rounded-control bg-neutral-bg p-0.5 ${className}`}>
       {options.map(option => {
         const active = value === option;
         return (
@@ -514,11 +522,11 @@ export function SegmentedControl<K extends string>({ options, value, onChange, l
             type="button"
             aria-pressed={active}
             onClick={() => onChange(active && allowEmpty ? '' : option)}
-            className={`h-8 flex-1 rounded-control px-3 text-sm font-medium transition-colors ${
+            className={`h-8 flex-1 rounded-control px-3 text-sm font-medium whitespace-nowrap transition-colors ${
               active ? 'bg-surface text-ink shadow-card ring-1 ring-line' : 'text-ink-muted hover:text-ink'
             }`}
           >
-            {option}
+            {renderLabel ? renderLabel(option, active) : option}
           </button>
         );
       })}
@@ -1365,59 +1373,11 @@ export function Tooltip({ content, children, className = '', asChild }: {
   );
 }
 
-// --- Timeline ----------------------------------------------------------------
-
-export interface TimelineEntry {
-  key: string;
-  status: HistoryStatus;
-  changedAt: string;
-  changedBy?: string;
-  note?: string;
-  // Extra context line (e.g. which scholarship the entry belongs to).
-  context?: React.ReactNode;
-}
-
-export function Timeline({ entries, empty, formatTime }: {
-  entries: TimelineEntry[];
-  empty: string;
-  formatTime: (iso: string) => string;
-}) {
-  if (entries.length === 0) return <p className="text-sm text-ink-muted">{empty}</p>;
-  return (
-    <ol>
-      {entries.map((entry, idx) => {
-        const meta = HISTORY_META[entry.status] ?? HISTORY_META['Under Evaluation'];
-        const Icon = meta.icon;
-        const last = idx === entries.length - 1;
-        return (
-          <li key={entry.key} className="relative flex gap-3 pb-5 last:pb-0">
-            {!last && <span aria-hidden className="absolute bottom-0 left-3.5 top-8 w-px bg-line" />}
-            <span className={`relative flex size-7 shrink-0 items-center justify-center rounded-full ring-1 ring-inset ${TONE_BADGE[meta.tone]}`}>
-              <Icon className="size-3.5" aria-hidden />
-            </span>
-            <div className="min-w-0 flex-1 pt-0.5">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-                <p className="text-sm font-medium text-ink">{historyLabel(entry.status)}</p>
-                <time dateTime={entry.changedAt} className="text-xs text-ink-subtle tabular-nums">{formatTime(entry.changedAt)}</time>
-              </div>
-              {entry.context && <div className="mt-1">{entry.context}</div>}
-              {entry.changedBy && (
-                <p className="mt-0.5 text-xs text-ink-subtle">by {entry.changedBy === 'student' ? 'Student' : entry.changedBy}</p>
-              )}
-              {entry.note && <Quote className="mt-2">{entry.note}</Quote>}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
 // Quoted free text (review notes, history notes).
 export function Quote({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <p className={`rounded-control bg-surface-muted px-3 py-2 text-sm text-ink-muted ring-1 ring-inset ring-line wrap-break-word whitespace-pre-line ${className}`}>
+    <blockquote className={`rounded-r-control border-l-2 border-line-strong bg-surface-muted px-3 py-2 text-sm text-ink-muted wrap-break-word whitespace-pre-line ${className}`}>
       {children}
-    </p>
+    </blockquote>
   );
 }

@@ -11,12 +11,14 @@ import { isGrantFormType, toGrantDetails } from '../../utils/grantForms';
 import {
   API_BASE_URL, AdminApplication, AdminDocument, AppStatus, applicantEmail, applicantName, applicantPhone,
   applicantProgram, applicantYearLevel, authHeaders, documentUrl, formTypeLabel, formatBytes, formatDate,
-  formatDateTime, formatShortDate, isOfficeApp, normalizeApplication, officeName
+  formatDateTime, formatShortDate, isOfficeApp, normalizeApplication, officeName, titleCaseName
 } from './adminData';
 import {
   Alert, Avatar, Badge, Button, ButtonVariant, Card, DetailField, EmptyState, Field, LinkButton, Modal,
-  PageHeader, Quote, StatusBadge, Tabs, Textarea, Timeline, TimelineEntry
+  PageHeader, Quote, StatusBadge, Tabs, Textarea
 } from './AdminUI';
+import HistoryList from './HistoryList';
+import { buildApplicationHistory } from './history';
 
 type ReviewTab = 'form' | 'sheet' | 'documents' | 'activity';
 type Decision = Exclude<AppStatus, 'Under Evaluation'>;
@@ -64,12 +66,8 @@ export default function ApplicationReview({ app, adminOffice, getToken, onBack, 
   const lockedByOverride = !!adminOffice && app.decisionOffice === 'LSO';
   const busy = isUpdating || isSavingNote;
 
-  const timeline = useMemo<TimelineEntry[]>(
-    () => [...(app.history ?? [])]
-      .sort((a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime())
-      .map((h, i) => ({ ...h, key: `${h.changedAt}-${i}` })),
-    [app.history]
-  );
+  // Newest first, repeated entries collapsed (see history.ts).
+  const timeline = useMemo(() => buildApplicationHistory(app, titleCaseName(name)), [app, name]);
 
   // PATCH /:id/status is also how a note is saved on its own: the
   // application's current status is sent back unchanged.
@@ -243,7 +241,7 @@ export default function ApplicationReview({ app, adminOffice, getToken, onBack, 
               )}
 
               {activeTab === 'activity' && (
-                <Timeline entries={timeline} empty="No history recorded for this application yet." formatTime={formatDateTime} />
+                <HistoryList events={timeline} empty="No history recorded for this application yet." label="Application activity" />
               )}
             </div>
           </Card>

@@ -9,7 +9,7 @@ import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
 import AdminScholars from './AdminScholars';
 import ApplicationReview from './ApplicationReview';
 import ApplicationsList, { DEFAULT_FILTERS, ListFilters } from './ApplicationsList';
-import { API_BASE_URL, AdminApplication, applicantName, authHeaders, normalizeApplication } from './adminData';
+import { API_BASE_URL, AdminApplication, applicantName, authHeaders, normalizeApplication, titleCaseName } from './adminData';
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -103,16 +103,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         const latest = applications
           .filter(a => a.studentNumber === selectedScholar)
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-        return latest ? applicantName(latest) : selectedScholar;
+        return latest ? titleCaseName(applicantName(latest)) : selectedScholar;
       })()
     : null;
-  // The Scholarships, Announcements and Statistics pages carry their own
-  // heading (the Scholarships detail view adds a back link), so the top bar
-  // shows no title there.
+  // Pages with their own heading (Scholars, Scholarships, Announcements,
+  // Statistics) show no title in the top bar; detail views (an application,
+  // a scholar) show a breadcrumb back to their list.
   const breadcrumbs: Crumb[] =
-    mainView === 'scholarships' || mainView === 'announcements' || mainView === 'analytics' ? []
-    : mainView === 'applications' && selected ? [sectionCrumb, { label: applicantName(selected) }]
+    mainView === 'applications' && selected ? [sectionCrumb, { label: titleCaseName(applicantName(selected)) }]
     : mainView === 'lifecycle' && scholarName ? [sectionCrumb, { label: scholarName }]
+    : mainView === 'lifecycle' || mainView === 'scholarships' || mainView === 'announcements' || mainView === 'analytics' ? []
     : [{ label: VIEW_TITLES[mainView] }];
 
   // Opens the Applications list filtered to one scholarship.
@@ -144,6 +144,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onRefresh={fetchApplications}
         selectedStudentNumber={selectedScholar}
         onSelectStudent={setSelectedScholar}
+        onOpenApplication={applicationId => {
+          navigate('applications');
+          setSelectedId(applicationId);
+        }}
       />
     );
   } else if (mainView === 'announcements' && isAdso) {

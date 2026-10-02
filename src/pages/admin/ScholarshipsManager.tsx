@@ -50,6 +50,7 @@ interface EditorState {
   eligibility: string;
   process: string;
   submissionNote: string;
+  schedule: string;
 }
 
 const toLines = (items: string[] | undefined) => (items ?? []).join('\n');
@@ -64,7 +65,8 @@ function editorFrom(s: Scholarship): EditorState {
     benefits: toLines(s.benefits),
     eligibility: toLines(s.eligibility),
     process: toLines(s.process),
-    submissionNote: s.submissionNote ?? ''
+    submissionNote: s.submissionNote ?? '',
+    schedule: s.schedule ?? ''
   };
 }
 
@@ -83,7 +85,9 @@ function toPayload(form: EditorState, defaults: Scholarship) {
     benefits: list(form.benefits, defaults.benefits),
     eligibility: list(form.eligibility, defaults.eligibility),
     process: list(form.process, defaults.process),
-    submissionNote: text(form.submissionNote, defaults.submissionNote)
+    submissionNote: text(form.submissionNote, defaults.submissionNote),
+    // Only scholarships with a schedule (e.g. Athletic tryouts) send it.
+    ...(defaults.scheduleLabel ? { schedule: text(form.schedule, defaults.schedule) } : {})
   };
 }
 
@@ -148,6 +152,12 @@ function ScholarshipEditor({ row, onClose, onSave, isSaving, error }: {
         <Field label="Deadline / application period" error={errors.deadline}>
           <TextInput value={form.deadline} onChange={e => set('deadline', e.target.value)} maxLength={200} disabled={isSaving} placeholder="e.g. October 30, 2026" />
         </Field>
+
+        {row.defaults.scheduleLabel && (
+          <Field label={row.defaults.scheduleLabel} optional helper="Shown on the scholarship's card and details page. For the full details, post an announcement and set its related scholarship to this one.">
+            <TextInput value={form.schedule} onChange={e => set('schedule', e.target.value)} maxLength={300} disabled={isSaving} placeholder="e.g. November 3–7, 2026, 4:00 PM, at the University Gym" />
+          </Field>
+        )}
 
         <Field label="Description" error={errors.description}>
           <Textarea value={form.description} onChange={e => set('description', e.target.value)} rows={4} maxLength={4000} disabled={isSaving} className="resize-y" />
@@ -309,6 +319,7 @@ export default function ScholarshipsManager() {
                     <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{s.description}</p>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-subtle">
                       <span className="flex items-center gap-1"><Calendar className="size-3.5" aria-hidden />{s.deadline}</span>
+                      {s.scheduleLabel && <span>{s.scheduleLabel}: {s.schedule || 'not set'}</span>}
                       {infoOnly ? (
                         <span>No online applications — listed for information</span>
                       ) : (

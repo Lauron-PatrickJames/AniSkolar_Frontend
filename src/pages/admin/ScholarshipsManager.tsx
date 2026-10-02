@@ -94,7 +94,7 @@ function ScholarshipStatusBadge({ status }: { status: ScholarshipStatus }) {
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const MONTH_PATTERN = MONTHS.join('|');
 const MONTH_RE = new RegExp(`\\b(${MONTH_PATTERN})\\b`, 'g');
-const DATE_RE = new RegExp(`\\b(${MONTH_PATTERN})\\s+(\\d{1,2}),\\s*(\\d{4})`);
+const DATE_RE = new RegExp(`\\b(${MONTH_PATTERN})\\s+(\\d{1,2})(?:\\s*[–-]\\s*\\d{1,2})?,\\s*(\\d{4})`);
 
 function shortSchedule(text: string): string {
   const t = text

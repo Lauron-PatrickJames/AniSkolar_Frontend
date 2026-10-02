@@ -43,10 +43,18 @@ export function StandardProfileAnswers({ info }: { info: StandardProfileInfo }) 
 }
 
 export function SfagAnswers({ details }: { details: SfagApplicationDetails }) {
-  const p = details.personalInfo;
-  const c = details.contactSchool;
-  const pg = details.parentsGuardian;
-  const a = details.assetsExpenses;
+  // Older or partial records can lack whole sections; show them as blank
+  // instead of failing.
+  const p = details.personalInfo ?? ({} as SfagApplicationDetails['personalInfo']);
+  const c = details.contactSchool ?? ({} as SfagApplicationDetails['contactSchool']);
+  const pgRaw = details.parentsGuardian ?? ({} as SfagApplicationDetails['parentsGuardian']);
+  const pg = {
+    ...pgRaw,
+    father: pgRaw.father ?? ({} as SfagApplicationDetails['parentsGuardian']['father']),
+    mother: pgRaw.mother ?? ({} as SfagApplicationDetails['parentsGuardian']['mother']),
+    guardian: pgRaw.guardian ?? ({} as SfagApplicationDetails['parentsGuardian']['guardian'])
+  };
+  const a = details.assetsExpenses ?? ({} as SfagApplicationDetails['assetsExpenses']);
   const parentRow = (label: string, parent: typeof pg.father) => [
     label, parent.fullName, parent.occupation, parent.company, parent.companyTel, parent.monthlyIncome, parent.isSoloParent ? 'Yes' : 'No'
   ];
@@ -106,7 +114,7 @@ export function SfagAnswers({ details }: { details: SfagApplicationDetails }) {
         <RowsTable
           columns={['Name', 'Status', 'Civil Status', 'Age', 'School / Company', 'Type', 'Tuition / Income', 'DLSU-D Scholar']}
           empty="No siblings listed."
-          rows={details.siblings.map(s => [s.fullName, s.socialStatus, s.civilStatus, s.age, s.schoolOrCompany, s.schoolType, s.tuitionOrIncome, s.isDlsudScholar ? 'Yes' : 'No'])}
+          rows={(details.siblings ?? []).map(s => [s.fullName, s.socialStatus, s.civilStatus, s.age, s.schoolOrCompany, s.schoolType, s.tuitionOrIncome, s.isDlsudScholar ? 'Yes' : 'No'])}
         />
       </AnswerGroup>
 

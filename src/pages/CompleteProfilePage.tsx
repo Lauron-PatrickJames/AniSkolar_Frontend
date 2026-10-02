@@ -43,6 +43,7 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [nationality, setNationality] = useState('');
   const [placeOfBirth, setPlaceOfBirth] = useState('');
+  const [middleName, setMiddleName] = useState('');
   const [civilStatus, setCivilStatus] = useState('');
   const [gpa, setGpa] = useState('');
 
@@ -99,6 +100,7 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
           dateOfBirth: dateOfBirth || undefined,
           nationality,
           placeOfBirth,
+          middleName: middleName.trim() || undefined,
           civilStatus: civilStatus || undefined,
           gpa: gpa.trim() ? gpa : undefined,
           homeAddress,
@@ -243,6 +245,17 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>Middle Name</label>
+              <input
+                type="text"
+                placeholder="Leave blank if you don't have one"
+                value={middleName}
+                onChange={e => setMiddleName(e.target.value)}
+                className={inputClass}
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

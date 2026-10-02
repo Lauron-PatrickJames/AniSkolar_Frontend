@@ -1,3 +1,4 @@
+import { profileNameParts } from './names';
 // Model for the grant-form application flows (POLCA / DLSU-D Alumni
 // Association): option lists, certification texts, the section list per
 // scholarship, prefill from the student profile, per-section validation,
@@ -310,12 +311,14 @@ function emptyDetails(scholarship: Scholarship): GrantApplicationDetails {
 // profile already has the field.
 export function initialGrantValues(scholarship: Scholarship, student: StudentProfile): GrantApplicationDetails {
   const base = emptyDetails(scholarship);
-  const nameParts = (student.name || '').trim().split(/\s+/).filter(Boolean);
+  // Stored name parts only — never split from the full name.
+  const names = profileNameParts(student);
   const civilStatus = CIVIL_STATUS_OPTIONS.find(o => o.toLowerCase() === (student.civilStatus || '').toLowerCase()) ?? '';
   base.personalInfo = {
     ...base.personalInfo,
-    lastName: nameParts.length > 1 ? nameParts[nameParts.length - 1] : '',
-    firstName: nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : (nameParts[0] ?? ''),
+    lastName: names.lastName,
+    firstName: names.firstName,
+    middleName: names.middleName,
     studentNumber: student.studentNumber,
     course: student.course || '',
     yearLevel: student.yearLevel || '',

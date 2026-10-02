@@ -14,8 +14,30 @@ function formatDate(value?: string): string {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-export function AnswerField({ label, value, wide }: { label: string; value?: React.ReactNode; wide?: boolean }) {
+// How answers render. 'student' is the original look (application review
+// step); 'admin' matches the admin console (normal-case labels, plain
+// section headings). With hideSummary, fields marked `summary` (the
+// applicant's name, student no., program, year, email and mobile) are left
+// out because the admin header already shows them.
+interface AnswersStyle { variant: 'student' | 'admin'; hideSummary?: boolean }
+const AnswersStyleContext = React.createContext<AnswersStyle>({ variant: 'student' });
+
+export function AnswersStyleProvider({ variant, hideSummary, children }: AnswersStyle & { children: React.ReactNode }) {
+  return <AnswersStyleContext.Provider value={{ variant, hideSummary }}>{children}</AnswersStyleContext.Provider>;
+}
+
+export function AnswerField({ label, value, wide, summary }: { label: string; value?: React.ReactNode; wide?: boolean; summary?: boolean }) {
+  const style = React.useContext(AnswersStyleContext);
+  if (summary && style.hideSummary) return null;
   const empty = value === undefined || value === null || value === '';
+  if (style.variant === 'admin') {
+    return (
+      <div className={`min-w-0 ${wide ? 'col-span-2 sm:col-span-3' : ''}`}>
+        <dt className="text-xs text-ink-subtle">{label}</dt>
+        <dd className="mt-0.5 text-sm text-ink wrap-break-word">{empty ? <span className="text-ink-subtle">—</span> : value}</dd>
+      </div>
+    );
+  }
   return (
     <div className={`min-w-0 ${wide ? 'col-span-2 sm:col-span-3' : ''}`}>
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>
@@ -25,6 +47,15 @@ export function AnswerField({ label, value, wide }: { label: string; value?: Rea
 }
 
 export function AnswerGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  const style = React.useContext(AnswersStyleContext);
+  if (style.variant === 'admin') {
+    return (
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
+        {children}
+      </section>
+    );
+  }
   return (
     <section className="space-y-3">
       <h4 className="font-display font-bold text-xs text-brand-green uppercase tracking-wider pb-1.5 border-b border-slate-100">{title}</h4>
@@ -34,12 +65,24 @@ export function AnswerGroup({ title, children }: { title: string; children: Reac
 }
 
 export function AnswerGrid({ children }: { children: React.ReactNode }) {
+  const style = React.useContext(AnswersStyleContext);
+  if (style.variant === 'admin') return <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">{children}</dl>;
   return <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-4">{children}</div>;
 }
 
+// A label inside a section (e.g. "Earning siblings" above a table).
+export function AnswerSubheading({ children }: { children: React.ReactNode }) {
+  const admin = React.useContext(AnswersStyleContext).variant === 'admin';
+  return admin
+    ? <p className="pt-2 text-xs font-medium text-ink-muted">{children}</p>
+    : <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-2">{children}</p>;
+}
+
 export function AnswerCheck({ ok, children }: { ok: boolean; children: React.ReactNode }) {
+  const admin = React.useContext(AnswersStyleContext).variant === 'admin';
+  const tone = admin ? (ok ? 'text-success-fg' : 'text-danger-fg') : ok ? 'text-brand-green' : 'text-rose-500';
   return (
-    <div className={`flex items-start gap-2 text-xs font-semibold ${ok ? 'text-brand-green' : 'text-rose-500'}`}>
+    <div className={`flex items-start gap-2 ${admin ? 'text-sm' : 'text-xs font-semibold'} ${tone}`}>
       {ok ? <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" /> : <XCircle className="w-4 h-4 shrink-0 mt-0.5" />}
       <span>{children}</span>
     </div>
@@ -48,19 +91,20 @@ export function AnswerCheck({ ok, children }: { ok: boolean; children: React.Rea
 
 // Compact table for repeatable rows; scrolls horizontally on small screens.
 export function RowsTable({ columns, rows, empty }: { columns: string[]; rows: React.ReactNode[][]; empty: string }) {
-  if (rows.length === 0) return <p className="text-xs text-slate-400 italic">{empty}</p>;
+  const admin = React.useContext(AnswersStyleContext).variant === 'admin';
+  if (rows.length === 0) return <p className={admin ? 'text-sm text-ink-subtle' : 'text-xs text-slate-400 italic'}>{empty}</p>;
   return (
     <div className="overflow-x-auto -mx-1">
       <table className="w-full text-xs text-left min-w-[560px]">
         <thead>
-          <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            {columns.map(c => <th key={c} className="px-2 py-2 font-bold">{c}</th>)}
+          <tr className={admin ? 'text-xs text-ink-subtle' : 'text-[10px] font-bold text-slate-400 uppercase tracking-wider'}>
+            {columns.map(c => <th key={c} className={`px-2 py-2 ${admin ? 'font-normal' : 'font-bold'}`}>{c}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className="border-t border-slate-100 text-slate-700">
-              {row.map((cell, j) => <td key={j} className="px-2 py-2 font-medium">{cell === '' || cell === undefined ? '—' : cell}</td>)}
+            <tr key={i} className={admin ? 'border-t border-line text-ink' : 'border-t border-slate-100 text-slate-700'}>
+              {row.map((cell, j) => <td key={j} className={`px-2 py-2 ${admin ? '' : 'font-medium'}`}>{cell === '' || cell === undefined ? '—' : cell}</td>)}
             </tr>
           ))}
         </tbody>
@@ -100,11 +144,11 @@ export function ApplicationFormAnswers({ details, scholarship }: { details: Gran
 
       <AnswerGroup title="Student Data">
         <AnswerGrid>
-          <AnswerField label="Last Name" value={p.lastName} />
-          <AnswerField label="First Name" value={p.firstName} />
-          <AnswerField label="Middle Name" value={p.middleName} />
-          <AnswerField label="Student No." value={p.studentNumber} />
-          <AnswerField label="Course / Year" value={[p.course, p.yearLevel].filter(Boolean).join(' · ')} />
+          <AnswerField summary label="Last Name" value={p.lastName} />
+          <AnswerField summary label="First Name" value={p.firstName} />
+          <AnswerField summary label="Middle Name" value={p.middleName} />
+          <AnswerField summary label="Student No." value={p.studentNumber} />
+          <AnswerField summary label="Course / Year" value={[p.course, p.yearLevel].filter(Boolean).join(' · ')} />
           <AnswerField label="Date of Birth" value={formatDate(p.dateOfBirth)} />
           <AnswerField label="Age" value={calculateAge(p.dateOfBirth) ?? ''} />
           <AnswerField label="Place of Birth" value={p.placeOfBirth} />
@@ -112,7 +156,7 @@ export function ApplicationFormAnswers({ details, scholarship }: { details: Gran
           <AnswerField label="Gender" value={p.gender} />
           <AnswerField label="Citizenship" value={p.citizenship} />
           <AnswerField label="Religion" value={p.religion} />
-          <AnswerField label="Email" value={p.email} />
+          <AnswerField summary label="Email" value={p.email} />
           <AnswerField label="Secondary School" value={p.secondarySchool ? `${p.secondarySchool}${p.secondarySchoolType ? ` (${p.secondarySchoolType})` : ''}` : ''} wide />
         </AnswerGrid>
       </AnswerGroup>
@@ -135,7 +179,7 @@ export function ApplicationFormAnswers({ details, scholarship }: { details: Gran
           <AnswerField label="City / Municipality" value={c.municipality} />
           <AnswerField label="Province" value={c.province} />
           <AnswerField label="Landline" value={c.landlineNo} />
-          <AnswerField label="Mobile" value={c.mobileNo} />
+          <AnswerField summary label="Mobile" value={c.mobileNo} />
         </AnswerGrid>
       </AnswerGroup>
 
@@ -271,19 +315,19 @@ export function EvaluationSheetAnswers({ sheet }: { sheet: EvaluationSheet }) {
             empty=""
             rows={HOUSEHOLD_ROLES.filter(r => fam[r.key].name).map(r => memberRow(r.label, fam[r.key]))}
           />
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-2">Earning Siblings</p>
+          <AnswerSubheading>Earning Siblings</AnswerSubheading>
           <RowsTable
             columns={['Name', 'Age', 'Degree / School', 'Civil Status', 'Children', 'Employer', 'Job Title', 'Gross Income', 'With Family']}
             empty="None listed."
             rows={fam.earningSiblings.map(s => [s.name, s.age, [s.highestDegree, s.school].filter(Boolean).join(', '), s.civilStatus, s.childrenCount, s.employer, s.jobTitle, formatPeso(s.grossIncome), s.livingWithFamily])}
           />
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-2">Non-earning Siblings</p>
+          <AnswerSubheading>Non-earning Siblings</AnswerSubheading>
           <RowsTable
             columns={['Name', 'Age', 'Civil Status', 'Children', 'Studying', 'Highest Level', 'School', 'Scholarship']}
             empty="None listed."
             rows={fam.nonEarningSiblings.map(s => [s.name, s.age, s.civilStatus, s.childrenCount, s.isStudying, s.highestLevel, s.school, s.withScholarship])}
           />
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-2">Other Contributors</p>
+          <AnswerSubheading>Other Contributors</AnswerSubheading>
           <RowsTable
             columns={['Name', 'Relationship', 'Contribution', 'Avg. Monthly']}
             empty="None listed."
@@ -306,7 +350,7 @@ export function EvaluationSheetAnswers({ sheet }: { sheet: EvaluationSheet }) {
             <AnswerField label="Credit Cards" value={a.hasCreditCards} />
             <AnswerField label="Boarders / Lodgers" value={a.boarders.has === 'Yes' ? `Yes · ${formatPeso(a.boarders.monthlyIncome)}/month` : a.boarders.has} />
           </AnswerGrid>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-2">Real Estate</p>
+          <AnswerSubheading>Real Estate</AnswerSubheading>
           <RowsTable
             columns={['Type', 'Area (sqm)', 'Location', 'Market Value', 'Monthly Income']}
             empty="None listed."

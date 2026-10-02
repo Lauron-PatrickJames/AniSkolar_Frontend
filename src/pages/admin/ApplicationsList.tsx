@@ -1,25 +1,23 @@
 import React, { useMemo } from 'react';
-import { CheckCircle2, ChevronRight, Clock, Inbox, RefreshCw, RotateCcw, Send, ShieldCheck } from 'lucide-react';
-import { acceptsOnlineApplications, mockScholarships, officeOf } from '../../data/scholarships';
+import { ChevronRight, Inbox } from 'lucide-react';
+import { OFFICE_LABELS, acceptsOnlineApplications, mockScholarships, officeDisplayName, officeOf } from '../../data/scholarships';
 import {
-  AdminApplication, AppStatus, applicantName, formTypeLabel,
-  formatShortDate, isOfficeApp, officeName
+  AdminApplication, STATUS_OPTIONS, applicantName, formatDateTime, isOfficeApp, titleCaseName
 } from './adminData';
 import {
-  Alert, Avatar, Button, Card, EmptyState, ErrorState, KpiCard, KpiGrid, MobileList, PageHeader,
-  Pagination, RowLink, SearchInput, Select, StatusBadge, Table, TableSkeleton, Tabs, Td, Th, Toolbar, Tr, Truncate, paginate
+  Alert, Avatar, Badge, Button, Card, CopyButton, EmptyState, ErrorState, PageHeader, Pagination, RowLink,
+  SearchInput, Select, StatusBadge, Table, TableSkeleton, Tabs, Td, Th, Toolbar, Tooltip, Tr, Truncate, paginate
 } from './AdminUI';
+import {
+  DEFAULT_FILTERS, ListFilters, OfficeFilter, QueueSort, SORT_LABELS, StatusTab, WAITING_HIGHLIGHT_DAYS,
+  filterApplications, waitingDays
+} from './applicationQueue';
+import { relativeTime } from './history';
+
+export { DEFAULT_FILTERS };
+export type { ListFilters };
 
 const PAGE_SIZE = 15;
-
-export interface ListFilters {
-  search: string;
-  status: AppStatus | 'All';
-  scholarship: string;
-  page: number;
-}
-
-export const DEFAULT_FILTERS: ListFilters = { search: '', status: 'All', scholarship: 'All', page: 1 };
 
 interface ApplicationsListProps {
   applications: AdminApplication[];
@@ -35,16 +33,32 @@ interface ApplicationsListProps {
   officeLabel: string;
 }
 
+const TABS: { key: StatusTab; label: string }[] = [
+  { key: 'Under Evaluation', label: 'Under evaluation' },
+  { key: 'Needs Revision', label: 'Needs revision' },
+  { key: 'Approved', label: 'Approved' },
+  { key: 'Rejected', label: 'Rejected' },
+  { key: 'All', label: 'All' }
+];
+
+const EMPTY_TABS: Record<StatusTab, { title: string; description: string }> = {
+  'Under Evaluation': { title: 'Nothing waiting for review', description: 'New and resubmitted applications appear here.' },
+  'Needs Revision': { title: 'Nothing waiting on applicants', description: 'Applications sent back for changes stay here until the applicant resubmits.' },
+  'Approved': { title: 'No approved applications', description: 'Applications you approve appear here.' },
+  'Rejected': { title: 'No rejected applications', description: 'Applications you reject appear here.' },
+  'All': { title: 'No applications yet', description: 'Applications appear here as students apply.' }
+};
+
 export default function ApplicationsList({
   applications, isLoading, loadError, onReload, onOpen, filters, onFiltersChange, adminOffice, officeLabel
 }: ApplicationsListProps) {
   const hasData = applications.length > 0;
   const firstLoad = isLoading && !hasData;
   const failedEmpty = !!loadError && !hasData && !isLoading;
+  const isAdso = !adminOffice;
 
   // Any filter change returns to page 1.
   const setFilter = (patch: Partial<Omit<ListFilters, 'page'>>) => onFiltersChange({ ...filters, ...patch, page: 1 });
-  const clearFilters = () => onFiltersChange(DEFAULT_FILTERS);
 
   const scholarshipOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -57,58 +71,30 @@ export default function ApplicationsList({
     return Array.from(map.entries());
   }, [applications, adminOffice]);
 
-  const stats = useMemo(() => {
-    const count = (s: AppStatus) => applications.filter(a => a.status === s).length;
-    return {
-      total: applications.length,
-      pending: count('Under Evaluation'),
-      revision: count('Needs Revision'),
-      approved: count('Approved'),
-      rejected: count('Rejected')
-    };
+  const counts = useMemo(() => {
+    const c = { All: applications.length } as Record<StatusTab, number>;
+    STATUS_OPTIONS.forEach(s => { c[s] = applications.filter(a => a.status === s).length; });
+    return c;
   }, [applications]);
 
-  const filtered = useMemo(() => {
-    const q = filters.search.trim().toLowerCase();
-    return applications.filter(app => {
-      if (filters.status !== 'All' && app.status !== filters.status) return false;
-      if (filters.scholarship !== 'All' && app.scholarshipId !== filters.scholarship) return false;
-      if (q) {
-        return applicantName(app).toLowerCase().includes(q) ||
-          app.studentNumber.toLowerCase().includes(q) ||
-          app.scholarshipName.toLowerCase().includes(q) ||
-          app.referenceCode.toLowerCase().includes(q);
-      }
-      return true;
-    });
-  }, [applications, filters.search, filters.status, filters.scholarship]);
-
+  const filtered = useMemo(() => filterApplications(applications, filters), [applications, filters]);
   const pager = paginate(filtered, filters.page, PAGE_SIZE);
+  const showWaiting = filters.status === 'Under Evaluation';
+  const now = Date.now();
 
   // Counts are hidden until there's data, so a failed or pending load
   // doesn't read as "0 applications".
   const tabCount = (n: number) => (firstLoad || failedEmpty ? undefined : n);
-  const statusTabs: { key: AppStatus | 'All'; label: string; count?: number }[] = [
-    { key: 'All', label: 'All', count: tabCount(stats.total) },
-    { key: 'Under Evaluation', label: 'Under evaluation', count: tabCount(stats.pending) },
-    { key: 'Needs Revision', label: 'Needs revision', count: tabCount(stats.revision) },
-    { key: 'Approved', label: 'Approved', count: tabCount(stats.approved) },
-    { key: 'Rejected', label: 'Rejected', count: tabCount(stats.rejected) }
-  ];
-  const decided = stats.approved + stats.rejected;
-  const approvalRate = decided > 0 ? Math.round((stats.approved / decided) * 100) : null;
-  const filtersActive = filters.search.trim() !== '' || filters.scholarship !== 'All' || filters.status !== 'All';
-  const toggleStatus = (status: AppStatus) => setFilter({ status: filters.status === status ? 'All' : status });
-  const kpiValue = (n: number | string) => (failedEmpty ? '—' : n);
+  const listFiltersActive = filters.search.trim() !== '' || filters.scholarship !== 'All' || filters.office !== 'All';
+  const clearListFilters = () => onFiltersChange({ ...DEFAULT_FILTERS, status: filters.status, sort: filters.sort });
 
   return (
     <>
       <PageHeader
         title="Applications"
         description={adminOffice
-          ? `Applications for the ${officeLabel}. Approved applications are sent to the AdSO automatically.`
-          : 'Review submissions, verify documents, and record a decision for each applicant.'}
-        actions={<Button icon={RefreshCw} loading={isLoading} onClick={() => onReload()}>Refresh</Button>}
+          ? `Applications for the ${officeLabel}. Approving one sends it to the AdSO automatically.`
+          : 'Review submissions and record a decision for each applicant.'}
       />
 
       {loadError && hasData && (
@@ -121,54 +107,38 @@ export default function ApplicationsList({
         </Alert>
       )}
 
-      <KpiGrid>
-        <KpiCard label="Total applications" value={kpiValue(stats.total)} hint="All submissions on file" icon={Inbox} loading={firstLoad} />
-        <KpiCard
-          label="Under evaluation"
-          value={kpiValue(stats.pending)}
-          hint="Waiting for a decision"
-          icon={Clock}
-          tone="warning"
-          loading={firstLoad}
-          active={filters.status === 'Under Evaluation'}
-          onClick={() => toggleStatus('Under Evaluation')}
-        />
-        <KpiCard
-          label="Needs revision"
-          value={kpiValue(stats.revision)}
-          hint="Waiting on applicants"
-          icon={RotateCcw}
-          tone="info"
-          loading={firstLoad}
-          active={filters.status === 'Needs Revision'}
-          onClick={() => toggleStatus('Needs Revision')}
-        />
-        <KpiCard
-          label="Approval rate"
-          value={kpiValue(approvalRate === null ? '—' : `${approvalRate}%`)}
-          hint={failedEmpty ? 'No data' : `${stats.approved} approved of ${decided} decided`}
-          icon={CheckCircle2}
-          tone="success"
-          loading={firstLoad}
-        />
-      </KpiGrid>
-
       <Card
         flush
         headerSlot={
           <>
-            <Tabs<AppStatus | 'All'> tabs={statusTabs} value={filters.status} onChange={status => setFilter({ status })} label="Filter by status" />
+            <Tabs<StatusTab>
+              tabs={TABS.map(t => ({ ...t, count: tabCount(counts[t.key]) }))}
+              value={filters.status}
+              onChange={status => setFilter({ status })}
+              label="Filter by status"
+            />
             <Toolbar>
               <SearchInput
                 value={filters.search}
                 onChange={search => setFilter({ search })}
                 label="Search applications"
-                placeholder="Search name, student no., scholarship or reference…"
-                className="flex-1"
+                placeholder="Search name, student no. or reference…"
+                className="min-w-56 flex-1"
               />
-              <Select value={filters.scholarship} onChange={scholarship => setFilter({ scholarship })} className="md:w-72" label="Filter by scholarship">
+              <Select value={filters.scholarship} onChange={scholarship => setFilter({ scholarship })} className="md:w-60" label="Filter by scholarship">
                 <option value="All">All scholarships</option>
                 {scholarshipOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </Select>
+              {isAdso && (
+                <Select value={filters.office} onChange={office => setFilter({ office: office as OfficeFilter })} className="md:w-48" label="Filter by office">
+                  <option value="All">All offices</option>
+                  {(Object.keys(OFFICE_LABELS) as OfficeFilter[]).map(code => (
+                    <option key={code} value={code}>{code === 'LSO' ? 'AdSO only' : `Via ${officeDisplayName(code)}`}</option>
+                  ))}
+                </Select>
+              )}
+              <Select value={filters.sort} onChange={sort => setFilter({ sort: sort as QueueSort })} className="md:w-44" label="Sort applications">
+                {(Object.keys(SORT_LABELS) as QueueSort[]).map(key => <option key={key} value={key}>{SORT_LABELS[key]}</option>)}
               </Select>
             </Toolbar>
           </>
@@ -179,89 +149,78 @@ export default function ApplicationsList({
         ) : failedEmpty ? (
           <ErrorState title="Couldn't load applications" message={loadError} onRetry={() => onReload()} retrying={isLoading} />
         ) : filtered.length === 0 ? (
-          filtersActive ? (
+          listFiltersActive ? (
             <EmptyState
-              title="No applications match your filters"
-              description="Try a different search term, status or scholarship."
-              action={<Button onClick={clearFilters}>Clear filters</Button>}
+              title="No applications match"
+              description="Try a different search, scholarship or office."
+              action={<Button onClick={clearListFilters}>Clear filters</Button>}
             />
           ) : (
-            <EmptyState
-              title="No applications yet"
-              description="New submissions appear here as students apply. Refresh to check for new ones."
-              action={<Button variant="primary" icon={RefreshCw} loading={isLoading} onClick={() => onReload()}>Refresh</Button>}
-            />
+            <EmptyState icon={Inbox} title={EMPTY_TABS[filters.status].title} description={EMPTY_TABS[filters.status].description} />
           )
         ) : (
           <>
-            <div className="hidden md:block">
-              <Table label="Applications">
-                <thead>
-                  <tr>
-                    <Th>Applicant</Th>
-                    <Th>Scholarship</Th>
-                    <Th className="hidden w-40 lg:table-cell">Reference</Th>
-                    <Th className="w-32">Submitted</Th>
-                    <Th className="w-44">Status</Th>
-                    <Th className="w-12"><span className="sr-only">Open</span></Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pager.pageItems.map(app => {
-                    const name = applicantName(app);
-                    return (
-                      <Tr key={app._id} onClick={() => onOpen(app)}>
-                        <Td>
-                          <div className="flex min-w-0 items-center gap-3">
-                            <Avatar name={name} avatarUrl={app.avatarUrl} size="sm" />
-                            <div className="min-w-0">
-                              <RowLink onClick={() => onOpen(app)}>{name}</RowLink>
-                              <p className="text-xs text-ink-subtle tabular-nums">{app.studentNumber}</p>
-                            </div>
+            <Table label="Applications" minWidth={showWaiting ? '58rem' : '52rem'}>
+              <thead>
+                <tr>
+                  <Th sticky={false}>Applicant</Th>
+                  <Th sticky={false}>Scholarship</Th>
+                  <Th sticky={false} className="w-32">Submitted</Th>
+                  {showWaiting && <Th sticky={false} className="w-28">Waiting</Th>}
+                  <Th sticky={false} className="w-40">Status</Th>
+                  <Th sticky={false} className="w-12"><span className="sr-only">Open</span></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {pager.pageItems.map(app => {
+                  const name = titleCaseName(applicantName(app));
+                  const days = waitingDays(app, now);
+                  return (
+                    <Tr key={app._id} onClick={() => onOpen(app)}>
+                      <Td>
+                        <div className="flex min-w-0 items-start gap-3">
+                          <Avatar name={name} avatarUrl={app.avatarUrl} size="sm" />
+                          <div className="min-w-0">
+                            <RowLink onClick={() => onOpen(app)}>{name}</RowLink>
+                            <p className="text-xs text-ink-subtle tabular-nums">{app.studentNumber}</p>
+                            <p className="flex items-center gap-1 text-xs text-ink-subtle">
+                              <span className="font-mono">{app.referenceCode}</span>
+                              <CopyButton
+                                value={app.referenceCode}
+                                label={`Copy reference ${app.referenceCode}`}
+                                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                              />
+                            </p>
                           </div>
-                        </Td>
-                        <Td>
-                          <Truncate className="text-ink">{app.scholarshipName}</Truncate>
-                          <Truncate className="text-xs text-ink-subtle">
-                            {`${formTypeLabel(app.applicationFormType)}${!adminOffice && isOfficeApp(app) ? ` · from ${officeName(app.office)}` : ''}`}
-                          </Truncate>
-                        </Td>
-                        <Td className="hidden lg:table-cell"><Truncate className="font-mono text-xs">{app.referenceCode}</Truncate></Td>
-                        <Td className="whitespace-nowrap tabular-nums">{formatShortDate(app.createdAt)}</Td>
-                        <Td>
-                          <div className="flex flex-col items-start gap-1">
-                            <StatusBadge status={app.status} />
-                            <RoutingNote app={app} adminOffice={adminOffice} />
-                          </div>
-                        </Td>
-                        <Td><ChevronRight className="size-4 text-ink-subtle group-hover:text-ink" aria-hidden /></Td>
-                      </Tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
-            </div>
-
-            <MobileList>
-              {pager.pageItems.map(app => {
-                const name = applicantName(app);
-                return (
-                  <li key={app._id}>
-                    <button type="button" onClick={() => onOpen(app)} className="flex w-full items-start gap-3 p-4 text-left hover:bg-surface-muted focus-visible:-outline-offset-2">
-                      <Avatar name={name} avatarUrl={app.avatarUrl} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="truncate text-sm font-medium text-ink">{name}</p>
-                          <StatusBadge status={app.status} />
                         </div>
-                        <p className="mt-0.5 truncate text-xs text-ink-muted">{app.scholarshipName}</p>
-                        <p className="mt-0.5 text-xs text-ink-subtle tabular-nums">{app.studentNumber} · {formatShortDate(app.createdAt)}</p>
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </MobileList>
+                      </Td>
+                      <Td>
+                        <Truncate className="text-ink">{app.scholarshipName}</Truncate>
+                        {isAdso && isOfficeApp(app) && (
+                          <span className="text-xs text-ink-subtle">via {officeDisplayName(app.office)}</span>
+                        )}
+                      </Td>
+                      <Td>
+                        <Tooltip content={formatDateTime(app.createdAt)} asChild>
+                          <time dateTime={app.createdAt} tabIndex={0} className="rounded-badge tabular-nums">
+                            {relativeTime(app.createdAt, now)}
+                          </time>
+                        </Tooltip>
+                      </Td>
+                      {showWaiting && (
+                        <Td>
+                          {days >= WAITING_HIGHLIGHT_DAYS
+                            ? <Badge tone="warning">{days} days</Badge>
+                            : <span className="tabular-nums">{days === 0 ? 'Today' : `${days} ${days === 1 ? 'day' : 'days'}`}</span>}
+                        </Td>
+                      )}
+                      <Td><StatusBadge status={app.status} /></Td>
+                      <Td><ChevronRight className="size-4 text-ink-subtle group-hover:text-ink" aria-hidden /></Td>
+                    </Tr>
+                  );
+                })}
+              </tbody>
+            </Table>
 
             <Pagination
               page={pager.page}
@@ -276,18 +235,4 @@ export default function ApplicationsList({
       </Card>
     </>
   );
-}
-
-// Secondary line under the status: whether an office has sent it on, or
-// whether the AdSO overrode the office.
-function RoutingNote({ app, adminOffice }: { app: AdminApplication; adminOffice: string | null }) {
-  if (adminOffice) {
-    return app.forwardedAt
-      ? <span className="flex items-center gap-1 text-xs text-ink-muted"><Send className="size-3" aria-hidden />Sent to AdSO</span>
-      : <span className="text-xs text-ink-subtle">Sent when approved</span>;
-  }
-  if (isOfficeApp(app) && app.decisionOffice === 'LSO') {
-    return <span className="flex items-center gap-1 text-xs text-warning-fg"><ShieldCheck className="size-3" aria-hidden />AdSO override</span>;
-  }
-  return null;
 }

@@ -1,4 +1,4 @@
-import { OFFICE_LABELS } from '../../data/scholarships';
+import { OFFICE_LABELS, OFFICE_SHORT_LABELS } from '../../data/scholarships';
 import { PolcaAdminFields } from '../../types';
 
 // Types and pure helpers shared by every admin page. Shapes mirror
@@ -19,7 +19,12 @@ export type HistoryStatus = AppStatus | 'Submitted' | 'Resubmitted' | 'Forwarded
 export interface HistoryEntry {
   status: HistoryStatus;
   note?: string;
+  // 'student', 'system' (automatic events), or the admin's email.
   changedBy?: string;
+  // Admin entries recorded since these fields were added: display name and
+  // office code ('LSO', 'POLCA', 'ALUMNI'). Older entries lack them.
+  changedByName?: string;
+  changedByOffice?: string;
   changedAt: string;
 }
 
@@ -167,9 +172,15 @@ export function officeName(office?: string): string {
   return (office && OFFICE_LABELS[office as keyof typeof OFFICE_LABELS]) || office || 'office';
 }
 
-// 'Forwarded to LSO' is the stored history value; show the office's name.
+// Sentence-case labels for history entries. 'Forwarded to LSO' is the
+// stored value; it reads as "Sent to AdSO" (office name from the config).
 export function historyLabel(status: HistoryStatus): string {
-  return status === 'Forwarded to LSO' ? 'Sent to the AdSO' : status;
+  switch (status) {
+    case 'Forwarded to LSO': return `Sent to ${OFFICE_SHORT_LABELS.LSO}`;
+    case 'Under Evaluation': return 'Under evaluation';
+    case 'Needs Revision': return 'Needs revision';
+    default: return status;
+  }
 }
 
 export const FORM_TYPE_LABELS: Record<FormType, string> = {
@@ -225,11 +236,45 @@ export function documentUrl(fileId: string): string {
 // Philippine academic-year convention: June through May. A submission in
 // March 2026 falls in AY 2025–2026; one in September 2026 in AY 2026–2027.
 // Derived from createdAt, since Application has no separate cycle field.
+// Mirrored in the backend's utils/academicYear.js (used by the CSV export).
 export function academicYearOf(iso: string): string {
   const d = parse(iso);
   if (!d) return 'Unknown';
   const startYear = d.getMonth() >= 5 ? d.getFullYear() : d.getFullYear() - 1;
   return `AY ${startYear}–${startYear + 1}`;
+}
+
+// "AY 2026–2027" → "2026–27", for compact table cells.
+export function shortAcademicYear(label: string): string {
+  const m = label.match(/(\d{4})–\d{2}(\d{2})$/);
+  return m ? `${m[1]}–${m[2]}` : label;
+}
+
+// The distinct academic years (cycles) a set of applications was submitted
+// in, oldest first.
+export function academicCycles(applications: { createdAt: string }[]): string[] {
+  return Array.from(new Set(applications.map(a => academicYearOf(a.createdAt)))).sort();
+}
+
+// A returning scholar applied in 2+ distinct academic years. Several
+// applications within one cycle is still a first-time scholar. The list,
+// the counts and the detail page all use this; the backend export uses the
+// same rule (utils/academicYear.js).
+export function isReturningScholar(applications: { createdAt: string }[]): boolean {
+  return academicCycles(applications).length >= 2;
+}
+
+// Names are often stored in capitals ("JUAN DELA CRUZ"). Shows them in title
+// case; a name typed in mixed case ("Juan de la Cruz") is kept as typed.
+// Keep the raw value for search and exports.
+export function titleCaseName(raw: string): string {
+  const s = (raw ?? '').trim().replace(/\s+/g, ' ');
+  const letters = s.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  if (!letters || (letters !== letters.toUpperCase() && letters !== letters.toLowerCase())) return s;
+  return s
+    .toLowerCase()
+    .replace(/(^|[\s\-'’(])([a-zà-ÿ])/g, (_m, before: string, ch: string) => before + ch.toUpperCase())
+    .replace(/\b(Ii|Iii|Iv|Vi|Vii|Viii)\b/g, m => m.toUpperCase());
 }
 
 // --- Requests ----------------------------------------------------------------

@@ -1,14 +1,16 @@
-import React, { useMemo, useState } from 'react';
-import { Award, CheckCircle2, ChevronRight, Clock, Download, FileText, Printer, RefreshCw, Repeat, Users, XCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ChevronRight, Download, FileText, Printer, Users } from 'lucide-react';
 import {
-  AdminApplication, AppStatus, HistoryEntry, academicYearOf, applicantEmail, applicantName, applicantPhone,
-  applicantProgram, applicantYearLevel, formatDate, formatDateTime, plural
+  AdminApplication, AppStatus, academicCycles, academicYearOf, applicantEmail, applicantName, applicantPhone,
+  applicantProgram, applicantYearLevel, formatDate, isReturningScholar, plural, shortAcademicYear, titleCaseName
 } from './adminData';
 import {
-  Alert, Avatar, Badge, Button, Card, DetailField, EmptyState, ErrorState, KpiCard, KpiGrid, Menu, MobileList, Modal,
-  PageHeader, Pagination, Quote, RowLink, SearchInput, Select, StatusBadge, Table, TableSkeleton, Td, Th, Timeline,
-  TimelineEntry, Toolbar, Tr, Truncate, Checkbox, usePagination
+  Alert, Avatar, Badge, Button, Card, Checkbox, DropdownMenu, EmptyState, ErrorState, Menu, Modal, PageHeader,
+  Pagination, RowLink, SearchInput, SegmentedControl, Select, StatusBadge, STATUS_META, Table, TableSkeleton, Td, Th,
+  Toolbar, Tr, Truncate, usePagination
 } from './AdminUI';
+import HistoryList from './HistoryList';
+import { buildApplicationHistory, buildCombinedHistory } from './history';
 
 interface AdminScholarsProps {
   applications: AdminApplication[];
@@ -19,6 +21,8 @@ interface AdminScholarsProps {
   onRefresh?: () => void;
   selectedStudentNumber: string | null;
   onSelectStudent: (studentNumber: string | null) => void;
+  // Opens one application in the Applications review.
+  onOpenApplication: (applicationId: string) => void;
 }
 
 // --- Scholar aggregation (client-side; used for the list/detail views and
@@ -26,21 +30,25 @@ interface AdminScholarsProps {
 
 interface ScholarSummary {
   studentNumber: string;
+  // As stored (often all caps). Used for search and exports.
+  rawName: string;
+  // Title case, for display.
   name: string;
   avatarUrl?: string;
   email: string;
   phone: string;
   program: string;
   yearLevel: string;
-  applications: AdminApplication[];
-  cycles: string[];
+  applications: AdminApplication[];   // newest first
+  cycles: string[];                   // distinct academic years, oldest first
   totalApplications: number;
   approvedCount: number;
   rejectedCount: number;
   latestApplication: AdminApplication;
   latestStatus: AppStatus;
   firstSubmission: string;
-  isRenewing: boolean;
+  // Applied in 2+ distinct academic years (isReturningScholar).
+  isReturning: boolean;
 }
 
 function buildScholarSummaries(applications: AdminApplication[]): ScholarSummary[] {
@@ -55,42 +63,28 @@ function buildScholarSummaries(applications: AdminApplication[]): ScholarSummary
     const sorted = [...apps].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const latest = sorted[0];
     const oldest = sorted[sorted.length - 1];
-    const cycles = Array.from(new Set(apps.map(a => academicYearOf(a.createdAt)))).sort();
+    const rawName = applicantName(latest);
 
     return {
       studentNumber,
-      name: applicantName(latest),
+      rawName,
+      name: titleCaseName(rawName),
       avatarUrl: latest.avatarUrl,
       email: applicantEmail(latest),
       phone: applicantPhone(latest),
       program: applicantProgram(latest),
       yearLevel: applicantYearLevel(latest),
       applications: sorted,
-      cycles,
+      cycles: academicCycles(apps),
       totalApplications: apps.length,
       approvedCount: apps.filter(a => a.status === 'Approved').length,
       rejectedCount: apps.filter(a => a.status === 'Rejected').length,
       latestApplication: latest,
       latestStatus: latest.status,
       firstSubmission: oldest.createdAt,
-      isRenewing: apps.length > 1
+      isReturning: isReturningScholar(apps)
     };
   }).sort((a, b) => new Date(b.latestApplication.createdAt).getTime() - new Date(a.latestApplication.createdAt).getTime());
-}
-
-// Every history entry from all of a scholar's applications in one
-// chronological record, tagged with the scholarship and cycle it belongs to.
-function buildMergedHistory(applications: AdminApplication[]): (TimelineEntry & { scholarshipName: string; cycle: string })[] {
-  const entries: (TimelineEntry & { scholarshipName: string; cycle: string })[] = [];
-  applications.forEach(app => {
-    const appEntries: HistoryEntry[] = app.history && app.history.length > 0
-      ? app.history
-      : [{ status: app.status, changedAt: app.createdAt }];
-    appEntries.forEach((h, i) => {
-      entries.push({ ...h, key: `${app._id}-${i}`, scholarshipName: app.scholarshipName, cycle: academicYearOf(app.createdAt) });
-    });
-  });
-  return entries.sort((a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime());
 }
 
 // --- Export column registry ----------------------------------------------------
@@ -100,7 +94,7 @@ function buildMergedHistory(applications: AdminApplication[]): (TimelineEntry & 
 // COLUMN_REGISTRY in routes/applications.js exactly.
 const EXPORT_COLUMNS: { key: string; label: string; numeric?: boolean; getValue: (s: ScholarSummary) => string | number }[] = [
   { key: 'studentNumber', label: 'Student Number', getValue: s => s.studentNumber },
-  { key: 'name', label: 'Name', getValue: s => s.name },
+  { key: 'name', label: 'Name', getValue: s => s.rawName },
   { key: 'email', label: 'Email', getValue: s => s.email || '—' },
   { key: 'phone', label: 'Phone', getValue: s => s.phone || '—' },
   { key: 'program', label: 'Program', getValue: s => s.program || '—' },
@@ -115,7 +109,7 @@ const EXPORT_COLUMNS: { key: string; label: string; numeric?: boolean; getValue:
     }
   },
   { key: 'latestStatus', label: 'Current Status', getValue: s => s.latestStatus },
-  { key: 'isRenewing', label: 'Renewing', getValue: s => (s.isRenewing ? 'Yes' : 'No') },
+  { key: 'isRenewing', label: 'Returning', getValue: s => (s.isReturning ? 'Yes' : 'No') },
   { key: 'firstSubmission', label: 'First Submission', getValue: s => formatDate(s.firstSubmission) }
 ];
 const DEFAULT_EXPORT_COLUMNS = [
@@ -126,6 +120,7 @@ const DEFAULT_EXPORT_COLUMNS = [
 
 type SortOption = 'recent' | 'most_applications' | 'name';
 type RenewalFilter = 'all' | 'renewing' | 'first_time';
+type ApprovedFilter = 'any' | 'yes' | 'no';
 type ExportKind = 'csv' | 'print';
 
 // --- Export helpers --------------------------------------------------------------
@@ -157,6 +152,7 @@ async function exportScholarsToCSV(params: {
   apiBaseUrl: string;
   search: string;
   renewalFilter: RenewalFilter;
+  approvedFilter: ApprovedFilter;
   sort: SortOption;
   columns: string[];
 }): Promise<{ error?: string }> {
@@ -165,6 +161,7 @@ async function exportScholarsToCSV(params: {
     const qs = new URLSearchParams({
       search: params.search,
       renewal: params.renewalFilter,
+      approved: params.approvedFilter,
       sort: params.sort,
       columns: params.columns.join(',')
     });
@@ -309,28 +306,60 @@ function ColumnPickerModal({ kind, selected, onChange, onConfirm, onCancel }: {
 
 // --- Page ------------------------------------------------------------------------
 
+type ScholarSegment = 'All' | 'Returning' | 'First-time';
+const SEGMENTS: readonly ScholarSegment[] = ['All', 'Returning', 'First-time'];
+const SEGMENT_TO_RENEWAL: Record<ScholarSegment, RenewalFilter> = { 'All': 'all', 'Returning': 'renewing', 'First-time': 'first_time' };
+
+// Refetch when the admin comes back to the tab, at most this often.
+const REFETCH_AFTER_MS = 30_000;
+
 export default function AdminScholars({
-  applications, isLoading, error, getToken, apiBaseUrl, onRefresh, selectedStudentNumber, onSelectStudent
+  applications, isLoading, error, getToken, apiBaseUrl, onRefresh, selectedStudentNumber, onSelectStudent, onOpenApplication
 }: AdminScholarsProps) {
   const [search, setSearch] = useState('');
-  const [renewalFilter, setRenewalFilter] = useState<RenewalFilter>('all');
+  const [segment, setSegment] = useState<ScholarSegment>('All');
+  const [approvedFilter, setApprovedFilter] = useState<ApprovedFilter>('any');
   const [sort, setSort] = useState<SortOption>('recent');
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set(DEFAULT_EXPORT_COLUMNS));
   const [pickerFor, setPickerFor] = useState<ExportKind | null>(null);
+  const renewalFilter = SEGMENT_TO_RENEWAL[segment];
+
+  // Applications are loaded by the dashboard; ask for fresh data when the
+  // admin returns to the tab.
+  const lastRefetch = useRef(Date.now());
+  const refreshIfStale = useCallback(() => {
+    if (!onRefresh || Date.now() - lastRefetch.current < REFETCH_AFTER_MS) return;
+    lastRefetch.current = Date.now();
+    onRefresh();
+  }, [onRefresh]);
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === 'visible') refreshIfStale(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [refreshIfStale]);
 
   const scholars = useMemo(() => buildScholarSummaries(applications), [applications]);
-  const renewingCount = useMemo(() => scholars.filter(s => s.isRenewing).length, [scholars]);
+  const counts = useMemo(() => {
+    const returning = scholars.filter(s => s.isReturning).length;
+    return { 'All': scholars.length, 'Returning': returning, 'First-time': scholars.length - returning } as Record<ScholarSegment, number>;
+  }, [scholars]);
 
   const filtered = useMemo(() => {
     let list = scholars;
-    if (renewalFilter === 'renewing') list = list.filter(s => s.isRenewing);
-    if (renewalFilter === 'first_time') list = list.filter(s => !s.isRenewing);
+    if (segment === 'Returning') list = list.filter(s => s.isReturning);
+    if (segment === 'First-time') list = list.filter(s => !s.isReturning);
+    if (approvedFilter === 'yes') list = list.filter(s => s.approvedCount > 0);
+    if (approvedFilter === 'no') list = list.filter(s => s.approvedCount === 0);
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(s =>
-        s.name.toLowerCase().includes(q) ||
+        s.rawName.toLowerCase().includes(q) ||
         s.studentNumber.toLowerCase().includes(q) ||
         s.program.toLowerCase().includes(q)
       );
@@ -340,17 +369,16 @@ export default function AdminScholars({
     else if (sort === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name));
     // 'recent' is already the order from buildScholarSummaries.
     return sorted;
-  }, [scholars, search, renewalFilter, sort]);
+  }, [scholars, search, segment, approvedFilter, sort]);
 
-  const pager = usePagination(filtered, 15, `${search}|${renewalFilter}|${sort}`);
-
+  const pager = usePagination(filtered, 15, `${search}|${segment}|${approvedFilter}|${sort}`);
   const selected = selectedStudentNumber ? scholars.find(s => s.studentNumber === selectedStudentNumber) ?? null : null;
-  const mergedHistory = useMemo(() => (selected ? buildMergedHistory(selected.applications) : []), [selected]);
 
   // Human-readable filter state, embedded in exports so the file explains
   // what it was scoped to.
   const filterSubtitle = [
-    renewalFilter === 'renewing' ? 'Returning only' : renewalFilter === 'first_time' ? 'First-time only' : 'All scholars',
+    segment === 'Returning' ? 'Returning only' : segment === 'First-time' ? 'First-time only' : 'All scholars',
+    ...(approvedFilter === 'yes' ? ['with an approved application'] : approvedFilter === 'no' ? ['without an approved application'] : []),
     ...(search.trim() ? [`search: "${search.trim()}"`] : []),
     sort === 'most_applications' ? 'sorted by most applications' : sort === 'name' ? 'sorted by name' : 'sorted by recent activity'
   ].join(' · ');
@@ -366,7 +394,7 @@ export default function AdminScholars({
       return;
     }
     setIsExporting(true);
-    const { error: err } = await exportScholarsToCSV({ getToken, apiBaseUrl, search, renewalFilter, sort, columns });
+    const { error: err } = await exportScholarsToCSV({ getToken, apiBaseUrl, search, renewalFilter, approvedFilter, sort, columns });
     if (err) setExportError(err);
     setIsExporting(false);
   };
@@ -375,127 +403,37 @@ export default function AdminScholars({
   const firstLoad = !!isLoading && !hasData;
   const failedEmpty = !!error && !hasData && !isLoading;
 
-  // === Detail: one scholar's full record =======================================
   if (selected) {
-    const details: [string, React.ReactNode][] = [
-      ['Student no.', <span className="tabular-nums">{selected.studentNumber}</span>],
-      ['Program', [selected.program, selected.yearLevel].filter(Boolean).join(' · ')],
-      ['Email', selected.email],
-      ['Mobile', selected.phone],
-      ['First submission', formatDate(selected.firstSubmission)],
-      ['Active cycles', selected.cycles.join(', ')]
-    ];
     return (
-      <>
-        <PageHeader
-          back={{ label: 'All scholars', onClick: () => onSelectStudent(null) }}
-          title={selected.name}
-          meta={
-            <>
-              <StatusBadge status={selected.latestStatus} />
-              {selected.isRenewing && <Badge tone="accent" icon={Repeat}>Returning scholar</Badge>}
-            </>
-          }
-          actions={
-            <>
-              <Button icon={FileText} onClick={() => exportScholarApplicationsToCSV(selected)}>Export CSV</Button>
-              <Button
-                icon={Printer}
-                onClick={() => {
-                  setExportError('');
-                  if (!printScholars([selected], `${selected.name} · Student No. ${selected.studentNumber}`, DEFAULT_EXPORT_COLUMNS)) {
-                    setExportError(POPUP_BLOCKED);
-                  }
-                }}
-              >
-                Print
-              </Button>
-            </>
-          }
-        />
-
-        {exportError && <Alert tone="danger" onDismiss={() => setExportError('')}>{exportError}</Alert>}
-
-        <Card title="Scholar">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-            <Avatar name={selected.name} avatarUrl={selected.avatarUrl} size="lg" />
-            <dl className="grid flex-1 grid-cols-1 gap-x-6 gap-y-4 min-[480px]:grid-cols-2 xl:grid-cols-3">
-              {details.map(([label, value]) => <DetailField key={label} label={label} value={value} />)}
-            </dl>
-          </div>
-        </Card>
-
-        <KpiGrid>
-          <KpiCard label="Applications" value={selected.totalApplications} icon={FileText} />
-          <KpiCard label="Approved" value={selected.approvedCount} icon={CheckCircle2} tone="success" />
-          <KpiCard label="Rejected" value={selected.rejectedCount} icon={XCircle} tone="danger" />
-          <KpiCard label="Cycles" value={selected.cycles.length} icon={Clock} />
-        </KpiGrid>
-
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-          <Card title="Applications" description="Every application this student has submitted, newest first" className="lg:col-span-2" flush>
-            <ul className="divide-y divide-line">
-              {selected.applications.map(app => (
-                <li key={app._id} className="px-5 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-ink">{app.scholarshipName}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-subtle">
-                        <Badge>{academicYearOf(app.createdAt)}</Badge>
-                        <span>Submitted {formatDate(app.createdAt)}</span>
-                      </div>
-                    </div>
-                    <StatusBadge status={app.status} />
-                  </div>
-                  {app.reviewNote && <Quote className="mt-3">{app.reviewNote}</Quote>}
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <Card title="Full timeline">
-            <Timeline
-              entries={mergedHistory.map(entry => ({
-                ...entry,
-                context: (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="truncate text-xs text-ink-muted">{entry.scholarshipName}</span>
-                    <Badge>{entry.cycle}</Badge>
-                  </div>
-                )
-              }))}
-              empty="No recorded history for this scholar yet."
-              formatTime={formatDateTime}
-            />
-          </Card>
-        </div>
-      </>
+      <ScholarDetail
+        scholar={selected}
+        onOpenApplication={onOpenApplication}
+        exportError={exportError}
+        onExportError={setExportError}
+      />
     );
   }
 
   // === List: all scholars =========================================================
-  const filtersActive = search.trim() !== '' || renewalFilter !== 'all';
-  const kpiValue = (n: number) => (failedEmpty ? '—' : n);
+  const filtersActive = search.trim() !== '' || segment !== 'All' || approvedFilter !== 'any';
+  const clearFilters = () => { setSearch(''); setSegment('All'); setApprovedFilter('any'); };
 
   return (
     <>
       <PageHeader
         title="Scholars"
-        description="Every student's applications and outcomes across all scholarship cycles."
+        description="Every student who has applied, with their applications and outcomes across cycles."
         actions={
-          <>
-            {onRefresh && <Button icon={RefreshCw} loading={isLoading} onClick={onRefresh}>Refresh</Button>}
-            <Menu
-              label={isExporting ? 'Exporting…' : 'Export'}
-              icon={Download}
-              loading={isExporting}
-              disabled={!hasData}
-              items={[
-                { key: 'csv', label: 'Export as CSV (Excel)', icon: FileText, onSelect: () => setPickerFor('csv') },
-                { key: 'print', label: 'Print / save as PDF', icon: Printer, onSelect: () => setPickerFor('print') }
-              ]}
-            />
-          </>
+          <Menu
+            label={isExporting ? 'Exporting…' : 'Export'}
+            icon={Download}
+            loading={isExporting}
+            disabled={!hasData}
+            items={[
+              { key: 'csv', label: 'Export as CSV (Excel)', icon: FileText, onSelect: () => setPickerFor('csv') },
+              { key: 'print', label: 'Print / save as PDF', icon: Printer, onSelect: () => setPickerFor('print') }
+            ]}
+          />
         }
       />
 
@@ -506,23 +444,30 @@ export default function AdminScholars({
         </Alert>
       )}
 
-      <KpiGrid columns={3}>
-        <KpiCard label="Total scholars" value={kpiValue(scholars.length)} hint="Students with at least one application" icon={Users} loading={firstLoad} />
-        <KpiCard label="Returning" value={kpiValue(renewingCount)} hint="Applied in more than one cycle" icon={Repeat} tone="accent" loading={firstLoad} />
-        <KpiCard label="First-time" value={kpiValue(scholars.length - renewingCount)} hint="Single application on file" icon={Award} tone="info" loading={firstLoad} />
-      </KpiGrid>
-
       <Card
         flush
         headerSlot={
           <Toolbar>
-            <SearchInput value={search} onChange={setSearch} label="Search scholars" placeholder="Search name, student no. or program…" className="flex-1" />
-            <Select value={renewalFilter} onChange={v => setRenewalFilter(v as RenewalFilter)} className="md:w-44" label="Filter scholars">
-              <option value="all">All scholars</option>
-              <option value="renewing">Returning only</option>
-              <option value="first_time">First-time only</option>
+            <SearchInput value={search} onChange={setSearch} label="Search scholars" placeholder="Search name, student no. or program…" className="min-w-56 flex-1" />
+            <SegmentedControl<ScholarSegment>
+              options={SEGMENTS}
+              value={segment}
+              onChange={v => v && setSegment(v)}
+              label="Show scholars"
+              className="md:w-auto"
+              renderLabel={(option, active) => (
+                <>
+                  {option}
+                  {!firstLoad && <> <span className={`tabular-nums ${active ? 'text-ink-muted' : 'text-ink-subtle'}`}>{counts[option]}</span></>}
+                </>
+              )}
+            />
+            <Select value={approvedFilter} onChange={v => setApprovedFilter(v as ApprovedFilter)} className="md:w-56" label="Filter by approval">
+              <option value="any">Any status</option>
+              <option value="yes">Has approved application</option>
+              <option value="no">No approved application</option>
             </Select>
-            <Select value={sort} onChange={v => setSort(v as SortOption)} className="md:w-52" label="Sort scholars">
+            <Select value={sort} onChange={v => setSort(v as SortOption)} className="md:w-48" label="Sort scholars">
               <option value="recent">Most recent activity</option>
               <option value="most_applications">Most applications</option>
               <option value="name">Name (A–Z)</option>
@@ -538,84 +483,57 @@ export default function AdminScholars({
           filtersActive ? (
             <EmptyState
               icon={Users}
-              title="No scholars match your filters"
-              description="Try a different search term or filter."
-              action={<Button onClick={() => { setSearch(''); setRenewalFilter('all'); }}>Clear filters</Button>}
+              title="No scholars match"
+              description="Try a different search or filter."
+              action={<Button onClick={clearFilters}>Clear filters</Button>}
             />
           ) : (
-            <EmptyState
-              icon={Users}
-              title="No scholars yet"
-              description="Students appear here once they submit an application."
-              action={onRefresh && <Button variant="primary" icon={RefreshCw} loading={isLoading} onClick={onRefresh}>Refresh</Button>}
-            />
+            <EmptyState icon={Users} title="No scholars yet" description="Students appear here once they submit an application." />
           )
         ) : (
           <>
-            <div className="hidden md:block">
-              <Table label="Scholars">
-                <thead>
-                  <tr>
-                    <Th>Scholar</Th>
-                    <Th>Program</Th>
-                    <Th className="hidden w-48 lg:table-cell">Cycles</Th>
-                    <Th numeric className="w-32">Applications</Th>
-                    <Th className="w-44">Latest status</Th>
-                    <Th className="w-12"><span className="sr-only">Open</span></Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pager.pageItems.map(scholar => (
-                    <Tr key={scholar.studentNumber} onClick={() => onSelectStudent(scholar.studentNumber)}>
-                      <Td>
-                        <div className="flex min-w-0 items-center gap-3">
-                          <Avatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="sm" />
-                          <div className="min-w-0">
+            <Table label="Scholars" minWidth="60rem">
+              <thead>
+                <tr>
+                  <Th sticky={false}>Scholar</Th>
+                  <Th sticky={false} className="w-48">Program</Th>
+                  <Th sticky={false} className="w-32">Cycles</Th>
+                  <Th sticky={false} className="w-36">Applications</Th>
+                  <Th sticky={false} className="w-40">Latest status</Th>
+                  <Th sticky={false} className="w-12"><span className="sr-only">Open</span></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {pager.pageItems.map(scholar => (
+                  <Tr key={scholar.studentNumber} onClick={() => onSelectStudent(scholar.studentNumber)}>
+                    <Td>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Avatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="sm" />
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-2">
                             <RowLink onClick={() => onSelectStudent(scholar.studentNumber)}>{scholar.name}</RowLink>
-                            <p className="flex items-center gap-1.5 text-xs text-ink-subtle">
-                              <span className="tabular-nums">{scholar.studentNumber}</span>
-                              {scholar.isRenewing && (
-                                <span className="inline-flex items-center gap-1 font-medium text-accent">
-                                  <Repeat className="size-3" aria-hidden />Returning
-                                </span>
-                              )}
-                            </p>
+                            {scholar.isReturning && <Badge tone="accent" className="h-5 shrink-0 px-1.5">Returning</Badge>}
                           </div>
+                          <p className="text-xs text-ink-subtle tabular-nums">{scholar.studentNumber}</p>
                         </div>
-                      </Td>
-                      <Td><Truncate className="text-ink">{scholar.program || 'Unspecified'}</Truncate></Td>
-                      <Td className="hidden lg:table-cell">
-                        <div className="flex flex-wrap gap-1">{scholar.cycles.map(c => <Badge key={c}>{c}</Badge>)}</div>
-                      </Td>
-                      <Td numeric>
-                        <span className="font-medium text-ink">{scholar.totalApplications}</span>
-                        <span className="block text-xs text-ink-subtle">{scholar.approvedCount} approved</span>
-                      </Td>
-                      <Td><StatusBadge status={scholar.latestStatus} /></Td>
-                      <Td><ChevronRight className="size-4 text-ink-subtle group-hover:text-ink" aria-hidden /></Td>
-                    </Tr>
-                  ))}
-                </tbody>
-              </Table>
-            </div>
-
-            <MobileList>
-              {pager.pageItems.map(scholar => (
-                <li key={scholar.studentNumber}>
-                  <button type="button" onClick={() => onSelectStudent(scholar.studentNumber)} className="flex w-full items-start gap-3 p-4 text-left hover:bg-surface-muted focus-visible:-outline-offset-2">
-                    <Avatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="sm" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="truncate text-sm font-medium text-ink">{scholar.name}</p>
-                        <StatusBadge status={scholar.latestStatus} />
                       </div>
-                      <p className="mt-0.5 truncate text-xs text-ink-muted">{scholar.program || 'Unspecified'}</p>
-                      <p className="mt-0.5 text-xs text-ink-subtle">{plural(scholar.totalApplications, 'application')} · {scholar.cycles.join(', ')}</p>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </MobileList>
+                    </Td>
+                    <Td><Truncate>{scholar.program || 'Unspecified'}</Truncate></Td>
+                    <Td>
+                      <Truncate className="tabular-nums">{scholar.cycles.map(c => shortAcademicYear(c)).join(', ')}</Truncate>
+                    </Td>
+                    <Td>
+                      <span className="tabular-nums">
+                        <span className="font-medium text-ink">{scholar.totalApplications}</span>
+                        <span className="text-ink-subtle"> · {scholar.approvedCount} approved</span>
+                      </span>
+                    </Td>
+                    <Td><StatusBadge status={scholar.latestStatus} /></Td>
+                    <Td><ChevronRight className="size-4 text-ink-subtle group-hover:text-ink" aria-hidden /></Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
 
             <Pagination page={pager.page} pageCount={pager.pageCount} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} noun="scholars" />
           </>
@@ -632,5 +550,176 @@ export default function AdminScholars({
         />
       )}
     </>
+  );
+}
+
+// --- Detail: one scholar ------------------------------------------------------------
+
+type HistoryView = 'By application' | 'All activity';
+const HISTORY_VIEWS: readonly HistoryView[] = ['By application', 'All activity'];
+
+const isActive = (status: AppStatus) => status === 'Under Evaluation' || status === 'Needs Revision';
+
+function ScholarDetail({ scholar, onOpenApplication, exportError, onExportError }: {
+  scholar: ScholarSummary;
+  onOpenApplication: (applicationId: string) => void;
+  exportError: string;
+  onExportError: (message: string) => void;
+}) {
+  const [view, setView] = useState<HistoryView>('By application');
+  // The most recent application still in review starts open.
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const active = scholar.applications.find(a => isActive(a.status));
+    return new Set(active ? [active._id] : []);
+  });
+  const toggle = (id: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  // Applications grouped by cycle, newest cycle first; applications inside
+  // each cycle are already newest first.
+  const byCycle = useMemo(() => {
+    const groups = new Map<string, AdminApplication[]>();
+    scholar.applications.forEach(app => {
+      const cycle = academicYearOf(app.createdAt);
+      groups.set(cycle, [...(groups.get(cycle) ?? []), app]);
+    });
+    return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [scholar.applications]);
+
+  const combined = useMemo(() => buildCombinedHistory(scholar.applications, scholar.name), [scholar.applications, scholar.name]);
+
+  const summary = [
+    plural(scholar.totalApplications, 'application'),
+    `${scholar.approvedCount} approved`,
+    `${scholar.rejectedCount} rejected`,
+    plural(scholar.cycles.length, 'cycle')
+  ].join(' · ');
+
+  const print = () => {
+    onExportError('');
+    if (!printScholars([scholar], `${scholar.rawName} · Student No. ${scholar.studentNumber}`, DEFAULT_EXPORT_COLUMNS)) {
+      onExportError(POPUP_BLOCKED);
+    }
+  };
+
+  const profile: [string, React.ReactNode][] = [
+    ['Email', scholar.email || '—'],
+    ['Mobile', scholar.phone || '—'],
+    ['First submission', formatDate(scholar.firstSubmission)]
+  ];
+
+  return (
+    <>
+      <PageHeader
+        leading={<Avatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="lg" />}
+        title={scholar.name}
+        description={[scholar.studentNumber, [scholar.program, scholar.yearLevel].filter(Boolean).join(' · ')].filter(Boolean).join(' · ')}
+        meta={
+          <>
+            <span className="text-xs text-ink-subtle tabular-nums">{summary}</span>
+            <Badge tone={STATUS_META[scholar.latestStatus]?.tone} dot>Latest: {scholar.latestStatus}</Badge>
+            {scholar.isReturning && <Badge tone="accent">Returning</Badge>}
+          </>
+        }
+        actions={
+          <DropdownMenu
+            label="More actions"
+            items={[
+              { key: 'csv', label: 'Export CSV', icon: FileText, onSelect: () => exportScholarApplicationsToCSV(scholar) },
+              { key: 'print', label: 'Print', icon: Printer, onSelect: print }
+            ]}
+          />
+        }
+      />
+
+      {exportError && <Alert tone="danger" onDismiss={() => onExportError('')}>{exportError}</Alert>}
+
+      <dl className="grid grid-cols-1 gap-x-8 gap-y-3 border-y border-line py-4 sm:grid-cols-3">
+        {profile.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-xs text-ink-subtle">{label}</dt>
+            <dd className="mt-0.5 truncate text-sm text-ink">{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <Card
+        flush
+        title="Applications"
+        description={view === 'By application' ? 'Grouped by cycle, newest first. Open one to see its history.' : 'Every event across all applications, newest first.'}
+        actions={
+          <SegmentedControl<HistoryView>
+            options={HISTORY_VIEWS}
+            value={view}
+            onChange={v => v && setView(v)}
+            label="History view"
+            className="w-auto"
+          />
+        }
+      >
+        {view === 'All activity' ? (
+          <div className="px-5 py-1">
+            <HistoryList events={combined} showScholarship empty="No recorded activity yet." label="All activity" />
+          </div>
+        ) : (
+          byCycle.map(([cycle, apps]) => (
+            <section key={cycle} aria-label={cycle}>
+              <h3 className="border-y border-line bg-surface-muted px-5 py-2 text-xs font-medium text-ink-muted first:border-t-0">
+                {cycle} <span className="font-normal text-ink-subtle">· {plural(apps.length, 'application')}</span>
+              </h3>
+              <ul className="divide-y divide-line">
+                {apps.map(app => (
+                  <ApplicationRow
+                    key={app._id}
+                    app={app}
+                    studentName={scholar.name}
+                    open={expanded.has(app._id)}
+                    onToggle={() => toggle(app._id)}
+                    onOpenApplication={onOpenApplication}
+                  />
+                ))}
+              </ul>
+            </section>
+          ))
+        )}
+      </Card>
+    </>
+  );
+}
+
+function ApplicationRow({ app, studentName, open, onToggle, onOpenApplication }: {
+  app: AdminApplication;
+  studentName: string;
+  open: boolean;
+  onToggle: () => void;
+  onOpenApplication: (applicationId: string) => void;
+}) {
+  const panelId = useId();
+  const events = useMemo(() => (open ? buildApplicationHistory(app, studentName) : []), [open, app, studentName]);
+  return (
+    <li>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-surface-muted focus-visible:-outline-offset-2"
+      >
+        <ChevronRight className={`size-4 shrink-0 text-ink-subtle transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={app.scholarshipName}>{app.scholarshipName}</span>
+        <span className="hidden shrink-0 text-xs text-ink-subtle tabular-nums sm:inline">Submitted {formatDate(app.createdAt)}</span>
+        <span className="shrink-0"><StatusBadge status={app.status} /></span>
+      </button>
+      <div id={panelId} hidden={!open} className="pb-3 pl-12 pr-5">
+        <p className="text-xs text-ink-subtle sm:hidden">Submitted {formatDate(app.createdAt)}</p>
+        <HistoryList events={events} empty="No recorded history for this application." label={`History of ${app.scholarshipName}`} />
+        <Button size="sm" variant="ghost" iconRight={ChevronRight} onClick={() => onOpenApplication(app._id)} className="-ml-3 mt-1">
+          Open application
+        </Button>
+      </div>
+    </li>
   );
 }

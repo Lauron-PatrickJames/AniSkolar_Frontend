@@ -170,7 +170,7 @@ export default function ApplicationReview({ app, adminOffice, getToken, onBack, 
                 : "The office's decision stands unless you override it."}
             </>
           ) : (
-            <>Not sent to the AdSO yet. It goes with the office's next "Send to AdSO".</>
+            <>Not sent to the AdSO yet. It's sent automatically as soon as the {officeName(app.office)} approves it.</>
           )}
         </Alert>
       )}

@@ -142,7 +142,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onFiltersChange={setListFilters}
         adminOffice={adminOffice}
         officeLabel={officeLabel}
-        getToken={getToken}
       />
     );
   }

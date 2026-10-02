@@ -352,8 +352,10 @@ export const mockScholarships: Scholarship[] = [
       'Evaluated by the coach and approved by the SDO Director'
     ],
     requirements: [],
+    scheduleLabel: 'Varsity tryouts',
+    schedule: 'To be announced. Tryout dates are posted in Announcements.',
     process: [
-      'Step 1: Try out for or get recruited into a DLSU-D varsity team.',
+      'Step 1: Try out for or get recruited into a DLSU-D varsity team. Tryout dates are posted in Announcements.',
       'Step 2: Your coach evaluates your performance and endorses you.',
       'Step 3: The SDO Director approves the scholarship.'
     ],
@@ -449,7 +451,7 @@ export const mockScholarships: Scholarship[] = [
 
 // Fields the AdSO can change from the admin Scholarships page. Everything
 // else (name, office, form, eligibility rules, documents) is fixed in code.
-export const EDITABLE_SCHOLARSHIP_FIELDS = ['status', 'deadline', 'description', 'benefits', 'eligibility', 'process', 'submissionNote'] as const;
+export const EDITABLE_SCHOLARSHIP_FIELDS = ['status', 'deadline', 'description', 'benefits', 'eligibility', 'process', 'submissionNote', 'schedule'] as const;
 
 // Merges AdSO overrides over the defaults above. Unknown ids are ignored.
 export function applyScholarshipOverrides(base: Scholarship[], overrides: ScholarshipOverride[]): Scholarship[] {
@@ -465,6 +467,7 @@ export function applyScholarshipOverrides(base: Scholarship[], overrides: Schola
     if (o.eligibility?.length) merged.eligibility = o.eligibility;
     if (o.process?.length) merged.process = o.process;
     if (o.submissionNote) merged.submissionNote = o.submissionNote;
+    if (o.schedule && scholarship.scheduleLabel) merged.schedule = o.schedule;
     return merged;
   });
 }

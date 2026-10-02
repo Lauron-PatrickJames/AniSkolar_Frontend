@@ -5,6 +5,7 @@ import {
   Plus, RefreshCw, RotateCw, Send, Trash2, X
 } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatDateTime } from './adminData';
+import { mockScholarships } from '../../data/scholarships';
 import {
   Alert, Badge, Button, Card, Checkbox, ConfirmDialog, EmptyState, ErrorState, Field, IconButton, KpiCard, KpiGrid, Modal,
   PageHeader, SearchInput, Select, TableSkeleton, Tabs, TextInput, Textarea, Toolbar, Tone
@@ -30,6 +31,7 @@ interface AdminAnnouncement {
   description: string;
   content: string;
   category: Category;
+  scholarshipId?: string | null;
   status: AnnouncementStatus;
   isPinned: boolean;
   publishedAt: string | null;
@@ -57,6 +59,8 @@ const FB_DEFAULTS: Pick<AdminAnnouncement, 'imageUrl' | 'fbEnabled' | 'fbStatus'
 };
 
 const normalize = (raw: Partial<AdminAnnouncement>): AdminAnnouncement => ({ ...FB_DEFAULTS, ...raw } as AdminAnnouncement);
+
+const SCHOLARSHIP_NAMES: Record<string, string> = Object.fromEntries(mockScholarships.map(s => [s.id, s.name]));
 
 const imageSrc = (url: string | null) => (url ? `${API_BASE_URL}${url}` : null);
 
@@ -90,6 +94,7 @@ interface EditorState {
   description: string;
   content: string;
   category: Category;
+  scholarshipId: string;         // '' = not about a specific scholarship
   isPinned: boolean;
   fbEnabled: boolean;
   existingImageUrl: string | null;  // image already saved on the announcement
@@ -101,7 +106,7 @@ interface ImageChange {
 }
 
 const BLANK_FORM: EditorState = {
-  title: '', description: '', content: '', category: 'General', isPinned: false, fbEnabled: true, existingImageUrl: null
+  title: '', description: '', content: '', category: 'General', scholarshipId: '', isPinned: false, fbEnabled: true, existingImageUrl: null
 };
 
 const LIMITS = { title: 150, description: 500, content: 8000 };
@@ -311,6 +316,13 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
               />
             </div>
           </div>
+
+          <Field label="Related scholarship" optional helper="The announcement also shows on that scholarship's page, e.g. varsity tryout dates on the Athletic Scholarship.">
+            <Select value={form.scholarshipId} onChange={v => set('scholarshipId', v)} disabled={isSaving}>
+              <option value="">None</option>
+              {mockScholarships.map(sch => <option key={sch.id} value={sch.id}>{sch.name}</option>)}
+            </Select>
+          </Field>
         </div>
 
         <div className="space-y-3 lg:col-span-2">
@@ -423,6 +435,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       description: a.description,
       content: a.content,
       category: a.category,
+      scholarshipId: a.scholarshipId ?? '',
       isPinned: a.isPinned,
       fbEnabled: a.fbEnabled,
       existingImageUrl: a.imageUrl
@@ -443,6 +456,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       data.append('description', form.description.trim());
       data.append('content', form.content.trim());
       data.append('category', form.category);
+      data.append('scholarshipId', form.scholarshipId);
       data.append('isPinned', String(form.isPinned));
       data.append('status', publish ? 'published' : 'draft');
       data.append('fbEnabled', String(form.fbEnabled));
@@ -628,6 +642,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
                       <h3 className="mr-1 text-sm font-medium text-ink wrap-break-word">{a.title}</h3>
                       {a.status === 'published' ? <Badge tone="success" dot>Published</Badge> : <Badge dot>Draft</Badge>}
                       <Badge icon={CategoryIcon}>{a.category}</Badge>
+                      {a.scholarshipId && <Badge>{SCHOLARSHIP_NAMES[a.scholarshipId] ?? a.scholarshipId}</Badge>}
                       {a.isPinned && <Badge tone="accent" icon={Pin}>Pinned</Badge>}
                       <Badge tone={fb.tone} icon={Facebook}>
                         <span className="sr-only">Facebook: </span>{fb.label}

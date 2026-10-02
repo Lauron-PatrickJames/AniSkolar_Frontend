@@ -677,6 +677,7 @@ export default function App() {
                 <ScholarshipDetails
                   scholarship={activeScholarship}
                   applications={applications}
+                  announcements={announcements}
                   onBack={() => handleNavigate('landing')}
                   onApply={handleApplyScholarship}
                 />
@@ -747,6 +748,7 @@ export default function App() {
                   <ScholarshipDetails
                     scholarship={activeScholarship}
                     applications={applications}
+                    announcements={announcements}
                     onBack={() => handleNavigate('explore')}
                     onApply={handleApplyScholarship}
                     onResubmit={handleResubmitApplication}

@@ -46,6 +46,11 @@ export interface Scholarship {
   // refuses applications. `availNote` says how the scholarship is awarded.
   applicationMode?: 'online' | 'info';
   availNote?: string;
+  // An extra date the AdSO keeps up to date, e.g. varsity tryouts for the
+  // Athletic Scholarship. Shown when scheduleLabel is set; `schedule` is
+  // editable from the admin Scholarships page.
+  scheduleLabel?: string;
+  schedule?: string;
 
   // Which office reviews the grant. Omitted = LSO. Office-scoped admins
   // only see their own office's applications.
@@ -76,6 +81,7 @@ export interface ScholarshipOverride {
   eligibility?: string[];
   process?: string[];
   submissionNote?: string;
+  schedule?: string;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -113,6 +119,9 @@ export interface Announcement {
   // the API server) and, when it was posted to the Facebook Page, its link.
   imageUrl?: string | null;
   fbPermalink?: string | null;
+  // The scholarship this announcement is about; it also shows on that
+  // scholarship's details page.
+  scholarshipId?: string | null;
 }
 
 // --- Detailed SFA Grant application schema ------------------------------

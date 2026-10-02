@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Announcement } from '../types';
 import { Calendar, ChevronDown, ChevronUp, Bell, Megaphone, Clock, Award, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { mockScholarships } from '../data/scholarships';
 
 interface AnnouncementCardProps {
   announcement: Announcement;
@@ -12,6 +13,9 @@ interface AnnouncementCardProps {
 
 export default function AnnouncementCard({ announcement, id, isInitiallyExpanded = false }: AnnouncementCardProps) {
   const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded);
+  const relatedScholarship = announcement.scholarshipId
+    ? mockScholarships.find(s => s.id === announcement.scholarshipId)
+    : undefined;
 
   const getCategoryBadgeColor = (category: string) => {
     switch (category) {
@@ -58,6 +62,11 @@ export default function AnnouncementCard({ announcement, id, isInitiallyExpanded
               {getCategoryIcon(announcement.category)}
               {announcement.category}
             </span>
+            {relatedScholarship && (
+              <span className="px-2.5 py-1 rounded-full text-xs font-semibold border bg-slate-50 text-slate-600 border-slate-200 truncate">
+                {relatedScholarship.name}
+              </span>
+            )}
           </div>
           <div className="flex items-center text-slate-400 text-xs gap-1 shrink-0">
             <Calendar className="w-3.5 h-3.5 text-slate-400" />

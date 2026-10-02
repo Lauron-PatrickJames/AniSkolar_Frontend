@@ -1,12 +1,15 @@
 import React from 'react';
-import { Scholarship, Application } from '../../types';
-import { ArrowLeft, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info } from 'lucide-react';
+import { Scholarship, Application, Announcement } from '../../types';
+import AnnouncementCard from '../../components/AnnouncementCard';
+import { ArrowLeft, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info, Megaphone } from 'lucide-react';
 import { motion } from 'motion/react';
 import { OFFICE_SHORT_LABELS, acceptsOnlineApplications, officeOf } from '../../data/scholarships';
 
 interface ScholarshipDetailsProps {
   scholarship: Scholarship;
   applications: Application[];
+  // Published announcements; the ones tagged with this scholarship are shown.
+  announcements?: Announcement[];
   onBack: () => void;
   onApply: (id: string) => void;
   onResubmit?: (applicationId: string) => void;
@@ -62,6 +65,7 @@ const STATUS_META: Record<AppStatus, {
 export default function ScholarshipDetails({
   scholarship,
   applications,
+  announcements = [],
   onBack,
   onApply,
   onResubmit,
@@ -80,6 +84,7 @@ export default function ScholarshipDetails({
   // Status copy names the LSO; swap in whichever office reviews this grant.
   const officeShort = OFFICE_SHORT_LABELS[officeOf(scholarship)];
   const isInfoOnly = !acceptsOnlineApplications(scholarship);
+  const relatedAnnouncements = announcements.filter(a => a.scholarshipId === scholarship.id);
   const hasDocuments = Boolean(scholarship.documentSlots?.length || scholarship.requirements.length);
   const baseMeta = STATUS_META[status] ?? STATUS_META['Under Evaluation'];
   const meta = { ...baseMeta, description: baseMeta.description.replace(/\b([Tt])he AdSO\b/, (_, t) => `${t}he ${officeShort}`) };
@@ -157,6 +162,17 @@ export default function ScholarshipDetails({
         </div>
       )}
 
+      {/* AdSO-maintained date, e.g. varsity tryouts for the Athletic Scholarship. */}
+      {scholarship.scheduleLabel && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-100 flex items-start gap-2.5">
+          <Calendar className="w-4.5 h-4.5 text-amber-700 shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-900 leading-relaxed">
+            <p className="font-bold mb-0.5">{scholarship.scheduleLabel}</p>
+            <p>{scholarship.schedule || 'To be announced.'}</p>
+          </div>
+        </div>
+      )}
+
       {/* Status Card — replaces the old inline badge once an application exists.
           Shows the current review state, a one-line explainer, and (for
           Rejected / Needs Revision) the AdSO's note plus a resubmit action. */}
@@ -204,6 +220,19 @@ export default function ScholarshipDetails({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Side: Overview & Process (Col-span 2) */}
         <div className="lg:col-span-2 space-y-8">
+          {/* Announcements the AdSO tagged with this scholarship. */}
+          {relatedAnnouncements.length > 0 && (
+            <section aria-labelledby="related-announcements" className="space-y-3">
+              <h3 id="related-announcements" className="font-display font-extrabold text-lg text-slate-900 flex items-center space-x-2">
+                <Megaphone className="w-5 h-5 text-brand-green" />
+                <span>Announcements</span>
+              </h3>
+              {relatedAnnouncements.map((a, i) => (
+                <AnnouncementCard key={a.id} announcement={a} isInitiallyExpanded={i === 0} />
+              ))}
+            </section>
+          )}
+
           {/* Overview */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
             <h3 className="font-display font-extrabold text-lg text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">

@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
   AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock,
-  FileText, Inbox, Info, RefreshCw, RotateCcw, RotateCw, Search, Send, X, XCircle
+  FileText, Inbox, Info, MoreHorizontal, RefreshCw, RotateCcw, RotateCw, Search, Send, X, XCircle
 } from 'lucide-react';
 import { AppStatus, HistoryStatus, historyLabel } from './adminData';
 
@@ -576,19 +576,36 @@ export function Tabs<K extends string>({ tabs, value, onChange, label, className
 // Fixed-layout table: columns take the widths set on <Th>, long text
 // truncates instead of pushing the table wider than its card. The header
 // sticks below the top bar while the page scrolls.
-export function Table({ children, label }: { children: React.ReactNode; label: string }) {
-  return (
-    <table aria-label={label} className="w-full table-fixed border-separate border-spacing-0 text-sm [&>tbody>tr:last-child>td]:border-b-0">
+//
+// `minWidth` makes the table scroll sideways inside its own container on
+// narrow screens instead of squeezing its columns. Pair it with
+// <Th sticky={false}>: a sticky header inside a scroll container would be
+// offset against that container, not the page.
+export function Table({ children, label, minWidth }: { children: React.ReactNode; label: string; minWidth?: string }) {
+  const table = (
+    <table
+      aria-label={label}
+      style={minWidth ? { minWidth } : undefined}
+      className="w-full table-fixed border-separate border-spacing-0 text-sm [&>tbody>tr:last-child>td]:border-b-0"
+    >
       {children}
     </table>
   );
+  // `relative` keeps absolutely positioned cell content (sr-only text)
+  // inside the scroll area instead of widening the page.
+  return minWidth ? <div className="relative overflow-x-auto overscroll-x-contain">{table}</div> : table;
 }
 
-export function Th({ children, className = '', numeric }: { children?: React.ReactNode; className?: string; numeric?: boolean }) {
+export function Th({ children, className = '', numeric, sticky = true }: {
+  children?: React.ReactNode;
+  className?: string;
+  numeric?: boolean;
+  sticky?: boolean;
+}) {
   return (
     <th
       scope="col"
-      className={`sticky top-topbar z-10 h-10 border-b border-line bg-surface-muted px-4 text-xs font-medium whitespace-nowrap text-ink-muted first:pl-5 last:pr-5 ${
+      className={`${sticky ? 'sticky top-topbar z-10' : ''} h-10 border-b border-line bg-surface-muted px-4 text-xs font-medium whitespace-nowrap text-ink-muted first:pl-5 last:pr-5 ${
         numeric ? 'text-right' : 'text-left'
       } ${className}`}
     >
@@ -607,9 +624,9 @@ export function Td({ children, className = '', numeric }: { children?: React.Rea
 
 // Clickable row. The row's primary cell should also contain a real button
 // or link so the row is reachable by keyboard.
-export function Tr({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+export function Tr({ children, onClick, className = '' }: { children: React.ReactNode; onClick?: () => void; className?: string }) {
   return (
-    <tr onClick={onClick} className={`group transition-colors ${onClick ? 'cursor-pointer hover:bg-surface-muted' : ''}`}>
+    <tr onClick={onClick} className={`group transition-colors ${onClick ? 'cursor-pointer hover:bg-surface-muted' : ''} ${className}`}>
       {children}
     </tr>
   );
@@ -1062,6 +1079,218 @@ export function Menu({ label, icon, items, disabled, loading, align = 'end' }: {
         </div>
       )}
     </div>
+  );
+}
+
+// Positions a fixed overlay next to its anchor, flipping to the other side
+// when it would run off the viewport. Overlays render in a portal so a
+// scrolling table (overflow-x-auto) can't clip them.
+function useAnchoredPosition(
+  open: boolean,
+  anchorRef: React.RefObject<HTMLElement | null>,
+  overlayRef: React.RefObject<HTMLElement | null>,
+  placement: 'below-end' | 'below-start' | 'above'
+) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return; }
+    const anchor = anchorRef.current?.getBoundingClientRect();
+    const overlay = overlayRef.current?.getBoundingClientRect();
+    if (!anchor || !overlay) return;
+    const gap = 6;
+    const margin = 8;
+    let top: number;
+    let left: number;
+    if (placement === 'above') {
+      top = anchor.top - overlay.height - gap;
+      if (top < margin) top = anchor.bottom + gap;
+      left = anchor.left + anchor.width / 2 - overlay.width / 2;
+    } else {
+      top = anchor.bottom + gap;
+      if (top + overlay.height > window.innerHeight - margin) top = Math.max(margin, anchor.top - overlay.height - gap);
+      left = placement === 'below-end' ? anchor.right - overlay.width : anchor.left;
+    }
+    left = Math.min(Math.max(margin, left), window.innerWidth - overlay.width - margin);
+    setPos({ top, left });
+  }, [open, anchorRef, overlayRef, placement]);
+  return pos;
+}
+
+export interface DropdownMenuItem {
+  key: string;
+  label: string;
+  icon?: ElementType;
+  onSelect: () => void;
+  tone?: 'danger';
+}
+
+// Overflow (⋯) menu for table rows and toolbars — the WAI-ARIA menu button
+// pattern, like <Menu>, with an icon trigger. Opens with click, Enter,
+// Space or ArrowDown; arrows/Home/End move between items; Escape closes
+// and returns focus to the trigger. Clicks never reach the row behind it.
+export function DropdownMenu({ label, items, icon = MoreHorizontal, align = 'end' }: {
+  label: string;
+  items: DropdownMenuItem[];
+  icon?: ElementType;
+  align?: 'start' | 'end';
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const menuId = useId();
+  const pos = useAnchoredPosition(open, triggerRef, menuRef, align === 'end' ? 'below-end' : 'below-start');
+  const positioned = pos !== null;
+
+  // The menu stays hidden until it's positioned, and hidden items can't
+  // take focus, so focus the first item once it's placed.
+  useEffect(() => {
+    if (open && positioned) itemRefs.current[0]?.focus();
+  }, [open, positioned]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (!menuRef.current?.contains(target) && !triggerRef.current?.contains(target)) setOpen(false);
+    };
+    // The menu is positioned once; close it rather than let it drift when
+    // the page or a table scrolls underneath.
+    const onScrollOrResize = (e: Event) => {
+      if (e.type === 'scroll' && menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
+    };
+  }, [open]);
+
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) triggerRef.current?.focus();
+  };
+
+  const onMenuKeyDown = (e: React.KeyboardEvent) => {
+    const index = itemRefs.current.findIndex(el => el === document.activeElement);
+    let next = -1;
+    if (e.key === 'ArrowDown') next = (index + 1) % items.length;
+    else if (e.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = items.length - 1;
+    else if (e.key === 'Escape') { e.preventDefault(); close(true); return; }
+    else if (e.key === 'Tab') { close(false); return; }
+    if (next < 0) return;
+    e.preventDefault();
+    itemRefs.current[next]?.focus();
+  };
+
+  return (
+    <>
+      <IconButton
+        ref={triggerRef}
+        icon={icon}
+        label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        onKeyDown={e => { if (e.key === 'ArrowDown' && !open) { e.preventDefault(); setOpen(true); } }}
+        className={open ? 'bg-surface-muted text-ink' : ''}
+      />
+      {open && createPortal(
+        // React events bubble through portals to the row; stop them here.
+        <div data-admin onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+          <div
+            ref={menuRef}
+            id={menuId}
+            role="menu"
+            aria-label={label}
+            onKeyDown={onMenuKeyDown}
+            style={{ position: 'fixed', top: pos?.top ?? 0, left: pos?.left ?? 0, visibility: pos ? 'visible' : 'hidden' }}
+            className="z-50 w-52 rounded-control bg-surface py-1 shadow-overlay"
+          >
+            {items.map((item, i) => {
+              const Icon = item.icon;
+              const danger = item.tone === 'danger';
+              return (
+                <button
+                  key={item.key}
+                  ref={el => { itemRefs.current[i] = el; }}
+                  type="button"
+                  role="menuitem"
+                  tabIndex={-1}
+                  onClick={() => { close(true); item.onSelect(); }}
+                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-surface-muted focus:bg-surface-muted focus-visible:outline-none ${
+                    danger ? 'text-danger-fg' : 'text-ink'
+                  }`}
+                >
+                  {Icon && <Icon className={`size-4 shrink-0 ${danger ? 'text-danger-fg' : 'text-ink-subtle'}`} aria-hidden />}
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// Short supplementary text on hover or keyboard focus. The trigger is
+// focusable and described by the tooltip, so the text reaches keyboard and
+// screen-reader users too. Keep essential information out of tooltips.
+export function Tooltip({ content, children, className = '' }: {
+  content: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const id = useId();
+  const pos = useAnchoredPosition(open, triggerRef, tipRef, 'above');
+
+  useEffect(() => {
+    if (!open) return;
+    const hide = () => setOpen(false);
+    window.addEventListener('scroll', hide, true);
+    return () => window.removeEventListener('scroll', hide, true);
+  }, [open]);
+
+  return (
+    <>
+      <span
+        ref={triggerRef}
+        tabIndex={0}
+        aria-describedby={open ? id : undefined}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}
+        className={`inline-flex items-center rounded-badge ${className}`}
+      >
+        {children}
+      </span>
+      {open && createPortal(
+        <div
+          ref={tipRef}
+          id={id}
+          role="tooltip"
+          style={{ position: 'fixed', top: pos?.top ?? 0, left: pos?.left ?? 0, visibility: pos ? 'visible' : 'hidden' }}
+          className="pointer-events-none z-60 max-w-xs rounded-control bg-ink px-2.5 py-1.5 text-xs leading-relaxed text-surface shadow-overlay"
+        >
+          {content}
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 

@@ -42,6 +42,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [mainView, setMainView] = useState<MainView>('applications');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedScholar, setSelectedScholar] = useState<string | null>(null);
+  // Scholarship open in the Scholarships page's detail view.
+  const [selectedScholarship, setSelectedScholarship] = useState<string | null>(null);
   const [listFilters, setListFilters] = useState<ListFilters>(DEFAULT_FILTERS);
 
   // Set in the effect body (not only the initializer) so StrictMode's
@@ -91,6 +93,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setMainView(view);
     setSelectedId(null);
     setSelectedScholar(null);
+    setSelectedScholarship(null);
   };
 
   const sectionCrumb: Crumb = { label: VIEW_TITLES[mainView], onClick: () => navigate(mainView) };
@@ -102,8 +105,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         return latest ? applicantName(latest) : selectedScholar;
       })()
     : null;
+  // The Scholarships page carries its own heading (and a back link in its
+  // detail view), so the top bar shows no title there.
   const breadcrumbs: Crumb[] =
-    mainView === 'applications' && selected ? [sectionCrumb, { label: applicantName(selected) }]
+    mainView === 'scholarships' ? []
+    : mainView === 'applications' && selected ? [sectionCrumb, { label: applicantName(selected) }]
     : mainView === 'lifecycle' && scholarName ? [sectionCrumb, { label: scholarName }]
     : [{ label: VIEW_TITLES[mainView] }];
 
@@ -126,7 +132,17 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   } else if (mainView === 'announcements' && isAdso) {
     page = <AdminAnnouncements />;
   } else if (mainView === 'scholarships' && isAdso) {
-    page = <ScholarshipsManager />;
+    page = (
+      <ScholarshipsManager
+        ownOffice="LSO"
+        selectedId={selectedScholarship}
+        onSelect={setSelectedScholarship}
+        onViewApplications={scholarshipId => {
+          navigate('applications');
+          setListFilters({ ...DEFAULT_FILTERS, scholarship: scholarshipId });
+        }}
+      />
+    );
   } else if (selected) {
     page = (
       <ApplicationReview
@@ -165,7 +181,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       pendingCount={pendingCount}
       hiddenViews={hiddenViews}
       breadcrumbs={breadcrumbs}
-      pageKey={`${mainView}:${selectedId ?? ''}:${selectedScholar ?? ''}`}
+      pageKey={`${mainView}:${selectedId ?? ''}:${selectedScholar ?? ''}:${selectedScholarship ?? ''}`}
     >
       {page}
     </AdminLayout>

@@ -89,7 +89,7 @@ export default function AdminLayout({
                 aria-controls="admin-sidebar"
                 className="-ml-2 md:hidden"
               />
-              <Breadcrumbs items={breadcrumbs} />
+              {breadcrumbs.length > 0 && <Breadcrumbs items={breadcrumbs} />}
             </div>
             <Badge icon={Building2} className="hidden sm:inline-flex">{officeLabel}</Badge>
           </header>

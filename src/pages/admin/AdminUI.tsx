@@ -173,22 +173,40 @@ export function LinkButton({ variant = 'secondary', size = 'md', icon: Icon, chi
 }
 
 // Square icon-only button. `label` is required: it is the accessible name
-// and the hover tooltip.
-export function IconButton({ icon: Icon, label, variant = 'ghost', size = 'sm', loading, disabled, className = '', ...rest }:
+// and the tooltip (shown on hover and keyboard focus; hidden while a menu
+// it controls is open).
+export function IconButton({ icon: Icon, label, variant = 'ghost', size = 'sm', loading, disabled, className = '', ref, ...rest }:
   Omit<ButtonProps, 'children' | 'iconRight' | 'icon'> & { icon: ElementType; label: string }) {
   const s = BUTTON_SIZES[size];
+  const expanded = rest['aria-expanded'] === true || rest['aria-expanded'] === 'true';
+  // The label is already the accessible name, so the tooltip doesn't also describe it.
+  const { triggerRef, triggerProps, tooltip } = useTooltip(expanded ? null : label, { describe: false });
+  const setRef = (el: HTMLButtonElement | null) => {
+    triggerRef.current = el;
+    if (typeof ref === 'function') ref(el);
+    else if (ref) (ref as React.RefObject<HTMLButtonElement | null>).current = el;
+  };
   return (
-    <button
-      type="button"
-      {...rest}
-      aria-label={label}
-      title={label}
-      disabled={disabled || loading}
-      aria-busy={loading || undefined}
-      className={`inline-flex items-center justify-center shrink-0 rounded-control transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${s.square} ${BUTTON_VARIANTS[variant]} ${className}`}
-    >
-      {loading ? <Spinner className={s.icon} /> : <Icon className={s.icon} aria-hidden />}
-    </button>
+    <>
+      <button
+        type="button"
+        {...rest}
+        ref={setRef}
+        onPointerEnter={chain(rest.onPointerEnter, triggerProps.onPointerEnter)}
+        onPointerLeave={chain(rest.onPointerLeave, triggerProps.onPointerLeave)}
+        onPointerDown={chain(rest.onPointerDown, triggerProps.onPointerDown)}
+        onFocus={chain(rest.onFocus, triggerProps.onFocus)}
+        onBlur={chain(rest.onBlur, triggerProps.onBlur)}
+        onKeyDown={chain(rest.onKeyDown, triggerProps.onKeyDown)}
+        aria-label={label}
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
+        className={`inline-flex items-center justify-center shrink-0 rounded-control transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${s.square} ${BUTTON_VARIANTS[variant]} ${className}`}
+      >
+        {loading ? <Spinner className={s.icon} /> : <Icon className={s.icon} aria-hidden />}
+      </button>
+      {tooltip}
+    </>
   );
 }
 
@@ -1242,54 +1260,104 @@ export function DropdownMenu({ label, items, icon = MoreHorizontal, align = 'end
   );
 }
 
-// Short supplementary text on hover or keyboard focus. The trigger is
-// focusable and described by the tooltip, so the text reaches keyboard and
-// screen-reader users too. Keep essential information out of tooltips.
-export function Tooltip({ content, children, className = '' }: {
-  content: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}) {
+// Shared tooltip behaviour: shows on mouse hover or keyboard focus (not
+// on touch, and not when a click moves focus), hides on Escape, scroll,
+// pointer down or blur. Returns props for the trigger and the portal.
+function useTooltip(content: React.ReactNode, { describe = true }: { describe?: boolean } = {}) {
   const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const id = useId();
-  const pos = useAnchoredPosition(open, triggerRef, tipRef, 'above');
+  const visible = open && !!content;
+  const pos = useAnchoredPosition(visible, triggerRef, tipRef, 'above');
 
   useEffect(() => {
-    if (!open) return;
+    if (!visible) return;
     const hide = () => setOpen(false);
     window.addEventListener('scroll', hide, true);
     return () => window.removeEventListener('scroll', hide, true);
-  }, [open]);
+  }, [visible]);
+
+  const focusVisible = (el: Element) => {
+    try { return el.matches(':focus-visible'); } catch { return true; }
+  };
+
+  const triggerProps = {
+    onPointerEnter: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') setOpen(true); },
+    onPointerLeave: () => setOpen(false),
+    onPointerDown: () => setOpen(false),
+    onFocus: (e: React.FocusEvent) => { if (focusVisible(e.currentTarget)) setOpen(true); },
+    onBlur: () => setOpen(false),
+    onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); },
+    'aria-describedby': describe && visible ? id : undefined
+  };
+
+  const tooltip = visible ? createPortal(
+    <div
+      ref={tipRef}
+      id={id}
+      role="tooltip"
+      style={{ position: 'fixed', top: pos?.top ?? 0, left: pos?.left ?? 0, visibility: pos ? 'visible' : 'hidden' }}
+      className="pointer-events-none z-60 max-w-xs rounded-control bg-ink px-2.5 py-1.5 text-xs leading-relaxed text-surface shadow-overlay"
+    >
+      {content}
+    </div>,
+    document.body
+  ) : null;
+
+  return { triggerRef, triggerProps, tooltip };
+}
+
+// Calls every handler that's defined, in order.
+function chain<E>(...handlers: (((e: E) => void) | undefined)[]) {
+  return (e: E) => handlers.forEach(h => h?.(e));
+}
+
+// Short supplementary text on hover or keyboard focus. The trigger is
+// focusable and described by the tooltip, so the text reaches keyboard and
+// screen-reader users too. Keep essential information out of tooltips.
+//
+// `asChild` attaches the tooltip to a single focusable child (a link or
+// button) instead of wrapping it in a focusable span.
+export function Tooltip({ content, children, className = '', asChild }: {
+  content: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  asChild?: boolean;
+}) {
+  const { triggerRef, triggerProps, tooltip } = useTooltip(content);
+
+  if (asChild && React.isValidElement(children)) {
+    const child = children as React.ReactElement<Record<string, any>>;
+    const p = child.props;
+    return (
+      <>
+        {React.cloneElement(child, {
+          ref: triggerRef,
+          onPointerEnter: chain(p.onPointerEnter, triggerProps.onPointerEnter),
+          onPointerLeave: chain(p.onPointerLeave, triggerProps.onPointerLeave),
+          onPointerDown: chain(p.onPointerDown, triggerProps.onPointerDown),
+          onFocus: chain(p.onFocus, triggerProps.onFocus),
+          onBlur: chain(p.onBlur, triggerProps.onBlur),
+          onKeyDown: chain(p.onKeyDown, triggerProps.onKeyDown),
+          'aria-describedby': triggerProps['aria-describedby'] ?? p['aria-describedby']
+        })}
+        {tooltip}
+      </>
+    );
+  }
 
   return (
     <>
       <span
-        ref={triggerRef}
+        ref={el => { triggerRef.current = el; }}
         tabIndex={0}
-        aria-describedby={open ? id : undefined}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}
+        {...triggerProps}
         className={`inline-flex items-center rounded-badge ${className}`}
       >
         {children}
       </span>
-      {open && createPortal(
-        <div
-          ref={tipRef}
-          id={id}
-          role="tooltip"
-          style={{ position: 'fixed', top: pos?.top ?? 0, left: pos?.left ?? 0, visibility: pos ? 'visible' : 'hidden' }}
-          className="pointer-events-none z-60 max-w-xs rounded-control bg-ink px-2.5 py-1.5 text-xs leading-relaxed text-surface shadow-overlay"
-        >
-          {content}
-        </div>,
-        document.body
-      )}
+      {tooltip}
     </>
   );
 }

@@ -105,10 +105,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         return latest ? applicantName(latest) : selectedScholar;
       })()
     : null;
-  // The Scholarships page carries its own heading (and a back link in its
-  // detail view), so the top bar shows no title there.
+  // The Scholarships and Announcements pages carry their own heading (the
+  // Scholarships detail view adds a back link), so the top bar shows no
+  // title there.
   const breadcrumbs: Crumb[] =
-    mainView === 'scholarships' ? []
+    mainView === 'scholarships' || mainView === 'announcements' ? []
     : mainView === 'applications' && selected ? [sectionCrumb, { label: applicantName(selected) }]
     : mainView === 'lifecycle' && scholarName ? [sectionCrumb, { label: scholarName }]
     : [{ label: VIEW_TITLES[mainView] }];

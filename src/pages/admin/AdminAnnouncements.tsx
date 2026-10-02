@@ -1,14 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
 import {
-  AlertCircle, Award, Bell, Calendar, Clock, ExternalLink, Facebook, FileEdit, ImagePlus, Megaphone, Pencil, Pin, PinOff,
-  Plus, RefreshCw, RotateCw, Send, Trash2, X
+  Award, Bell, Calendar, Clock, Facebook, FileEdit, ImagePlus, Megaphone, Pencil, Pin, PinOff,
+  Plus, RotateCw, Send, Trash2, X
 } from 'lucide-react';
-import { API_BASE_URL, authHeaders, formatDateTime } from './adminData';
+import { API_BASE_URL, authHeaders, formatShortDate } from './adminData';
 import { mockScholarships } from '../../data/scholarships';
 import {
-  Alert, Badge, Button, Card, Checkbox, ConfirmDialog, EmptyState, ErrorState, Field, IconButton, KpiCard, KpiGrid, Modal,
-  PageHeader, SearchInput, Select, TableSkeleton, Tabs, TextInput, Textarea, Toolbar, Tone
+  Alert, Badge, Button, Card, Checkbox, ConfirmDialog, DropdownMenu, EmptyState, ErrorState, Field, IconButton, Modal,
+  PageHeader, SearchInput, Select, TableSkeleton, Tabs, TextInput, Textarea, Toolbar, Tooltip
 } from './AdminUI';
 
 // Matches frontend/src/types.ts `Announcement['category']` exactly.
@@ -69,12 +69,6 @@ const CATEGORY_ICONS: Record<Category, React.ElementType> = {
   Update: Award,
   Deadline: Clock,
   Event: Calendar
-};
-
-const FB_BADGE: Record<FbStatus, { label: string; tone: Tone }> = {
-  posted: { label: 'Posted', tone: 'info' },
-  not_posted: { label: 'Not posted', tone: 'neutral' },
-  failed: { label: 'Failed', tone: 'danger' }
 };
 
 // The Facebook post text: title, blank line, body. Must match
@@ -349,6 +343,18 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
 
 // --- Page ----------------------------------------------------------------------
 
+type ListTab = 'all' | 'published' | 'draft' | 'pinned';
+
+const EMPTY_TABS: Record<ListTab, { title: string; description: string }> = {
+  all: { title: 'No announcements yet', description: 'Post updates students see on their dashboard and on the Facebook Page.' },
+  published: { title: 'Nothing published', description: 'Published announcements show on the student dashboard.' },
+  draft: { title: 'No drafts', description: 'Save an announcement as a draft to finish it later.' },
+  pinned: { title: 'Nothing pinned', description: 'Pin an announcement to keep it at the top of the student feed.' }
+};
+
+// Refetch when the admin comes back to the tab, at most this often.
+const REFETCH_AFTER_MS = 30_000;
+
 export default function AdminAnnouncements({ id }: { id?: string }) {
   const { getToken } = useAuth();
 
@@ -361,7 +367,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
   const [facebookNotice, setFacebookNotice] = useState<{ title: string; message: string } | null>(null);
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<AnnouncementStatus | 'All'>('All');
+  const [tab, setTab] = useState<ListTab>('all');
   const [facebookFilter, setFacebookFilter] = useState<FbStatus | 'All'>('All');
 
   const [editorState, setEditorState] = useState<EditorState | null>(null);
@@ -375,8 +381,54 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
   const [togglingPinId, setTogglingPinId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
+  // Each load and each local change bumps this, so a response that started
+  // before a change can't overwrite it with older data.
+  const loadSeq = useRef(0);
+  const lastLoaded = useRef(0);
+
+  const fetchAnnouncements = useCallback(async () => {
+    const seq = ++loadSeq.current;
+    setIsLoading(true);
+    setLoadError('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/announcements`, { headers: await authHeaders(getToken) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'The server returned an error while loading announcements.');
+      if (seq !== loadSeq.current) return;
+      setAnnouncements((body.announcements ?? []).map(normalize));
+      lastLoaded.current = Date.now();
+    } catch (err) {
+      if (seq === loadSeq.current) setLoadError(err instanceof Error ? err.message : 'Something went wrong loading announcements.');
+    } finally {
+      if (seq === loadSeq.current) setIsLoading(false);
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    fetchAnnouncements();
+  }, [fetchAnnouncements]);
+
+  useEffect(() => {
+    const refetch = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastLoaded.current > REFETCH_AFTER_MS) fetchAnnouncements();
+    };
+    window.addEventListener('focus', refetch);
+    document.addEventListener('visibilitychange', refetch);
+    return () => {
+      window.removeEventListener('focus', refetch);
+      document.removeEventListener('visibilitychange', refetch);
+    };
+  }, [fetchAnnouncements]);
+
+  // After a change: show the server's copy right away, then refetch the
+  // list so ordering and anything changed elsewhere are current.
+  const applyChange = (update: (prev: AdminAnnouncement[]) => AdminAnnouncement[]) => {
+    loadSeq.current++;
+    setAnnouncements(update);
+    fetchAnnouncements();
+  };
   const upsert = (saved: AdminAnnouncement) =>
-    setAnnouncements(prev => (prev.some(a => a.id === saved.id) ? prev.map(a => (a.id === saved.id ? saved : a)) : [saved, ...prev]));
+    applyChange(prev => (prev.some(a => a.id === saved.id) ? prev.map(a => (a.id === saved.id ? saved : a)) : [saved, ...prev]));
 
   const reportFacebook = (title: string, result: FacebookResult | null | undefined) => {
     if (result && !result.ok) {
@@ -387,43 +439,27 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
     }
   };
 
-  const fetchAnnouncements = async () => {
-    setIsLoading(true);
-    setLoadError('');
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/announcements`, { headers: await authHeaders(getToken) });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'The server returned an error while loading announcements.');
-      setAnnouncements((body.announcements ?? []).map(normalize));
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Something went wrong loading announcements.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAnnouncements();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return announcements.filter(a => {
-      if (statusFilter !== 'All' && a.status !== statusFilter) return false;
-      if (facebookFilter !== 'All' && a.fbStatus !== facebookFilter) return false;
-      if (q && !a.title.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [announcements, search, statusFilter, facebookFilter]);
-
-  const stats = useMemo(() => ({
-    total: announcements.length,
+  const counts = useMemo(() => ({
+    all: announcements.length,
     published: announcements.filter(a => a.status === 'published').length,
     draft: announcements.filter(a => a.status === 'draft').length,
-    pinned: announcements.filter(a => a.isPinned).length,
-    onFacebook: announcements.filter(a => a.fbStatus === 'posted').length
+    pinned: announcements.filter(a => a.isPinned).length
   }), [announcements]);
+
+  // Pinned first; otherwise the server's order (newest first). sort() is stable.
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return announcements
+      .filter(a => {
+        if (tab === 'published' && a.status !== 'published') return false;
+        if (tab === 'draft' && a.status !== 'draft') return false;
+        if (tab === 'pinned' && !a.isPinned) return false;
+        if (facebookFilter !== 'All' && a.fbStatus !== facebookFilter) return false;
+        if (q && !a.title.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
+        return true;
+      })
+      .sort((a, b) => Number(b.isPinned) - Number(a.isPinned));
+  }, [announcements, search, tab, facebookFilter]);
 
   const openCreate = () => { setSaveError(''); setEditorState({ ...BLANK_FORM }); };
   const openEdit = (a: AdminAnnouncement) => {
@@ -534,7 +570,8 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Couldn't delete the announcement. Please try again.");
-      setAnnouncements(prev => prev.filter(a => a.id !== pendingDelete.id));
+      const deletedId = pendingDelete.id;
+      applyChange(prev => prev.filter(a => a.id !== deletedId));
       setPendingDelete(null);
       if (body.facebookWarning) setFacebookNotice({ title: 'Announcement deleted, but the Facebook post is still up', message: body.facebookWarning });
     } catch (err) {
@@ -544,28 +581,19 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
     }
   };
 
-  const statusTabs: { key: AnnouncementStatus | 'All'; label: string; count: number }[] = [
-    { key: 'All', label: 'All', count: stats.total },
-    { key: 'published', label: 'Published', count: stats.published },
-    { key: 'draft', label: 'Drafts', count: stats.draft }
-  ];
-  const filtersActive = search.trim() !== '' || statusFilter !== 'All' || facebookFilter !== 'All';
+  const listFiltersActive = search.trim() !== '' || facebookFilter !== 'All';
   const hasData = announcements.length > 0;
   const firstLoad = isLoading && !hasData;
   const failedEmpty = !!loadError && !hasData && !isLoading;
-  const kpiValue = (n: number) => (failedEmpty ? '—' : n);
+  const tabCount = (n: number) => (firstLoad || failedEmpty ? undefined : n);
+  const newButton = <Button variant="primary" icon={Plus} onClick={openCreate}>New announcement</Button>;
 
   return (
     <div id={id} className="space-y-6">
       <PageHeader
         title="Announcements"
-        description="Post and manage the official updates students see on their dashboard and on the Facebook Page."
-        actions={
-          <>
-            <Button icon={RefreshCw} loading={isLoading} onClick={fetchAnnouncements}>Refresh</Button>
-            <Button variant="primary" icon={Plus} onClick={openCreate}>New announcement</Button>
-          </>
-        }
+        description="Post updates to the student dashboard and the Facebook Page."
+        actions={newButton}
       />
 
       {loadError && hasData && (
@@ -578,25 +606,28 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       )}
       {actionError && <Alert tone="danger" onDismiss={() => setActionError('')}>{actionError}</Alert>}
 
-      <KpiGrid>
-        <KpiCard label="Published" value={kpiValue(stats.published)} hint="Visible to students" icon={Send} tone="success" loading={firstLoad} />
-        <KpiCard label="Drafts" value={kpiValue(stats.draft)} hint="Not yet visible" icon={FileEdit} tone="warning" loading={firstLoad} />
-        <KpiCard label="Pinned" value={kpiValue(stats.pinned)} hint="Shown at the top" icon={Pin} tone="accent" loading={firstLoad} />
-        <KpiCard label="On Facebook" value={kpiValue(stats.onFacebook)} hint="Posted to the Page" icon={Facebook} tone="info" loading={firstLoad} />
-      </KpiGrid>
-
       <Card
         flush
         headerSlot={
           <>
-            <Tabs<AnnouncementStatus | 'All'> tabs={statusTabs} value={statusFilter} onChange={setStatusFilter} label="Filter by status" />
+            <Tabs<ListTab>
+              label="Filter announcements"
+              value={tab}
+              onChange={setTab}
+              tabs={[
+                { key: 'all', label: 'All', count: tabCount(counts.all) },
+                { key: 'published', label: 'Published', count: tabCount(counts.published) },
+                { key: 'draft', label: 'Drafts', count: tabCount(counts.draft) },
+                { key: 'pinned', label: 'Pinned', count: tabCount(counts.pinned) }
+              ]}
+            />
             <Toolbar>
               <SearchInput value={search} onChange={setSearch} label="Search announcements" placeholder="Search title or summary…" className="flex-1" />
               <Select value={facebookFilter} onChange={v => setFacebookFilter(v as FbStatus | 'All')} className="md:w-56" label="Filter by Facebook status">
                 <option value="All">Any Facebook status</option>
-                <option value="posted">Posted</option>
-                <option value="not_posted">Not posted</option>
-                <option value="failed">Failed</option>
+                <option value="posted">Posted to Facebook</option>
+                <option value="not_posted">Not on Facebook</option>
+                <option value="failed">Facebook failed</option>
               </Select>
             </Toolbar>
           </>
@@ -606,97 +637,32 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
           <TableSkeleton rows={3} label="Loading announcements" />
         ) : failedEmpty ? (
           <ErrorState title="Couldn't load announcements" message={loadError} onRetry={fetchAnnouncements} retrying={isLoading} />
-        ) : filtered.length === 0 ? (
-          filtersActive ? (
+        ) : visible.length === 0 ? (
+          listFiltersActive ? (
             <EmptyState
               icon={Megaphone}
-              title="No announcements match your filters"
-              description="Try a different search or filter."
-              action={<Button onClick={() => { setSearch(''); setStatusFilter('All'); setFacebookFilter('All'); }}>Clear filters</Button>}
+              title="No announcements match"
+              description="Try a different search or Facebook status."
+              action={<Button onClick={() => { setSearch(''); setFacebookFilter('All'); }}>Clear filters</Button>}
             />
           ) : (
-            <EmptyState
-              icon={Megaphone}
-              title="No announcements yet"
-              description="Create your first announcement to keep students informed."
-              action={<Button variant="primary" icon={Plus} onClick={openCreate}>New announcement</Button>}
-            />
+            <EmptyState icon={tab === 'pinned' ? Pin : Megaphone} title={EMPTY_TABS[tab].title} description={EMPTY_TABS[tab].description} action={newButton} />
           )
         ) : (
-          <ul className="divide-y divide-line">
-            {filtered.map(a => {
-              const CategoryIcon = CATEGORY_ICONS[a.category] ?? Bell;
-              const fb = FB_BADGE[a.fbStatus] ?? FB_BADGE.not_posted;
-              const thumb = imageSrc(a.imageUrl);
-              return (
-                <li key={a.id} className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-surface-muted sm:flex-row sm:items-start sm:gap-4">
-                  {thumb ? (
-                    <img src={thumb} alt="" className="hidden size-9 shrink-0 rounded-control object-cover ring-1 ring-line sm:block" />
-                  ) : (
-                    <span className={`hidden size-9 shrink-0 items-center justify-center rounded-control sm:flex ${a.isPinned ? 'bg-accent-subtle text-accent' : 'bg-neutral-bg text-ink-muted'}`}>
-                      {a.isPinned ? <Pin className="size-4" aria-label="Pinned" /> : <CategoryIcon className="size-4" aria-hidden />}
-                    </span>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <h3 className="mr-1 text-sm font-medium text-ink wrap-break-word">{a.title}</h3>
-                      {a.status === 'published' ? <Badge tone="success" dot>Published</Badge> : <Badge dot>Draft</Badge>}
-                      <Badge icon={CategoryIcon}>{a.category}</Badge>
-                      {a.scholarshipId && <Badge>{SCHOLARSHIP_NAMES[a.scholarshipId] ?? a.scholarshipId}</Badge>}
-                      {a.isPinned && <Badge tone="accent" icon={Pin}>Pinned</Badge>}
-                      <Badge tone={fb.tone} icon={Facebook}>
-                        <span className="sr-only">Facebook: </span>{fb.label}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-sm text-ink-muted wrap-break-word">{a.description}</p>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-subtle">
-                      <span className="flex items-center gap-1 tabular-nums">
-                        <Clock className="size-3.5" aria-hidden />
-                        {a.status === 'published' ? `Published ${formatDateTime(a.publishedAt)}` : `Updated ${formatDateTime(a.updatedAt)}`}
-                      </span>
-                      {a.fbPostId && a.fbPermalink && (
-                        <a href={a.fbPermalink} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-badge font-medium text-info-fg hover:underline">
-                          <ExternalLink className="size-3.5" aria-hidden /> View on Facebook
-                        </a>
-                      )}
-                      {a.fbStatus === 'failed' && a.fbError && (
-                        <span className="flex items-start gap-1 text-danger wrap-break-word">
-                          <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden /> {a.fbError}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1 self-start">
-                    {a.fbStatus === 'failed' && (
-                      <Button
-                        size="sm"
-                        icon={RotateCw}
-                        loading={retryingId === a.id}
-                        disabled={!!retryingId}
-                        onClick={() => retryFacebook(a)}
-                        aria-label={`Retry Facebook for "${a.title}"`}
-                      >
-                        Retry
-                      </Button>
-                    )}
-                    <IconButton
-                      icon={a.isPinned ? PinOff : Pin}
-                      label={`${a.isPinned ? 'Unpin' : 'Pin'} "${a.title}"`}
-                      loading={togglingPinId === a.id}
-                      onClick={() => togglePin(a)}
-                    />
-                    <IconButton icon={Pencil} label={`Edit "${a.title}"`} onClick={() => openEdit(a)} disabled={retryingId === a.id} />
-                    <IconButton
-                      icon={Trash2}
-                      label={`Delete "${a.title}"`}
-                      onClick={() => { setDeleteError(''); setPendingDelete(a); }}
-                      disabled={retryingId === a.id}
-                      className="hover:bg-danger-bg hover:text-danger"
-                    />
-                  </div>
-                </li>
-              );
-            })}
+          <ul className="divide-y divide-line" aria-label="Announcements">
+            {visible.map(a => (
+              <AnnouncementRow
+                key={a.id}
+                a={a}
+                pinBusy={togglingPinId === a.id}
+                retrying={retryingId === a.id}
+                retryDisabled={!!retryingId}
+                onEdit={() => openEdit(a)}
+                onTogglePin={() => togglePin(a)}
+                onRetry={() => retryFacebook(a)}
+                onDelete={() => { setDeleteError(''); setPendingDelete(a); }}
+              />
+            ))}
           </ul>
         )}
       </Card>
@@ -715,7 +681,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
         <ConfirmDialog
           tone="danger"
           title="Delete announcement?"
-          description={<>"{pendingDelete.title}" will be permanently removed for everyone. This can't be undone.</>}
+          description={<>"{pendingDelete.title}" will be permanently removed from the student portal. This can't be undone.</>}
           confirmLabel={pendingDelete.fbPostId ? 'Delete here and on Facebook' : 'Delete'}
           confirmIcon={Trash2}
           onConfirm={confirmDelete}
@@ -723,11 +689,141 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
           busy={isDeleting}
           error={deleteError}
         >
-          {pendingDelete.fbPostId && (
-            <Alert tone="warning">This also deletes the post from the Facebook Page.</Alert>
+          {pendingDelete.fbPostId ? (
+            <Alert tone="warning" icon={Facebook}>The post on the Facebook Page is deleted too.</Alert>
+          ) : (
+            <p className="text-sm text-ink-muted">It isn't on the Facebook Page, so nothing changes there.</p>
           )}
         </ConfirmDialog>
       )}
     </div>
+  );
+}
+
+// --- Row -----------------------------------------------------------------------
+
+function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onTogglePin, onRetry, onDelete }: {
+  a: AdminAnnouncement;
+  pinBusy: boolean;
+  retrying: boolean;
+  retryDisabled: boolean;
+  onEdit: () => void;
+  onTogglePin: () => void;
+  onRetry: () => void;
+  onDelete: () => void;
+}) {
+  const CategoryIcon = CATEGORY_ICONS[a.category] ?? Bell;
+  // Falls back to the category icon if the image can't load.
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const thumb = thumbFailed ? null : imageSrc(a.imageUrl);
+  const published = a.status === 'published';
+  const meta = [
+    a.category,
+    published ? `Published ${formatShortDate(a.publishedAt)}` : `Edited ${formatShortDate(a.updatedAt)}`,
+    a.scholarshipId ? SCHOLARSHIP_NAMES[a.scholarshipId] ?? a.scholarshipId : null
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <li className="flex gap-3 px-4 py-3.5 sm:gap-4 sm:px-5">
+      {thumb ? (
+        <img src={thumb} alt="" onError={() => setThumbFailed(true)} className="size-10 shrink-0 rounded-control object-cover ring-1 ring-line" />
+      ) : (
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-control bg-neutral-bg text-ink-subtle">
+          <CategoryIcon className="size-4" aria-hidden />
+        </span>
+      )}
+
+      <div className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {a.isPinned && (
+              <>
+                <Pin className="size-3.5 shrink-0 text-accent" aria-hidden />
+                <span className="sr-only">Pinned: </span>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={onEdit}
+              title={a.title}
+              className="min-w-0 truncate rounded-badge text-left text-sm font-medium text-ink hover:text-accent"
+            >
+              {a.title}
+            </button>
+          </div>
+          <p className="mt-0.5 line-clamp-1 text-sm text-ink-muted wrap-break-word">{a.description}</p>
+          <p className="mt-1 truncate text-xs text-ink-subtle tabular-nums">{meta}</p>
+        </div>
+
+        <div className="mt-2 flex items-center gap-2 sm:mt-0 sm:shrink-0">
+          {published ? <Badge tone="success" dot>Published</Badge> : <Badge dot>Draft</Badge>}
+          <FacebookIndicator a={a} retrying={retrying} retryDisabled={retryDisabled} onRetry={onRetry} />
+          <div className="ml-auto flex items-center gap-0.5 sm:ml-2">
+            <IconButton
+              icon={a.isPinned ? PinOff : Pin}
+              label={a.isPinned ? 'Unpin' : 'Pin to top'}
+              loading={pinBusy}
+              onClick={onTogglePin}
+            />
+            <IconButton icon={Pencil} label="Edit" onClick={onEdit} disabled={retrying} />
+            <DropdownMenu
+              label={`More actions for "${a.title}"`}
+              items={[{ key: 'delete', label: 'Delete', icon: Trash2, tone: 'danger', onSelect: onDelete }]}
+            />
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+// One small Facebook icon instead of a badge: muted when the announcement
+// isn't on the Page, accent (and a link to the post) when it is, red with
+// a Retry action when the last Facebook step failed.
+function FacebookIndicator({ a, retrying, retryDisabled, onRetry }: {
+  a: AdminAnnouncement;
+  retrying: boolean;
+  retryDisabled: boolean;
+  onRetry: () => void;
+}) {
+  const box = 'inline-flex size-8 items-center justify-center rounded-control';
+
+  if (a.fbStatus === 'failed') {
+    return (
+      <span className="flex items-center gap-1">
+        <Tooltip content={a.fbError || 'Facebook returned an error.'} className={`${box} text-danger-fg`}>
+          <Facebook className="size-4" aria-hidden />
+          <span className="sr-only">Facebook failed</span>
+        </Tooltip>
+        <Button size="sm" variant="danger-secondary" icon={RotateCw} loading={retrying} disabled={retryDisabled} onClick={onRetry}>
+          Retry
+          <span className="sr-only"> Facebook for “{a.title}”</span>
+        </Button>
+      </span>
+    );
+  }
+
+  if (a.fbStatus === 'posted' && a.fbPermalink) {
+    return (
+      <Tooltip content="Posted to Facebook. Opens the post." asChild>
+        <a
+          href={a.fbPermalink}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="View on Facebook (opens in a new tab)"
+          className={`${box} text-accent hover:bg-accent-subtle`}
+        >
+          <Facebook className="size-4" aria-hidden />
+        </a>
+      </Tooltip>
+    );
+  }
+
+  const note = a.fbEnabled && a.status === 'draft' ? 'Posts to Facebook when published' : 'Not on Facebook';
+  return (
+    <Tooltip content={note} className={`${box} text-ink-subtle/60`}>
+      <Facebook className="size-4" aria-hidden />
+      <span className="sr-only">{note}</span>
+    </Tooltip>
   );
 }

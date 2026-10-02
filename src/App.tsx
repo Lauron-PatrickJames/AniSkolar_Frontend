@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useUser, useAuth, useClerk } from '@clerk/react';
-import { StudentProfile, Application, Scholarship } from './types';
+import { StudentProfile, Application, Scholarship, Announcement } from './types';
 import { mockScholarships } from './data/scholarships';
 import { mockAnnouncements } from './data/announcements';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
@@ -160,7 +160,31 @@ export default function App() {
 
   const [student, setStudent] = useState<StudentProfile>(defaultStudent);
   const [applications, setApplications] = useState<Application[]>([]);
+  // Published announcements from the API (GET /api/announcements/feed). The
+  // built-in sample announcements stay as a fallback if the feed can't be
+  // reached, so the portal still renders offline / without a backend.
+  const [announcements, setAnnouncements] = useState<Announcement[]>(mockAnnouncements);
   const [authPhase, setAuthPhase] = useState<AuthPhase>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/announcements/feed`);
+        if (!res.ok) return;
+        const body = await res.json();
+        if (cancelled || !Array.isArray(body.announcements)) return;
+        setAnnouncements(body.announcements.map((a: Announcement) => ({
+          ...a,
+          // The API returns image paths relative to the API server.
+          imageUrl: a.imageUrl ? `${API_BASE_URL}${a.imageUrl}` : null
+        })));
+      } catch {
+        // Keep the fallback announcements.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const isFirstRender = useRef(true);
   const isPopStateUpdate = useRef(false);
@@ -717,7 +741,7 @@ export default function App() {
                   />
                 );
               case 'announcements':
-                return <Announcements announcements={mockAnnouncements} />;
+                return <Announcements announcements={announcements} />;
               case 'profile':
                 return (
                   <Profile
@@ -730,7 +754,7 @@ export default function App() {
                 return (
                   <Dashboard
                     scholarships={mockScholarships}
-                    announcements={mockAnnouncements}
+                    announcements={announcements}
                     applications={applications}
                     student={student}
                     onNavigate={handleNavigate}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Announcement } from '../types';
-import { Calendar, ChevronDown, ChevronUp, Bell, Megaphone, Clock, Award } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronUp, Bell, Megaphone, Clock, Award, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface AnnouncementCardProps {
@@ -73,7 +73,7 @@ export default function AnnouncementCard({ announcement, id, isInitiallyExpanded
           {announcement.description}
         </p>
 
-        <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+        <div className="flex flex-wrap gap-2 justify-between items-center pt-2 border-t border-slate-100">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="text-xs font-semibold text-brand-green hover:text-brand-green-dark flex items-center space-x-1 focus:outline-hidden"
@@ -81,6 +81,17 @@ export default function AnnouncementCard({ announcement, id, isInitiallyExpanded
             <span>{isExpanded ? 'Collapse Article' : 'Read Full Announcement'}</span>
             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
+          {announcement.fbPermalink && (
+            <a
+              href={announcement.fbPermalink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold text-slate-500 hover:text-brand-green inline-flex items-center gap-1"
+            >
+              <span>View on Facebook</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
         </div>
       </div>
 
@@ -93,6 +104,14 @@ export default function AnnouncementCard({ announcement, id, isInitiallyExpanded
             transition={{ duration: 0.25, ease: 'easeInOut' }}
           >
             <div className="px-4 sm:px-5 pb-6 pt-2 border-t border-slate-100 bg-slate-50/50">
+              {announcement.imageUrl && (
+                <img
+                  src={announcement.imageUrl}
+                  alt=""
+                  loading="lazy"
+                  className="w-full max-h-80 object-cover rounded-lg border border-slate-100 mt-2 mb-4"
+                />
+              )}
               <div className="prose prose-slate max-w-none text-sm text-slate-700 whitespace-pre-line leading-relaxed font-normal break-words">
                 {announcement.content}
               </div>

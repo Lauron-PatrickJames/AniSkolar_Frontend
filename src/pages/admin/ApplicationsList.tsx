@@ -1,12 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { CheckCircle2, ChevronRight, Clock, Inbox, RefreshCw, RotateCcw, Send, ShieldCheck } from 'lucide-react';
 import { mockScholarships, officeOf } from '../../data/scholarships';
 import {
-  API_BASE_URL, AdminApplication, AppStatus, applicantName, authHeaders, formTypeLabel, formatDateTime,
-  formatShortDate, isOfficeApp, officeName, plural
+  AdminApplication, AppStatus, applicantName, formTypeLabel,
+  formatShortDate, isOfficeApp, officeName
 } from './adminData';
 import {
-  Alert, Avatar, Button, Card, ConfirmDialog, EmptyState, ErrorState, KpiCard, KpiGrid, MobileList, PageHeader,
+  Alert, Avatar, Button, Card, EmptyState, ErrorState, KpiCard, KpiGrid, MobileList, PageHeader,
   Pagination, RowLink, SearchInput, Select, StatusBadge, Table, TableSkeleton, Tabs, Td, Th, Toolbar, Tr, Truncate, paginate
 } from './AdminUI';
 
@@ -33,11 +33,10 @@ interface ApplicationsListProps {
   // Office code for office admins (POLCA, ALUMNI); null for the AdSO.
   adminOffice: string | null;
   officeLabel: string;
-  getToken: () => Promise<string | null>;
 }
 
 export default function ApplicationsList({
-  applications, isLoading, loadError, onReload, onOpen, filters, onFiltersChange, adminOffice, officeLabel, getToken
+  applications, isLoading, loadError, onReload, onOpen, filters, onFiltersChange, adminOffice, officeLabel
 }: ApplicationsListProps) {
   const hasData = applications.length > 0;
   const firstLoad = isLoading && !hasData;
@@ -107,7 +106,7 @@ export default function ApplicationsList({
       <PageHeader
         title="Applications"
         description={adminOffice
-          ? `Applications for the ${officeLabel}. Review them, then send them to the AdSO.`
+          ? `Applications for the ${officeLabel}. Approved applications are sent to the AdSO automatically.`
           : 'Review submissions, verify documents, and record a decision for each applicant.'}
         actions={<Button icon={RefreshCw} loading={isLoading} onClick={() => onReload()}>Refresh</Button>}
       />
@@ -120,10 +119,6 @@ export default function ApplicationsList({
         >
           {loadError} Showing the last loaded list.
         </Alert>
-      )}
-
-      {adminOffice && hasData && (
-        <SendToAdsoCard applications={applications} getToken={getToken} onSent={onReload} statusTabs={statusTabs} />
       )}
 
       <KpiGrid>
@@ -289,108 +284,10 @@ function RoutingNote({ app, adminOffice }: { app: AdminApplication; adminOffice:
   if (adminOffice) {
     return app.forwardedAt
       ? <span className="flex items-center gap-1 text-xs text-ink-muted"><Send className="size-3" aria-hidden />Sent to AdSO</span>
-      : <span className="text-xs text-ink-subtle">Not sent yet</span>;
+      : <span className="text-xs text-ink-subtle">Sent when approved</span>;
   }
   if (isOfficeApp(app) && app.decisionOffice === 'LSO') {
     return <span className="flex items-center gap-1 text-xs text-warning-fg"><ShieldCheck className="size-3" aria-hidden />AdSO override</span>;
   }
   return null;
-}
-
-// Office admins only: sends every application the office hasn't sent yet,
-// whatever its status (POST /api/applications/forward).
-function SendToAdsoCard({ applications, getToken, onSent, statusTabs }: {
-  applications: AdminApplication[];
-  getToken: () => Promise<string | null>;
-  onSent: () => Promise<void>;
-  statusTabs: { key: AppStatus | 'All'; label: string }[];
-}) {
-  const [confirming, setConfirming] = useState(false);
-  const [isForwarding, setIsForwarding] = useState(false);
-  const [error, setError] = useState('');
-  const [result, setResult] = useState('');
-
-  const unsent = applications.filter(a => !a.forwardedAt);
-  const unsentSummary = statusTabs
-    .filter(t => t.key !== 'All')
-    .map(t => [t.label.toLowerCase(), unsent.filter(a => a.status === t.key).length] as const)
-    .filter(([, c]) => c > 0);
-  const lastForwardedAt = applications.reduce<string | null>(
-    (latest, a) => (a.forwardedAt && (!latest || a.forwardedAt > latest) ? a.forwardedAt : latest), null
-  );
-
-  const send = async () => {
-    setIsForwarding(true);
-    setError('');
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/applications/forward`, {
-        method: 'POST',
-        headers: await authHeaders(getToken, true)
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'Failed to send applications to the AdSO.');
-      setResult(`Sent ${plural(body.forwarded ?? 0, 'application')} to the AdSO.`);
-      setConfirming(false);
-      await onSent();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send applications to the AdSO.');
-    } finally {
-      setIsForwarding(false);
-    }
-  };
-
-  return (
-    <Card>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-control bg-accent-subtle text-accent">
-          <Send className="size-5" aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-ink">
-            {unsent.length > 0 ? `${plural(unsent.length, 'application')} not yet sent to the AdSO` : 'Everything has been sent to the AdSO'}
-          </p>
-          <p className="mt-0.5 text-sm text-ink-muted">
-            {unsent.length > 0
-              ? 'Approved applications go to the AdSO automatically. This sends the rest, whatever their status. Your decisions stand unless the AdSO overrides them.'
-              : lastForwardedAt ? `Last sent ${formatDateTime(lastForwardedAt)}. Approved applications are sent automatically.` : 'Approved applications are sent automatically.'}
-          </p>
-          {result && (
-            <p role="status" className="mt-1.5 flex items-center gap-1.5 text-sm font-medium text-success-fg">
-              <CheckCircle2 className="size-4" aria-hidden />{result}
-            </p>
-          )}
-        </div>
-        <Button
-          variant="primary"
-          icon={Send}
-          disabled={unsent.length === 0}
-          onClick={() => { setResult(''); setError(''); setConfirming(true); }}
-        >
-          Send to AdSO
-        </Button>
-      </div>
-
-      {confirming && (
-        <ConfirmDialog
-          title={`Send ${plural(unsent.length, 'application')} to the AdSO?`}
-          description="The AdSO will see them right away. Your decisions stand unless the AdSO overrides them."
-          confirmLabel="Send to AdSO"
-          confirmIcon={Send}
-          onConfirm={send}
-          onCancel={() => setConfirming(false)}
-          busy={isForwarding}
-          error={error}
-        >
-          <ul className="divide-y divide-line rounded-control ring-1 ring-inset ring-line">
-            {unsentSummary.map(([label, count]) => (
-              <li key={label} className="flex items-center justify-between px-3 py-2 text-sm">
-                <span className="capitalize text-ink-muted">{label}</span>
-                <span className="font-medium text-ink tabular-nums">{count}</span>
-              </li>
-            ))}
-          </ul>
-        </ConfirmDialog>
-      )}
-    </Card>
-  );
 }

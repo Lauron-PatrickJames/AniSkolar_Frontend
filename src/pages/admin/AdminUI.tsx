@@ -1,50 +1,95 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ChevronDown, ChevronLeft, ChevronRight, Inbox, Search } from 'lucide-react';
+import React, { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { motion } from 'motion/react';
+import {
+  AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock,
+  FileText, Inbox, Info, RefreshCw, RotateCcw, RotateCw, Search, Send, X, XCircle
+} from 'lucide-react';
+import { AppStatus, HistoryStatus, historyLabel } from './adminData';
 
-// Shared building blocks for every admin page (applications, statistics,
-// scholars, announcements). One place for the admin visual language:
-// white panels on a soft slate canvas, sentence-case headings, a single
-// brand accent, and quiet status colours. Pages compose these instead of
-// styling cards/buttons/tables by hand.
+// The admin console's component library. Pages compose these and use only
+// the semantic tokens from index.css (bg-surface, text-ink-muted,
+// rounded-card, ...), so spacing, colour, radius and type stay consistent.
+
+type ElementType = React.ElementType;
+
+// --- Tones -------------------------------------------------------------------
+
+export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
+
+const TONE_BADGE: Record<Tone, string> = {
+  neutral: 'bg-neutral-bg text-neutral-fg ring-neutral-fg/10',
+  accent: 'bg-accent-subtle text-accent-hover ring-accent/15',
+  success: 'bg-success-bg text-success-fg ring-success-fg/15',
+  warning: 'bg-warning-bg text-warning-fg ring-warning-fg/15',
+  danger: 'bg-danger-bg text-danger-fg ring-danger-fg/15',
+  info: 'bg-info-bg text-info-fg ring-info-fg/15'
+};
+
+const TONE_DOT: Record<Tone, string> = {
+  neutral: 'bg-neutral-solid',
+  accent: 'bg-accent',
+  success: 'bg-success-solid',
+  warning: 'bg-warning-solid',
+  danger: 'bg-danger-solid',
+  info: 'bg-info-solid'
+};
+
+const TONE_ICON_CHIP: Record<Tone, string> = {
+  neutral: 'bg-neutral-bg text-ink-muted',
+  accent: 'bg-accent-subtle text-accent',
+  success: 'bg-success-bg text-success-fg',
+  warning: 'bg-warning-bg text-warning-fg',
+  danger: 'bg-danger-bg text-danger-fg',
+  info: 'bg-info-bg text-info-fg'
+};
+
+// Reads a colour token at runtime, for libraries (charts) that need a
+// literal colour instead of a class. Keeps index.css the single source.
+export function tokenColor(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
+  return value || fallback;
+}
 
 // --- Status ------------------------------------------------------------------
 
-export type AppStatus = 'Under Evaluation' | 'Approved' | 'Rejected' | 'Needs Revision';
-
-export const STATUS_STYLES: Record<AppStatus, { badge: string; dot: string; text: string }> = {
-  'Under Evaluation': { badge: 'bg-amber-50 text-amber-800 ring-amber-600/15', dot: 'bg-amber-500', text: 'text-amber-700' },
-  'Approved': { badge: 'bg-emerald-50 text-emerald-800 ring-emerald-600/15', dot: 'bg-emerald-500', text: 'text-emerald-700' },
-  'Rejected': { badge: 'bg-rose-50 text-rose-800 ring-rose-600/15', dot: 'bg-rose-500', text: 'text-rose-700' },
-  'Needs Revision': { badge: 'bg-sky-50 text-sky-800 ring-sky-600/15', dot: 'bg-sky-500', text: 'text-sky-700' }
+export const STATUS_META: Record<AppStatus, { tone: Tone; icon: ElementType; token: string }> = {
+  'Under Evaluation': { tone: 'warning', icon: Clock, token: 'warning-solid' },
+  'Needs Revision': { tone: 'info', icon: RotateCcw, token: 'info-solid' },
+  'Approved': { tone: 'success', icon: CheckCircle2, token: 'success-solid' },
+  'Rejected': { tone: 'danger', icon: XCircle, token: 'danger-solid' }
 };
 
-export function StatusBadge({ status }: { status: AppStatus }) {
-  const style = STATUS_STYLES[status] ?? STATUS_STYLES['Under Evaluation'];
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md ring-1 ring-inset text-xs font-medium whitespace-nowrap ${style.badge}`}>
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${style.dot}`} />
-      {status}
-    </span>
-  );
-}
+const HISTORY_META: Record<HistoryStatus, { tone: Tone; icon: ElementType }> = {
+  'Submitted': { tone: 'neutral', icon: FileText },
+  'Resubmitted': { tone: 'neutral', icon: RefreshCw },
+  'Forwarded to LSO': { tone: 'accent', icon: Send },
+  ...STATUS_META
+};
 
-// Neutral tag (form type, office, cycle...).
-export function Tag({ children, tone = 'slate' }: { children: React.ReactNode; tone?: 'slate' | 'green' | 'blue' | 'amber' | 'rose' }) {
-  const tones = {
-    slate: 'bg-slate-100 text-slate-600 ring-slate-500/10',
-    green: 'bg-emerald-50 text-emerald-700 ring-emerald-600/15',
-    blue: 'bg-sky-50 text-sky-700 ring-sky-600/15',
-    amber: 'bg-amber-50 text-amber-700 ring-amber-600/15',
-    rose: 'bg-rose-50 text-rose-700 ring-rose-600/15'
-  };
+export function Badge({ tone = 'neutral', dot, icon: Icon, children, className = '' }: {
+  tone?: Tone;
+  dot?: boolean;
+  icon?: ElementType;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md ring-1 ring-inset text-[11px] font-medium whitespace-nowrap ${tones[tone]}`}>
+    <span className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-badge ring-1 ring-inset text-xs font-medium whitespace-nowrap ${TONE_BADGE[tone]} ${className}`}>
+      {dot && <span className={`size-1.5 rounded-full shrink-0 ${TONE_DOT[tone]}`} aria-hidden />}
+      {Icon && <Icon className="size-3.5 shrink-0" aria-hidden />}
       {children}
     </span>
   );
 }
 
-// --- Avatar --------------------------------------------------------------------
+export function StatusBadge({ status }: { status: AppStatus }) {
+  const meta = STATUS_META[status] ?? STATUS_META['Under Evaluation'];
+  return <Badge tone={meta.tone} dot>{status}</Badge>;
+}
+
+// --- Avatar ------------------------------------------------------------------
 
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -53,226 +98,409 @@ export function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export function AdminAvatar({ name, avatarUrl, size = 'md' }: { name: string; avatarUrl?: string; size?: 'sm' | 'md' | 'lg' }) {
+const AVATAR_SIZES = { sm: 'size-8 text-xs', md: 'size-10 text-sm', lg: 'size-14 text-base' };
+
+export function Avatar({ name, avatarUrl, size = 'md' }: { name: string; avatarUrl?: string; size?: keyof typeof AVATAR_SIZES }) {
   const [failed, setFailed] = useState(false);
-  const dims = size === 'lg' ? 'w-14 h-14 text-lg' : size === 'sm' ? 'w-8 h-8 text-[11px]' : 'w-10 h-10 text-xs';
+  const dims = AVATAR_SIZES[size];
   if (avatarUrl && !failed) {
-    return <img src={avatarUrl} alt={name} onError={() => setFailed(true)} className={`${dims} rounded-full object-cover shrink-0 ring-1 ring-slate-200`} />;
+    return <img src={avatarUrl} alt="" onError={() => setFailed(true)} className={`${dims} rounded-full object-cover shrink-0 ring-1 ring-line`} />;
   }
   return (
-    <div className={`${dims} rounded-full bg-emerald-50 text-brand-green ring-1 ring-emerald-600/15 font-semibold flex items-center justify-center shrink-0`}>
+    <span aria-hidden className={`${dims} rounded-full bg-accent-subtle text-accent font-semibold flex items-center justify-center shrink-0 capitalize`}>
       {initials(name)}
-    </div>
+    </span>
   );
 }
 
-// --- Layout ----------------------------------------------------------------------
+// --- Buttons -----------------------------------------------------------------
 
-export function PageHeader({ title, description, actions, children }: {
-  title: React.ReactNode;
-  description?: React.ReactNode;
-  actions?: React.ReactNode;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-      <div className="min-w-0">
-        <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">{title}</h1>
-        {description && <p className="text-sm text-slate-500 mt-1 max-w-2xl">{description}</p>}
-        {children}
-      </div>
-      {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
-    </div>
-  );
-}
-
-export function Panel({ title, description, actions, children, className = '', bodyClassName = 'p-5 sm:p-6', footer }: {
-  title?: React.ReactNode;
-  description?: React.ReactNode;
-  actions?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-  bodyClassName?: string;
-  footer?: React.ReactNode;
-}) {
-  return (
-    <section className={`bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(16,24,40,0.04)] min-w-0 ${className}`}>
-      {(title || actions) && (
-        <header className="flex items-start justify-between gap-3 px-5 sm:px-6 pt-5 pb-4 border-b border-slate-100">
-          <div className="min-w-0">
-            {title && <h2 className="text-sm font-semibold text-slate-900">{title}</h2>}
-            {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
-          </div>
-          {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
-        </header>
-      )}
-      <div className={bodyClassName}>{children}</div>
-      {footer && <footer className="px-5 sm:px-6 py-3 border-t border-slate-100">{footer}</footer>}
-    </section>
-  );
-}
-
-// --- KPI -------------------------------------------------------------------------
-
-export type Tone = 'slate' | 'green' | 'amber' | 'sky' | 'rose' | 'violet';
-
-const TONE_ICON: Record<Tone, string> = {
-  slate: 'bg-slate-100 text-slate-600',
-  green: 'bg-emerald-50 text-emerald-700',
-  amber: 'bg-amber-50 text-amber-700',
-  sky: 'bg-sky-50 text-sky-700',
-  rose: 'bg-rose-50 text-rose-700',
-  violet: 'bg-violet-50 text-violet-700'
-};
-
-export function KpiCard({ label, value, hint, icon: Icon, tone = 'slate', active, onClick, footer }: {
-  label: string;
-  value: React.ReactNode;
-  hint?: React.ReactNode;
-  icon?: React.ElementType;
-  tone?: Tone;
-  active?: boolean;
-  onClick?: () => void;
-  footer?: React.ReactNode;
-}) {
-  const Comp = onClick ? 'button' : 'div';
-  return (
-    <Comp
-      type={onClick ? 'button' : undefined}
-      onClick={onClick}
-      className={`text-left bg-white rounded-xl border p-4 sm:p-5 min-w-0 transition-all shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${
-        active ? 'border-brand-green ring-1 ring-brand-green' : 'border-slate-200/80'
-      } ${onClick ? 'hover:border-slate-300 hover:shadow-sm focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green/40' : ''}`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-slate-500">{label}</p>
-        {Icon && (
-          <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${TONE_ICON[tone]}`}>
-            <Icon className="w-3.5 h-3.5" />
-          </span>
-        )}
-      </div>
-      <p className="text-2xl sm:text-[28px] leading-none font-semibold text-slate-900 tracking-tight mt-3 tabular-nums">{value}</p>
-      {hint && <p className="text-xs text-slate-500 mt-2">{hint}</p>}
-      {footer && <div className="mt-2">{footer}</div>}
-    </Comp>
-  );
-}
-
-// --- Controls ----------------------------------------------------------------------
-
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'info';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-secondary';
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-brand-green text-white hover:bg-brand-green-dark shadow-sm',
-  secondary: 'bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 shadow-sm',
-  ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-  danger: 'bg-white text-rose-700 ring-1 ring-inset ring-rose-200 hover:bg-rose-50',
-  success: 'bg-brand-green text-white hover:bg-brand-green-dark shadow-sm',
-  info: 'bg-white text-sky-700 ring-1 ring-inset ring-sky-200 hover:bg-sky-50'
+  primary: 'bg-accent text-white shadow-card hover:bg-accent-hover',
+  secondary: 'bg-surface text-ink ring-1 ring-inset ring-line-strong shadow-card hover:bg-surface-muted',
+  ghost: 'text-ink-muted hover:bg-neutral-bg hover:text-ink',
+  danger: 'bg-danger text-white shadow-card hover:bg-danger-hover',
+  'danger-secondary': 'bg-surface text-danger ring-1 ring-inset ring-danger/30 hover:bg-danger-bg'
 };
 
-export function Button({ variant = 'secondary', size = 'md', icon: Icon, iconRight, children, className = '', loading, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+const BUTTON_SIZES = {
+  sm: { box: 'h-8 px-2.5 text-xs gap-1.5', square: 'size-8', icon: 'size-3.5' },
+  md: { box: 'h-9 px-3.5 text-sm gap-2', square: 'size-9', icon: 'size-4' }
+};
+
+function Spinner({ className = 'size-4' }: { className?: string }) {
+  return <span aria-hidden className={`${className} shrink-0 rounded-full border-2 border-current/30 border-t-current motion-safe:animate-spin`} />;
+}
+
+type ButtonProps = React.ComponentPropsWithRef<'button'> & {
   variant?: ButtonVariant;
   size?: 'sm' | 'md';
-  icon?: React.ElementType;
-  iconRight?: React.ReactNode;
+  icon?: ElementType;
+  iconRight?: ElementType;
+  // Shows a spinner in place of the icon and disables the button.
   loading?: boolean;
-}) {
-  const sizes = size === 'sm' ? 'px-2.5 py-1.5 text-xs gap-1.5' : 'px-3.5 py-2 text-sm gap-2';
+};
+
+export function Button({ variant = 'secondary', size = 'md', icon: Icon, iconRight: IconRight, loading, disabled, children, className = '', ...rest }: ButtonProps) {
+  const s = BUTTON_SIZES[size];
   return (
     <button
       type="button"
       {...rest}
-      className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green/40 disabled:opacity-50 disabled:cursor-not-allowed ${sizes} ${BUTTON_VARIANTS[variant]} ${className}`}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      className={`inline-flex items-center justify-center shrink-0 rounded-control font-medium whitespace-nowrap transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none ${s.box} ${BUTTON_VARIANTS[variant]} ${className}`}
     >
-      {loading ? (
-        <span className="w-3.5 h-3.5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
-      ) : Icon ? (
-        <Icon className={size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
-      ) : null}
+      {loading ? <Spinner className={s.icon} /> : Icon ? <Icon className={s.icon} aria-hidden /> : null}
       {children}
-      {iconRight}
+      {IconRight && <IconRight className={`${s.icon} opacity-60`} aria-hidden />}
     </button>
   );
 }
 
-export const controlClass =
-  'w-full border-0 ring-1 ring-inset ring-slate-300 rounded-lg text-sm bg-white text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-brand-green transition-shadow';
+// A link that looks like a Button (downloads, external pages).
+export function LinkButton({ variant = 'secondary', size = 'md', icon: Icon, children, className = '', ...rest }:
+  React.ComponentPropsWithRef<'a'> & { variant?: ButtonVariant; size?: 'sm' | 'md'; icon?: ElementType }) {
+  const s = BUTTON_SIZES[size];
+  return (
+    <a {...rest} className={`inline-flex items-center justify-center shrink-0 rounded-control font-medium whitespace-nowrap transition-colors ${s.box} ${BUTTON_VARIANTS[variant]} ${className}`}>
+      {Icon && <Icon className={s.icon} aria-hidden />}
+      {children}
+    </a>
+  );
+}
 
-export function SearchInput({ value, onChange, placeholder, className = '' }: {
+// Square icon-only button. `label` is required: it is the accessible name
+// and the hover tooltip.
+export function IconButton({ icon: Icon, label, variant = 'ghost', size = 'sm', loading, disabled, className = '', ...rest }:
+  Omit<ButtonProps, 'children' | 'iconRight' | 'icon'> & { icon: ElementType; label: string }) {
+  const s = BUTTON_SIZES[size];
+  return (
+    <button
+      type="button"
+      {...rest}
+      aria-label={label}
+      title={label}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      className={`inline-flex items-center justify-center shrink-0 rounded-control transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${s.square} ${BUTTON_VARIANTS[variant]} ${className}`}
+    >
+      {loading ? <Spinner className={s.icon} /> : <Icon className={s.icon} aria-hidden />}
+    </button>
+  );
+}
+
+// --- Layout ------------------------------------------------------------------
+
+export function PageHeader({ title, description, actions, back, meta }: {
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  actions?: React.ReactNode;
+  back?: { label: string; onClick: () => void };
+  meta?: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      {back && (
+        <button
+          type="button"
+          onClick={back.onClick}
+          className="inline-flex items-center gap-1.5 rounded-control text-sm font-medium text-ink-muted hover:text-ink transition-colors"
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          {back.label}
+        </button>
+      )}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-title font-semibold tracking-tight text-ink">{title}</h1>
+          {description && <p className="mt-1 max-w-2xl text-sm text-ink-muted">{description}</p>}
+          {meta && <div className="mt-2 flex flex-wrap items-center gap-2">{meta}</div>}
+        </div>
+        {actions && <div className="flex flex-wrap items-center gap-2 sm:shrink-0">{actions}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Surface for every grouped piece of content. Never clips overflow, so
+// sticky table headers inside it keep working.
+export function Card({ title, description, actions, children, footer, flush, className = '', headerSlot }: {
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  // No body padding (tables, lists that run edge to edge).
+  flush?: boolean;
+  className?: string;
+  // Rendered between the header and body (tabs, toolbars).
+  headerSlot?: React.ReactNode;
+}) {
+  return (
+    <section className={`min-w-0 rounded-card bg-surface ring-1 ring-line shadow-card ${className}`}>
+      {(title || actions) && (
+        <header className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
+          <div className="min-w-0">
+            {title && <h2 className="text-sm font-semibold text-ink">{title}</h2>}
+            {description && <p className="mt-0.5 text-xs text-ink-subtle">{description}</p>}
+          </div>
+          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        </header>
+      )}
+      {headerSlot}
+      <div className={flush ? '' : 'p-5'}>{children}</div>
+      {footer && <footer className="border-t border-line px-5 py-3">{footer}</footer>}
+    </section>
+  );
+}
+
+// Filter/search row placed directly under a card's header or tabs.
+export function Toolbar({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-col gap-3 border-b border-line p-4 md:flex-row md:items-center">{children}</div>;
+}
+
+export function KpiCard({ label, value, hint, icon: Icon, tone = 'neutral', active, onClick, footer, loading }: {
+  label: string;
+  value: React.ReactNode;
+  hint?: React.ReactNode;
+  icon?: ElementType;
+  tone?: Tone;
+  active?: boolean;
+  onClick?: () => void;
+  footer?: React.ReactNode;
+  loading?: boolean;
+}) {
+  const interactive = !!onClick && !loading;
+  const Comp = interactive ? 'button' : 'div';
+  return (
+    <Comp
+      type={interactive ? 'button' : undefined}
+      onClick={interactive ? onClick : undefined}
+      aria-pressed={interactive ? !!active : undefined}
+      className={`flex h-full min-w-0 flex-col rounded-card bg-surface p-4 text-left shadow-card ring-1 transition-colors sm:p-5 ${
+        active ? 'ring-2 ring-accent' : 'ring-line'
+      } ${interactive ? 'hover:bg-surface-muted' : ''}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="truncate text-xs font-medium text-ink-muted">{label}</p>
+        {Icon && (
+          <span className={`flex size-7 shrink-0 items-center justify-center rounded-control ${TONE_ICON_CHIP[tone]}`}>
+            <Icon className="size-3.5" aria-hidden />
+          </span>
+        )}
+      </div>
+      {loading ? (
+        <>
+          <Skeleton className="mt-3 h-8 w-16" />
+          <Skeleton className="mt-2 h-3 w-28" />
+        </>
+      ) : (
+        <>
+          <p className="mt-3 text-metric font-semibold tracking-tight text-ink tabular-nums">{value}</p>
+          {hint && <p className="mt-1 text-xs text-ink-subtle">{hint}</p>}
+          {footer && <div className="mt-auto pt-2">{footer}</div>}
+        </>
+      )}
+    </Comp>
+  );
+}
+
+export function KpiGrid({ children, columns = 4 }: { children: React.ReactNode; columns?: 3 | 4 }) {
+  return (
+    <div className={`grid grid-cols-2 gap-4 ${columns === 4 ? 'lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
+      {children}
+    </div>
+  );
+}
+
+// Label/value pair for read-only detail grids (inside a <dl>).
+export function DetailField({ label, value }: { label: string; value?: React.ReactNode }) {
+  const empty = value === undefined || value === null || value === '';
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-ink-subtle">{label}</dt>
+      <dd className="mt-0.5 text-sm font-medium text-ink wrap-break-word">
+        {empty ? <span className="font-normal text-ink-subtle">Not provided</span> : value}
+      </dd>
+    </div>
+  );
+}
+
+// Single-line text that truncates and shows the full value on hover.
+export function Truncate({ children, className = '' }: { children: string; className?: string }) {
+  return <span className={`block truncate ${className}`} title={children}>{children}</span>;
+}
+
+// --- Form controls -----------------------------------------------------------
+
+interface FieldContextValue { id: string; describedBy?: string; invalid: boolean }
+const FieldContext = createContext<FieldContextValue | null>(null);
+
+// Label above, control, then helper text or the error. Wires ids and
+// aria-describedby/aria-invalid into the control automatically.
+export function Field({ label, helper, error, optional, labelAside, children, className = '' }: {
+  label: string;
+  helper?: React.ReactNode;
+  error?: string;
+  optional?: boolean;
+  labelAside?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const id = useId();
+  const messageId = `${id}-message`;
+  const hasMessage = !!error || !!helper;
+  return (
+    <div className={`min-w-0 ${className}`}>
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <label htmlFor={id} className="text-sm font-medium text-ink">
+          {label}
+          {optional && <span className="ml-1 font-normal text-ink-subtle">(optional)</span>}
+        </label>
+        {labelAside && <span className="text-xs text-ink-subtle tabular-nums">{labelAside}</span>}
+      </div>
+      <FieldContext.Provider value={{ id, describedBy: hasMessage ? messageId : undefined, invalid: !!error }}>
+        {children}
+      </FieldContext.Provider>
+      {error ? (
+        <p id={messageId} className="mt-1.5 flex items-start gap-1.5 text-xs font-medium text-danger">
+          <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden />
+          {error}
+        </p>
+      ) : helper ? (
+        <p id={messageId} className="mt-1.5 text-xs text-ink-subtle">{helper}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function useFieldProps(props: { id?: string; 'aria-describedby'?: string; 'aria-invalid'?: React.AriaAttributes['aria-invalid'] }) {
+  const field = useContext(FieldContext);
+  return {
+    id: props.id ?? field?.id,
+    'aria-describedby': props['aria-describedby'] ?? field?.describedBy,
+    'aria-invalid': props['aria-invalid'] ?? (field?.invalid || undefined)
+  };
+}
+
+const CONTROL =
+  'block w-full rounded-control border-0 bg-surface text-sm text-ink ring-1 ring-inset ring-line-strong placeholder:text-ink-subtle transition-shadow ' +
+  'focus:ring-2 focus:ring-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-subtle ' +
+  'aria-[invalid=true]:ring-danger aria-[invalid=true]:focus:ring-danger';
+
+export function TextInput({ className = '', ...rest }: React.ComponentPropsWithRef<'input'>) {
+  const field = useFieldProps(rest);
+  return <input {...rest} {...field} className={`${CONTROL} h-9 px-3 ${className}`} />;
+}
+
+export function Textarea({ className = '', ...rest }: React.ComponentPropsWithRef<'textarea'>) {
+  const field = useFieldProps(rest);
+  return <textarea {...rest} {...field} className={`${CONTROL} px-3 py-2 leading-relaxed ${className}`} />;
+}
+
+export function Select({ value, onChange, children, className = '', label, disabled }: {
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  className?: string;
+  // Accessible name when the select isn't inside a <Field>.
+  label?: string;
+  disabled?: boolean;
+}) {
+  const field = useFieldProps({});
+  return (
+    <div className={`relative min-w-0 ${className}`}>
+      <select
+        {...field}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        aria-label={field.id ? undefined : label}
+        disabled={disabled}
+        className={`${CONTROL} h-9 appearance-none truncate pl-3 pr-9 font-medium`}
+      >
+        {children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-subtle" aria-hidden />
+    </div>
+  );
+}
+
+export function SearchInput({ value, onChange, placeholder, label, className = '' }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  label: string;
   className?: string;
 }) {
   return (
     <div className={`relative min-w-0 ${className}`}>
-      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-subtle" aria-hidden />
       <input
         type="search"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`${controlClass} pl-9 pr-3 py-2`}
+        aria-label={label}
+        className={`${CONTROL} h-9 pl-9 pr-3`}
       />
     </div>
   );
 }
 
-export function SelectInput({ value, onChange, children, className = '', ariaLabel }: {
-  value: string;
-  onChange: (value: string) => void;
-  children: React.ReactNode;
-  className?: string;
-  ariaLabel?: string;
+export function Checkbox({ checked, onChange, label, description, disabled }: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  disabled?: boolean;
 }) {
+  const id = useId();
   return (
-    <div className={`relative ${className}`}>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        aria-label={ariaLabel}
-        className={`${controlClass} appearance-none pl-3 pr-9 py-2 font-medium text-slate-700`}
-      >
-        {children}
-      </select>
-      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+    <div className="flex items-start gap-3">
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={e => onChange(e.target.checked)}
+        aria-describedby={description ? `${id}-desc` : undefined}
+        className="mt-0.5 size-4 shrink-0 rounded accent-accent disabled:cursor-not-allowed"
+      />
+      <div className="min-w-0">
+        <label htmlFor={id} className="text-sm font-medium text-ink">{label}</label>
+        {description && <p id={`${id}-desc`} className="mt-0.5 text-xs text-ink-subtle">{description}</p>}
+      </div>
     </div>
   );
 }
 
-// Underlined tabs with optional counts (status filters, detail sections).
-export function TabBar<K extends string>({ tabs, value, onChange, className = '' }: {
-  tabs: { key: K; label: string; count?: number; icon?: React.ElementType }[];
-  value: K;
-  onChange: (key: K) => void;
-  className?: string;
+// Two-or-more option toggle (e.g. New / Old applicant). Clicking the active
+// option clears it when `allowEmpty` is set.
+export function SegmentedControl<K extends string>({ options, value, onChange, label, allowEmpty }: {
+  options: readonly K[];
+  value: K | '';
+  onChange: (value: K | '') => void;
+  label: string;
+  allowEmpty?: boolean;
 }) {
   return (
-    <div className={`flex gap-1 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden border-b border-slate-200 ${className}`} role="tablist">
-      {tabs.map(tab => {
-        const active = tab.key === value;
-        const Icon = tab.icon;
+    <div role="group" aria-label={label} className="inline-flex w-full rounded-control bg-neutral-bg p-0.5">
+      {options.map(option => {
+        const active = value === option;
         return (
           <button
-            key={tab.key}
+            key={option}
             type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(tab.key)}
-            className={`relative inline-flex items-center gap-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors focus:outline-hidden ${
-              active ? 'text-brand-green' : 'text-slate-500 hover:text-slate-800'
+            aria-pressed={active}
+            onClick={() => onChange(active && allowEmpty ? '' : option)}
+            className={`h-8 flex-1 rounded-control px-3 text-sm font-medium transition-colors ${
+              active ? 'bg-surface text-ink shadow-card ring-1 ring-line' : 'text-ink-muted hover:text-ink'
             }`}
           >
-            {Icon && <Icon className="w-4 h-4 shrink-0" />}
-            {tab.label}
-            {tab.count !== undefined && (
-              <span className={`px-1.5 py-0.5 rounded-md text-[11px] font-semibold tabular-nums ${active ? 'bg-emerald-50 text-brand-green' : 'bg-slate-100 text-slate-500'}`}>
-                {tab.count}
-              </span>
-            )}
-            {active && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-green" />}
+            {option}
           </button>
         );
       })}
@@ -280,25 +508,155 @@ export function TabBar<K extends string>({ tabs, value, onChange, className = ''
   );
 }
 
-// --- Tables ------------------------------------------------------------------------
+// --- Tabs --------------------------------------------------------------------
 
-export function Th({ children, className = '' }: { children?: React.ReactNode; className?: string }) {
-  return <th scope="col" className={`px-4 py-3 text-left text-xs font-medium text-slate-500 whitespace-nowrap ${className}`}>{children}</th>;
+// Underlined tabs with optional counts. Arrow keys / Home / End move
+// between tabs (WAI-ARIA tabs pattern, automatic activation).
+export function Tabs<K extends string>({ tabs, value, onChange, label, className = '' }: {
+  tabs: { key: K; label: string; count?: number; icon?: ElementType }[];
+  value: K;
+  onChange: (key: K) => void;
+  label: string;
+  className?: string;
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const onKeyDown = (e: React.KeyboardEvent, index: number) => {
+    let next = -1;
+    if (e.key === 'ArrowRight') next = (index + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = tabs.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    refs.current[next]?.focus();
+    onChange(tabs[next].key);
+  };
+
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      className={`flex gap-1 overflow-x-auto border-b border-line px-3 scrollbar-none ${className}`}
+    >
+      {tabs.map((tab, i) => {
+        const active = tab.key === value;
+        const Icon = tab.icon;
+        return (
+          <button
+            key={tab.key}
+            ref={el => { refs.current[i] = el; }}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            tabIndex={active ? 0 : -1}
+            onClick={() => onChange(tab.key)}
+            onKeyDown={e => onKeyDown(e, i)}
+            className={`relative inline-flex h-11 shrink-0 items-center gap-2 px-2.5 text-sm font-medium whitespace-nowrap transition-colors focus-visible:-outline-offset-2 ${
+              active ? 'text-ink' : 'text-ink-subtle hover:text-ink'
+            }`}
+          >
+            {Icon && <Icon className={`size-4 shrink-0 ${active ? 'text-accent' : ''}`} aria-hidden />}
+            {tab.label}
+            {tab.count !== undefined && (
+              <span className={`rounded-badge px-1.5 py-0.5 text-xs font-medium tabular-nums ${active ? 'bg-accent-subtle text-accent-hover' : 'bg-neutral-bg text-ink-muted'}`}>
+                {tab.count}
+              </span>
+            )}
+            {active && <span aria-hidden className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-accent" />}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
-export function Td({ children, className = '' }: { children?: React.ReactNode; className?: string }) {
-  return <td className={`px-4 py-3 text-sm text-slate-600 align-middle ${className}`}>{children}</td>;
+// --- Tables ------------------------------------------------------------------
+
+// Fixed-layout table: columns take the widths set on <Th>, long text
+// truncates instead of pushing the table wider than its card. The header
+// sticks below the top bar while the page scrolls.
+export function Table({ children, label }: { children: React.ReactNode; label: string }) {
+  return (
+    <table aria-label={label} className="w-full table-fixed border-separate border-spacing-0 text-sm [&>tbody>tr:last-child>td]:border-b-0">
+      {children}
+    </table>
+  );
 }
 
-// Client-side pagination; resets to page 1 whenever `resetKey` changes
-// (e.g. a filter or search term).
+export function Th({ children, className = '', numeric }: { children?: React.ReactNode; className?: string; numeric?: boolean }) {
+  return (
+    <th
+      scope="col"
+      className={`sticky top-topbar z-10 h-10 border-b border-line bg-surface-muted px-4 text-xs font-medium whitespace-nowrap text-ink-muted first:pl-5 last:pr-5 ${
+        numeric ? 'text-right' : 'text-left'
+      } ${className}`}
+    >
+      {children}
+    </th>
+  );
+}
+
+export function Td({ children, className = '', numeric }: { children?: React.ReactNode; className?: string; numeric?: boolean }) {
+  return (
+    <td className={`border-b border-line px-4 py-3 align-middle text-ink-muted first:pl-5 last:pr-5 ${numeric ? 'text-right tabular-nums' : ''} ${className}`}>
+      {children}
+    </td>
+  );
+}
+
+// Clickable row. The row's primary cell should also contain a real button
+// or link so the row is reachable by keyboard.
+export function Tr({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+  return (
+    <tr onClick={onClick} className={`group transition-colors ${onClick ? 'cursor-pointer hover:bg-surface-muted' : ''}`}>
+      {children}
+    </tr>
+  );
+}
+
+// Stacked list used in place of a table on phones.
+export function MobileList({ children }: { children: React.ReactNode }) {
+  return <ul className="divide-y divide-line md:hidden">{children}</ul>;
+}
+
+export function RowLink({ children, onClick, className = '' }: { children: React.ReactNode; onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onClick(); }}
+      title={typeof children === 'string' ? children : undefined}
+      className={`block max-w-full truncate rounded-badge text-left text-sm font-medium text-ink hover:text-accent ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// --- Pagination --------------------------------------------------------------
+
+export function paginate<T>(items: T[], page: number, pageSize: number) {
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const current = Math.min(Math.max(1, page), pageCount);
+  return {
+    page: current,
+    pageCount,
+    total: items.length,
+    pageSize,
+    pageItems: items.slice((current - 1) * pageSize, current * pageSize)
+  };
+}
+
+// Client-side pagination that resets to page 1 whenever `resetKey` changes.
 export function usePagination<T>(items: T[], pageSize: number, resetKey: unknown) {
   const [page, setPage] = useState(1);
-  useEffect(() => { setPage(1); }, [resetKey]);
-  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-  const current = Math.min(page, pageCount);
-  const pageItems = useMemo(() => items.slice((current - 1) * pageSize, current * pageSize), [items, current, pageSize]);
-  return { page: current, setPage, pageCount, pageItems, total: items.length, pageSize };
+  const [lastKey, setLastKey] = useState(resetKey);
+  if (lastKey !== resetKey) {
+    setLastKey(resetKey);
+    setPage(1);
+  }
+  const result = useMemo(() => paginate(items, page, pageSize), [items, page, pageSize]);
+  return { ...result, setPage };
 }
 
 export function Pagination({ page, pageCount, total, pageSize, onChange, noun = 'results' }: {
@@ -313,79 +671,453 @@ export function Pagination({ page, pageCount, total, pageSize, onChange, noun = 
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(total, page * pageSize);
   return (
-    <div className="flex items-center justify-between gap-3">
-      <p className="text-xs text-slate-500">
-        Showing <span className="font-medium text-slate-700">{from}–{to}</span> of <span className="font-medium text-slate-700">{total}</span> {noun}
+    <nav aria-label="Pagination" className="flex items-center justify-between gap-3 border-t border-line px-5 py-3">
+      <p className="text-xs text-ink-subtle tabular-nums">
+        <span className="font-medium text-ink">{from}–{to}</span> of <span className="font-medium text-ink">{total}</span> {noun}
       </p>
       {pageCount > 1 && (
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="secondary" icon={ChevronLeft} disabled={page <= 1} onClick={() => onChange(page - 1)} aria-label="Previous page">
-            <span className="hidden sm:inline">Previous</span>
-          </Button>
-          <span className="px-2 text-xs text-slate-500 tabular-nums">{page} / {pageCount}</span>
-          <Button size="sm" variant="secondary" disabled={page >= pageCount} onClick={() => onChange(page + 1)} aria-label="Next page" iconRight={<ChevronRight className="w-3.5 h-3.5" />}>
-            <span className="hidden sm:inline">Next</span>
-          </Button>
+          <IconButton icon={ChevronLeft} label="Previous page" variant="secondary" disabled={page <= 1} onClick={() => onChange(page - 1)} />
+          <span className="px-2 text-xs text-ink-subtle tabular-nums" aria-current="page">Page {page} of {pageCount}</span>
+          <IconButton icon={ChevronRight} label="Next page" variant="secondary" disabled={page >= pageCount} onClick={() => onChange(page + 1)} />
+        </div>
+      )}
+    </nav>
+  );
+}
+
+// --- Feedback ----------------------------------------------------------------
+
+export function EmptyState({ icon: Icon = Inbox, title, description, action }: {
+  icon?: ElementType;
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="px-6 py-14 text-center">
+      <span className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-neutral-bg text-ink-subtle">
+        <Icon className="size-5" aria-hidden />
+      </span>
+      <p className="text-sm font-medium text-ink">{title}</p>
+      {description && <p className="mx-auto mt-1 max-w-sm text-sm text-ink-muted">{description}</p>}
+      {action && <div className="mt-4 flex justify-center gap-2">{action}</div>}
+    </div>
+  );
+}
+
+// Inline load failure, in place of the content that failed to load.
+export function ErrorState({ title = 'Something went wrong', message, onRetry, retrying }: {
+  title?: string;
+  message?: string;
+  onRetry?: () => void;
+  retrying?: boolean;
+}) {
+  return (
+    <div role="alert" className="px-6 py-14 text-center">
+      <span className="mx-auto mb-3 flex size-10 items-center justify-center rounded-full bg-danger-bg text-danger">
+        <AlertTriangle className="size-5" aria-hidden />
+      </span>
+      <p className="text-sm font-medium text-ink">{title}</p>
+      {message && <p className="mx-auto mt-1 max-w-sm text-sm text-ink-muted">{message}</p>}
+      {onRetry && (
+        <div className="mt-4">
+          <Button icon={RotateCw} loading={retrying} onClick={onRetry}>Try again</Button>
         </div>
       )}
     </div>
   );
 }
 
-// --- Feedback ------------------------------------------------------------------------
+const ALERT_ICONS: Record<Tone, ElementType> = {
+  neutral: Info,
+  accent: Info,
+  success: CheckCircle2,
+  warning: AlertTriangle,
+  danger: AlertCircle,
+  info: Info
+};
 
-export function EmptyState({ icon: Icon = Inbox, title, description, action }: {
-  icon?: React.ElementType;
-  title: string;
-  description?: string;
+const ALERT_STYLES: Record<Tone, string> = {
+  neutral: 'bg-surface-muted text-ink ring-line',
+  accent: 'bg-accent-subtle text-ink ring-accent/20',
+  success: 'bg-success-bg text-success-fg ring-success-fg/15',
+  warning: 'bg-warning-bg text-warning-fg ring-warning-fg/15',
+  danger: 'bg-danger-bg text-danger-fg ring-danger-fg/15',
+  info: 'bg-info-bg text-info-fg ring-info-fg/15'
+};
+
+const ALERT_ICON_COLOR: Record<Tone, string> = {
+  neutral: 'text-ink-subtle',
+  accent: 'text-accent',
+  success: '',
+  warning: '',
+  danger: '',
+  info: ''
+};
+
+// Inline message: confirmations, warnings, non-blocking errors.
+export function Alert({ tone = 'neutral', icon, title, children, action, onDismiss }: {
+  tone?: Tone;
+  icon?: ElementType;
+  title?: React.ReactNode;
+  children?: React.ReactNode;
   action?: React.ReactNode;
+  onDismiss?: () => void;
 }) {
+  const Icon = icon ?? ALERT_ICONS[tone];
   return (
-    <div className="py-14 px-6 text-center">
-      <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
-        <Icon className="w-5 h-5" />
+    <div
+      role={tone === 'danger' ? 'alert' : 'status'}
+      className={`flex items-start gap-3 rounded-control px-3.5 py-3 text-sm ring-1 ring-inset ${ALERT_STYLES[tone]}`}
+    >
+      <Icon className={`mt-0.5 size-4 shrink-0 ${ALERT_ICON_COLOR[tone]}`} aria-hidden />
+      <div className="min-w-0 flex-1">
+        {title && <p className="font-medium">{title}</p>}
+        {children && <div className={title ? 'mt-0.5 opacity-90' : ''}>{children}</div>}
       </div>
-      <p className="text-sm font-medium text-slate-900">{title}</p>
-      {description && <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">{description}</p>}
-      {action && <div className="mt-4">{action}</div>}
+      {action && <div className="shrink-0 self-center">{action}</div>}
+      {onDismiss && (
+        <button type="button" onClick={onDismiss} aria-label="Dismiss" className="-m-1 shrink-0 rounded-badge p-1 opacity-70 hover:opacity-100">
+          <X className="size-4" aria-hidden />
+        </button>
+      )}
     </div>
   );
 }
 
-export function ErrorBanner({ message }: { message?: string }) {
-  if (!message) return null;
-  return (
-    <div className="p-3.5 bg-rose-50 text-rose-800 rounded-lg ring-1 ring-inset ring-rose-200 text-sm flex items-center gap-2">
-      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-      <span>{message}</span>
-    </div>
-  );
+export function Skeleton({ className = '' }: { className?: string }) {
+  return <span aria-hidden className={`block rounded-badge bg-neutral-bg motion-safe:animate-pulse ${className}`} />;
 }
 
-export function SkeletonRows({ rows = 6 }: { rows?: number }) {
+// Placeholder rows shaped like the tables (avatar, two lines, badge).
+export function TableSkeleton({ rows = 6, label = 'Loading' }: { rows?: number; label?: string }) {
   return (
-    <div className="divide-y divide-slate-100">
+    <div role="status" aria-label={label} className="divide-y divide-line">
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="flex items-center gap-4 px-4 py-3.5 animate-pulse">
-          <div className="w-8 h-8 rounded-full bg-slate-100" />
+        <div key={i} className="flex items-center gap-4 px-5 py-3.5">
+          <Skeleton className="size-8 rounded-full" />
           <div className="flex-1 space-y-2">
-            <div className="h-3 w-40 bg-slate-100 rounded" />
-            <div className="h-2.5 w-64 bg-slate-100 rounded" />
+            <Skeleton className="h-3 w-40 max-w-full" />
+            <Skeleton className="h-2.5 w-64 max-w-full" />
           </div>
-          <div className="h-5 w-24 bg-slate-100 rounded-md" />
+          <Skeleton className="hidden h-3 w-24 sm:block" />
+          <Skeleton className="h-6 w-28" />
         </div>
       ))}
     </div>
   );
 }
 
-// Label/value pair for read-only detail grids.
-export function DetailField({ label, value }: { label: string; value?: React.ReactNode }) {
-  const empty = value === undefined || value === null || value === '';
+// --- Modal -------------------------------------------------------------------
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])';
+
+const MODAL_SIZES = { sm: 'sm:max-w-md', md: 'sm:max-w-2xl', lg: 'sm:max-w-4xl' };
+
+// Accessible dialog: rendered in a portal, traps Tab focus, closes on
+// Escape or backdrop click (unless `dismissible` is false, e.g. while
+// saving), and returns focus to whatever opened it. Mount it only while
+// open: {open && <Modal …/>}.
+export function Modal({ title, description, children, footer, onClose, size = 'md', dismissible = true, initialFocusRef, role = 'dialog', icon, bodyClassName = 'p-5' }: {
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  children?: React.ReactNode;
+  footer?: React.ReactNode;
+  onClose: () => void;
+  size?: keyof typeof MODAL_SIZES;
+  dismissible?: boolean;
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
+  role?: 'dialog' | 'alertdialog';
+  icon?: React.ReactNode;
+  bodyClassName?: string;
+}) {
+  const titleId = useId();
+  const descId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  const dismissibleRef = useRef(dismissible);
+  onCloseRef.current = onClose;
+  dismissibleRef.current = dismissible;
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    const firstInBody = bodyRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+    (initialFocusRef?.current ?? firstInBody ?? panel)?.focus();
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && dismissibleRef.current) {
+        e.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab' || !panel) return;
+      const focusables = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(el => el.offsetParent !== null);
+      if (focusables.length === 0) { e.preventDefault(); return; }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      previouslyFocused?.focus?.();
+    };
+    // Runs once per mount; callbacks are read through refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return createPortal(
+    <div data-admin className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <motion.div
+        aria-hidden
+        className="absolute inset-0 bg-ink/50"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.15, ease: 'easeOut' }}
+        onClick={() => { if (dismissibleRef.current) onCloseRef.current(); }}
+      />
+      <motion.div
+        ref={panelRef}
+        role={role}
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={description ? descId : undefined}
+        tabIndex={-1}
+        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className={`relative flex max-h-[92dvh] w-full flex-col rounded-t-card bg-surface text-ink shadow-overlay outline-none sm:max-h-[88dvh] sm:rounded-card ${MODAL_SIZES[size]}`}
+      >
+        <header className="flex shrink-0 items-start gap-3 border-b border-line px-5 py-4">
+          {icon}
+          <div className="min-w-0 flex-1">
+            <h2 id={titleId} className="text-base font-semibold text-ink">{title}</h2>
+            {description && <div id={descId} className="mt-0.5 text-sm text-ink-muted">{description}</div>}
+          </div>
+          {dismissible && <IconButton icon={X} label="Close" onClick={() => onCloseRef.current()} className="-mr-1.5 -mt-1" />}
+        </header>
+        {children !== undefined && (
+          <div ref={bodyRef} className={`min-h-0 flex-1 overflow-y-auto ${bodyClassName}`}>{children}</div>
+        )}
+        {footer && (
+          <footer className="flex shrink-0 flex-col-reverse gap-2 border-t border-line bg-surface-muted px-5 py-3 sm:flex-row sm:justify-end sm:rounded-b-card">
+            {footer}
+          </footer>
+        )}
+      </motion.div>
+    </div>,
+    document.body
+  );
+}
+
+// Confirmation for consequential actions. Focus starts on Cancel; errors
+// from the action show inside the dialog, which stays open until it
+// succeeds or is cancelled.
+export function ConfirmDialog({ title, description, children, confirmLabel, confirmIcon, tone = 'primary', onConfirm, onCancel, busy, error }: {
+  title: string;
+  description?: React.ReactNode;
+  children?: React.ReactNode;
+  confirmLabel: string;
+  confirmIcon?: ElementType;
+  tone?: 'primary' | 'danger';
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy?: boolean;
+  error?: string;
+}) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
   return (
-    <div className="min-w-0">
-      <dt className="text-xs text-slate-500">{label}</dt>
-      <dd className="text-sm text-slate-900 font-medium mt-0.5 wrap-break-word">{empty ? <span className="text-slate-300">—</span> : value}</dd>
+    <Modal
+      role="alertdialog"
+      size="sm"
+      title={title}
+      description={description}
+      onClose={onCancel}
+      dismissible={!busy}
+      initialFocusRef={cancelRef}
+      icon={tone === 'danger' ? (
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-danger-bg text-danger">
+          <AlertTriangle className="size-4.5" aria-hidden />
+        </span>
+      ) : undefined}
+      footer={
+        <>
+          <Button ref={cancelRef} onClick={onCancel} disabled={busy}>Cancel</Button>
+          <Button variant={tone} icon={confirmIcon} loading={busy} onClick={onConfirm}>{confirmLabel}</Button>
+        </>
+      }
+    >
+      {(children || error) && (
+        <div className="space-y-3">
+          {children}
+          {error && <Alert tone="danger">{error}</Alert>}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// --- Menu --------------------------------------------------------------------
+
+// Dropdown menu button (WAI-ARIA menu button): opens with click, Enter,
+// Space or ArrowDown; arrows/Home/End move between items; Escape closes
+// and returns focus to the trigger.
+export function Menu({ label, icon, items, disabled, loading, align = 'end' }: {
+  label: string;
+  icon?: ElementType;
+  items: { key: string; label: string; icon?: ElementType; onSelect: () => void }[];
+  disabled?: boolean;
+  loading?: boolean;
+  align?: 'start' | 'end';
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const menuId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    itemRefs.current[0]?.focus();
+    const onPointerDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [open]);
+
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) triggerRef.current?.focus();
+  };
+
+  const onMenuKeyDown = (e: React.KeyboardEvent) => {
+    const index = itemRefs.current.findIndex(el => el === document.activeElement);
+    let next = -1;
+    if (e.key === 'ArrowDown') next = (index + 1) % items.length;
+    else if (e.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = items.length - 1;
+    else if (e.key === 'Escape') { e.preventDefault(); close(true); return; }
+    else if (e.key === 'Tab') { close(false); return; }
+    if (next < 0) return;
+    e.preventDefault();
+    itemRefs.current[next]?.focus();
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <Button
+        ref={triggerRef}
+        icon={icon}
+        iconRight={ChevronDown}
+        loading={loading}
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={e => { if (e.key === 'ArrowDown' && !open) { e.preventDefault(); setOpen(true); } }}
+      >
+        {label}
+      </Button>
+      {open && (
+        <div
+          id={menuId}
+          role="menu"
+          aria-label={label}
+          onKeyDown={onMenuKeyDown}
+          className={`absolute z-40 mt-1.5 w-56 rounded-control bg-surface py-1 shadow-overlay ${align === 'end' ? 'right-0' : 'left-0'}`}
+        >
+          {items.map((item, i) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.key}
+                ref={el => { itemRefs.current[i] = el; }}
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                onClick={() => { close(true); item.onSelect(); }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-ink hover:bg-surface-muted focus:bg-surface-muted focus-visible:outline-none"
+              >
+                {Icon && <Icon className="size-4 shrink-0 text-ink-subtle" aria-hidden />}
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
+  );
+}
+
+// --- Timeline ----------------------------------------------------------------
+
+export interface TimelineEntry {
+  key: string;
+  status: HistoryStatus;
+  changedAt: string;
+  changedBy?: string;
+  note?: string;
+  // Extra context line (e.g. which scholarship the entry belongs to).
+  context?: React.ReactNode;
+}
+
+export function Timeline({ entries, empty, formatTime }: {
+  entries: TimelineEntry[];
+  empty: string;
+  formatTime: (iso: string) => string;
+}) {
+  if (entries.length === 0) return <p className="text-sm text-ink-muted">{empty}</p>;
+  return (
+    <ol>
+      {entries.map((entry, idx) => {
+        const meta = HISTORY_META[entry.status] ?? HISTORY_META['Under Evaluation'];
+        const Icon = meta.icon;
+        const last = idx === entries.length - 1;
+        return (
+          <li key={entry.key} className="relative flex gap-3 pb-5 last:pb-0">
+            {!last && <span aria-hidden className="absolute bottom-0 left-3.5 top-8 w-px bg-line" />}
+            <span className={`relative flex size-7 shrink-0 items-center justify-center rounded-full ring-1 ring-inset ${TONE_BADGE[meta.tone]}`}>
+              <Icon className="size-3.5" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                <p className="text-sm font-medium text-ink">{historyLabel(entry.status)}</p>
+                <time dateTime={entry.changedAt} className="text-xs text-ink-subtle tabular-nums">{formatTime(entry.changedAt)}</time>
+              </div>
+              {entry.context && <div className="mt-1">{entry.context}</div>}
+              {entry.changedBy && (
+                <p className="mt-0.5 text-xs text-ink-subtle">by {entry.changedBy === 'student' ? 'Student' : entry.changedBy}</p>
+              )}
+              {entry.note && <Quote className="mt-2">{entry.note}</Quote>}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// Quoted free text (review notes, history notes).
+export function Quote({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <p className={`rounded-control bg-surface-muted px-3 py-2 text-sm text-ink-muted ring-1 ring-inset ring-line wrap-break-word whitespace-pre-line ${className}`}>
+      {children}
+    </p>
   );
 }

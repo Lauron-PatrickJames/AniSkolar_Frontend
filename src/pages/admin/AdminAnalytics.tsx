@@ -1,12 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip
 } from 'recharts';
-import { BarChart3, Clock, Percent, RefreshCw, Timer, TrendingDown, TrendingUp, Users } from 'lucide-react';
-import { AdminApplication, AppStatus, STATUS_OPTIONS, applicantProgram } from './adminData';
+import { ArrowDown, ArrowUp, BarChart3, Download, Info } from 'lucide-react';
+import { ScholarshipOffice } from '../../types';
+import { OFFICE_LABELS, mockScholarships, officeOf } from '../../data/scholarships';
+import { AdminApplication, AppStatus, STATUS_OPTIONS } from './adminData';
 import {
-  Alert, Button, Card, EmptyState, ErrorState, KpiCard, KpiGrid, PageHeader, STATUS_META, Select, Skeleton, Tone, tokenColor
+  Alert, Button, Card, EmptyState, ErrorState, KpiCard, KpiGrid, PageHeader, STATUS_META, Select, Skeleton,
+  Table, Td, TextInput, Th, Tooltip, Tr, RowLink, tokenColor
 } from './AdminUI';
 
 interface AdminAnalyticsProps {
@@ -14,275 +16,397 @@ interface AdminAnalyticsProps {
   isLoading?: boolean;
   error?: string;
   onRefresh?: () => void;
+  // The signed-in admin's office; the table names other offices only.
+  ownOffice: ScholarshipOffice;
+  // Opens the Applications list filtered to one scholarship.
+  onViewScholarship: (scholarshipId: string) => void;
   id?: string;
 }
 
-type RangeOption = '30d' | '90d' | '6m' | '1y' | 'all';
-
-const RANGE_OPTIONS: { key: RangeOption; label: string; days: number | null }[] = [
-  { key: '30d', label: 'Last 30 days', days: 30 },
-  { key: '90d', label: 'Last 90 days', days: 90 },
-  { key: '6m', label: 'Last 6 months', days: 182 },
-  { key: '1y', label: 'Last year', days: 365 },
-  { key: 'all', label: 'All time', days: null }
-];
+// --- Dates -----------------------------------------------------------------------
+// All bucketing uses LOCAL calendar days. Keys are built from local date
+// parts, never toISOString(), which converts to UTC and shifts dates.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function withinRange(iso: string, days: number | null): boolean {
-  if (days === null) return true;
-  return new Date(iso).getTime() >= Date.now() - days * DAY_MS;
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-// Picks a sensible default range for offices whose submissions arrive in a
-// short burst (e.g. one active month a year): if the busiest 30-day window
-// in the last 12 months holds most submissions, open on the smallest range
-// that contains it; otherwise default to 90 days.
-function pickDefaultRange(applications: AdminApplication[]): RangeOption {
-  const timestamps = applications.map(a => new Date(a.createdAt).getTime()).filter(t => !Number.isNaN(t));
-  if (timestamps.length === 0) return '90d';
+function addDays(d: Date, days: number): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days);
+}
 
-  const oneYearAgo = Date.now() - 365 * DAY_MS;
-  const recent = timestamps.filter(t => t >= oneYearAgo);
-  const sorted = [...(recent.length > 0 ? recent : timestamps)].sort((a, b) => a - b);
+// Monday of the week containing `d` (weeks start on Monday).
+function startOfWeek(d: Date): Date {
+  const day = startOfDay(d);
+  return addDays(day, -((day.getDay() + 6) % 7));
+}
 
-  // Slide a 30-day window and find the one with the most submissions.
-  let bestCount = 0;
-  let bestStart = sorted[0];
-  let left = 0;
-  for (let right = 0; right < sorted.length; right++) {
-    while (sorted[right] - sorted[left] > 30 * DAY_MS) left++;
-    if (right - left + 1 > bestCount) {
-      bestCount = right - left + 1;
-      bestStart = sorted[left];
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function parseDayKey(key: string): Date | null {
+  const m = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+}
+
+// Calendar days between two local midnights (DST-safe).
+function daysBetween(a: Date, b: Date): number {
+  return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / DAY_MS);
+}
+
+const fmtDay = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDayYear = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+// "Sep 22–28", "Sep 29–Oct 5", or "Oct 1" for a one-day bucket.
+function bucketLabel(first: Date, last: Date): string {
+  if (dayKey(first) === dayKey(last)) return fmtDay(first);
+  if (first.getMonth() === last.getMonth()) return `${fmtDay(first)}–${last.getDate()}`;
+  return `${fmtDay(first)}–${fmtDay(last)}`;
+}
+
+// --- Ranges ----------------------------------------------------------------------
+
+type RangeKey = '7d' | '30d' | 'semester' | 'schoolYear' | 'custom';
+
+const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
+  { key: '7d', label: 'Last 7 days' },
+  { key: '30d', label: 'Last 30 days' },
+  { key: 'semester', label: 'This semester' },
+  { key: 'schoolYear', label: 'This school year' },
+  { key: 'custom', label: 'Custom' }
+];
+
+// DLSU-D academic calendar, by month (0 = January). The school year starts
+// in August: 1st semester Aug–Dec, 2nd semester Jan–May, midyear Jun–Jul.
+const SCHOOL_YEAR_START_MONTH = 7;
+const TERMS: { startMonth: number; endMonth: number }[] = [
+  { startMonth: 7, endMonth: 11 },
+  { startMonth: 0, endMonth: 4 },
+  { startMonth: 5, endMonth: 6 }
+];
+
+// A range is [start, endExclusive) in local time.
+interface DateRange { start: Date; endExclusive: Date }
+
+function resolveRange(key: RangeKey, custom: { from: string; to: string }, now = new Date()): DateRange {
+  const today = startOfDay(now);
+  const tomorrow = addDays(today, 1);
+  switch (key) {
+    case '7d':
+      return { start: addDays(today, -6), endExclusive: tomorrow };
+    case '30d':
+      return { start: addDays(today, -29), endExclusive: tomorrow };
+    case 'semester': {
+      const month = today.getMonth();
+      const term = TERMS.find(t => month >= t.startMonth && month <= t.endMonth) ?? TERMS[0];
+      return { start: new Date(today.getFullYear(), term.startMonth, 1), endExclusive: tomorrow };
+    }
+    case 'schoolYear': {
+      const year = today.getMonth() >= SCHOOL_YEAR_START_MONTH ? today.getFullYear() : today.getFullYear() - 1;
+      return { start: new Date(year, SCHOOL_YEAR_START_MONTH, 1), endExclusive: tomorrow };
+    }
+    case 'custom': {
+      const from = parseDayKey(custom.from) ?? addDays(today, -29);
+      const to = parseDayKey(custom.to) ?? today;
+      const [a, b] = from <= to ? [from, to] : [to, from];
+      return { start: a, endExclusive: addDays(b, 1) };
     }
   }
-
-  if (bestCount / timestamps.length < 0.7) return '90d';
-  const ageDays = (Date.now() - bestStart) / DAY_MS;
-  if (ageDays <= 30) return '30d';
-  if (ageDays <= 90) return '90d';
-  if (ageDays <= 182) return '6m';
-  return '1y';
 }
 
-// Weekly buckets (last 16): submissions, plus each review outcome reached
-// that week from history (falling back to the current status when there's
-// no history, so pre-migration records still count).
-function buildWeeklyTrend(applications: AdminApplication[]) {
-  const buckets = new Map<string, { week: string; submitted: number; approved: number; rejected: number; revision: number }>();
-  const bucketFor = (iso: string) => {
-    const d = new Date(iso);
-    // Snap to the Monday of that week for a stable label.
-    const monday = new Date(d);
-    monday.setDate(d.getDate() + ((d.getDay() === 0 ? -6 : 1) - d.getDay()));
-    const key = monday.toISOString().slice(0, 10);
-    if (!buckets.has(key)) buckets.set(key, { week: key, submitted: 0, approved: 0, rejected: 0, revision: 0 });
-    return buckets.get(key)!;
+function describeRange(range: DateRange): string {
+  const last = addDays(range.endExclusive, -1);
+  if (dayKey(range.start) === dayKey(last)) return fmtDayYear(last);
+  return range.start.getFullYear() === last.getFullYear()
+    ? `${fmtDay(range.start)} – ${fmtDayYear(last)}`
+    : `${fmtDayYear(range.start)} – ${fmtDayYear(last)}`;
+}
+
+function inRange(iso: string, range: DateRange): boolean {
+  const t = new Date(iso).getTime();
+  return t >= range.start.getTime() && t < range.endExclusive.getTime();
+}
+
+// --- Submissions series ------------------------------------------------------------
+// Ranges over 14 days are bucketed by week (Monday start), shorter ones by
+// day. Every bucket in the range is created up front so empty weeks/days
+// show as zero, and edge weeks are clipped to the range (their label says so).
+
+interface Bucket { key: string; label: string; count: number }
+
+function buildSubmissionSeries(apps: AdminApplication[], range: DateRange): { buckets: Bucket[]; unit: 'day' | 'week' } {
+  const unit = daysBetween(range.start, range.endExclusive) > 14 ? 'week' : 'day';
+  const buckets: Bucket[] = [];
+  const byKey = new Map<string, Bucket>();
+  let cursor = unit === 'week' ? startOfWeek(range.start) : range.start;
+  while (cursor < range.endExclusive) {
+    const next = addDays(cursor, unit === 'week' ? 7 : 1);
+    const first = cursor < range.start ? range.start : cursor;
+    const last = addDays(next > range.endExclusive ? range.endExclusive : next, -1);
+    const bucket = { key: dayKey(cursor), label: bucketLabel(first, last), count: 0 };
+    buckets.push(bucket);
+    byKey.set(bucket.key, bucket);
+    cursor = next;
+  }
+  apps.forEach(app => {
+    const created = new Date(app.createdAt);
+    if (Number.isNaN(created.getTime())) return;
+    const key = dayKey(unit === 'week' ? startOfWeek(created) : startOfDay(created));
+    const bucket = byKey.get(key);
+    if (bucket) bucket.count += 1;
+  });
+  return { buckets, unit };
+}
+
+// --- Metrics -----------------------------------------------------------------------
+
+const isDecided = (s: AppStatus) => s === 'Approved' || s === 'Rejected';
+
+// Days from submission to the LAST final decision (Approved / Rejected) in
+// the history, so revision loops before the decision count toward it.
+function decisionDays(app: AdminApplication): number | null {
+  const finals = (app.history ?? []).filter(h => isDecided(h.status as AppStatus));
+  const decision = finals[finals.length - 1];
+  if (!decision) return null;
+  const start = new Date(app.createdAt).getTime();
+  const end = new Date(decision.changedAt).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return null;
+  return (end - start) / DAY_MS;
+}
+
+// Revision requests before the final decision, for decided applications.
+function revisionCycles(app: AdminApplication): number | null {
+  const history = app.history ?? [];
+  if (!history.some(h => isDecided(h.status as AppStatus))) return null;
+  return history.filter(h => h.status === 'Needs Revision').length;
+}
+
+const average = (values: (number | null)[]): number | null => {
+  const nums = values.filter((v): v is number => v !== null);
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+};
+
+function countStatuses(apps: AdminApplication[]): Record<AppStatus, number> {
+  const counts = Object.fromEntries(STATUS_OPTIONS.map(s => [s, 0])) as Record<AppStatus, number>;
+  apps.forEach(a => { if (a.status in counts) counts[a.status] += 1; });
+  return counts;
+}
+
+const SMALL_SAMPLE = 10;
+
+const STATUS_LABELS: Record<AppStatus, string> = {
+  'Under Evaluation': 'Under evaluation',
+  'Needs Revision': 'Needs revision',
+  'Approved': 'Approved',
+  'Rejected': 'Rejected'
+};
+
+const formatDays = (days: number | null) => (days === null ? '—' : `${days.toFixed(1)} ${days.toFixed(1) === '1.0' ? 'day' : 'days'}`);
+const formatCycles = (n: number | null) => (n === null ? '—' : n.toFixed(1));
+
+// --- Per-scholarship table ------------------------------------------------------------
+
+interface ScholarshipRow {
+  id: string;
+  name: string;
+  office: ScholarshipOffice;
+  submissions: number;
+  approved: number;
+  rejected: number;
+  // Not decided yet: under evaluation or needs revision.
+  pending: number;
+  avgDecisionDays: number | null;
+  avgRevisionCycles: number | null;
+}
+
+type SortKey = 'name' | 'office' | 'submissions' | 'approved' | 'rejected' | 'pending' | 'avgDecisionDays' | 'avgRevisionCycles';
+
+function buildScholarshipRows(apps: AdminApplication[]): ScholarshipRow[] {
+  const groups = new Map<string, AdminApplication[]>();
+  apps.forEach(a => groups.set(a.scholarshipId, [...(groups.get(a.scholarshipId) ?? []), a]));
+  return Array.from(groups.entries()).map(([id, group]) => {
+    const registry = mockScholarships.find(s => s.id === id);
+    const counts = countStatuses(group);
+    return {
+      id,
+      name: registry?.name ?? group[0].scholarshipName,
+      office: registry ? officeOf(registry) : ((group[0].office as ScholarshipOffice | undefined) ?? 'LSO'),
+      submissions: group.length,
+      approved: counts.Approved,
+      rejected: counts.Rejected,
+      pending: counts['Under Evaluation'] + counts['Needs Revision'],
+      avgDecisionDays: average(group.map(decisionDays)),
+      avgRevisionCycles: average(group.map(revisionCycles))
+    };
+  });
+}
+
+function sortRows(rows: ScholarshipRow[], key: SortKey, dir: 'asc' | 'desc'): ScholarshipRow[] {
+  const sign = dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const va = key === 'office' ? OFFICE_LABELS[a.office] : a[key];
+    const vb = key === 'office' ? OFFICE_LABELS[b.office] : b[key];
+    // Missing averages always sort last.
+    if (va === null && vb !== null) return 1;
+    if (vb === null && va !== null) return -1;
+    if (typeof va === 'string' && typeof vb === 'string') return sign * va.localeCompare(vb) || a.name.localeCompare(b.name);
+    return sign * (((va as number) ?? 0) - ((vb as number) ?? 0)) || a.name.localeCompare(b.name);
+  });
+}
+
+function toCsv(rows: ScholarshipRow[], includeOffice: boolean): string {
+  const header = ['Scholarship', ...(includeOffice ? ['Office'] : []), 'Submissions', 'Approved', 'Rejected', 'Pending', 'Avg. decision time (days)', 'Avg. revision cycles'];
+  const cell = (v: string | number | null) => {
+    const text = v === null ? '' : String(v);
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const lines = rows.map(r => [
+    r.name,
+    ...(includeOffice ? [OFFICE_LABELS[r.office]] : []),
+    r.submissions, r.approved, r.rejected, r.pending,
+    r.avgDecisionDays === null ? null : r.avgDecisionDays.toFixed(1),
+    r.avgRevisionCycles === null ? null : r.avgRevisionCycles.toFixed(1)
+  ].map(cell).join(','));
+  return [header.map(cell).join(','), ...lines].join('\r\n');
+}
+
+function downloadCsv(filename: string, csv: string) {
+  // BOM so Excel opens UTF-8 (ñ, en dashes) correctly.
+  const url = URL.createObjectURL(new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+// --- Page ----------------------------------------------------------------------------
+
+// Refetch on range change and window focus, at most this often.
+const REFETCH_AFTER_MS = 30_000;
+
+export default function AdminAnalytics({ applications, isLoading, error, onRefresh, ownOffice, onViewScholarship, id }: AdminAnalyticsProps) {
+  const [rangeKey, setRangeKey] = useState<RangeKey>('30d');
+  const [custom, setCustom] = useState(() => {
+    const today = startOfDay(new Date());
+    return { from: dayKey(addDays(today, -29)), to: dayKey(today) };
+  });
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'submissions', dir: 'desc' });
+
+  // The applications are loaded by the dashboard; ask it for fresh data when
+  // the range changes or the admin returns to the tab.
+  const lastRefetch = useRef(Date.now());
+  const refreshIfStale = useCallback(() => {
+    if (!onRefresh || Date.now() - lastRefetch.current < REFETCH_AFTER_MS) return;
+    lastRefetch.current = Date.now();
+    onRefresh();
+  }, [onRefresh]);
+
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === 'visible') refreshIfStale(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [refreshIfStale]);
+
+  const changeRange = (key: RangeKey) => {
+    setRangeKey(key);
+    refreshIfStale();
   };
 
-  applications.forEach(app => { bucketFor(app.createdAt).submitted += 1; });
+  const range = useMemo(() => resolveRange(rangeKey, custom), [rangeKey, custom]);
+  const scoped = useMemo(() => applications.filter(a => inRange(a.createdAt, range)), [applications, range]);
 
-  applications.forEach(app => {
-    const decisions = (app.history ?? []).filter(h => h.status === 'Approved' || h.status === 'Rejected' || h.status === 'Needs Revision');
-    if (decisions.length === 0 && app.status !== 'Under Evaluation') decisions.push({ status: app.status, changedAt: app.createdAt });
-    decisions.forEach(h => {
-      const bucket = bucketFor(h.changedAt);
-      if (h.status === 'Approved') bucket.approved += 1;
-      else if (h.status === 'Rejected') bucket.rejected += 1;
-      else if (h.status === 'Needs Revision') bucket.revision += 1;
-    });
-  });
+  const counts = useMemo(() => countStatuses(scoped), [scoped]);
+  const decided = counts.Approved + counts.Rejected;
+  const avgDecision = useMemo(() => average(scoped.map(decisionDays)), [scoped]);
+  const series = useMemo(() => buildSubmissionSeries(scoped, range), [scoped, range]);
 
-  return Array.from(buckets.values())
-    .sort((a, b) => a.week.localeCompare(b.week))
-    .slice(-16)
-    .map(b => ({ ...b, label: new Date(b.week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }));
-}
+  const rows = useMemo(() => buildScholarshipRows(scoped), [scoped]);
+  const sortedRows = useMemo(() => sortRows(rows, sort.key, sort.dir), [rows, sort]);
+  const showOffice = rows.some(r => r.office !== ownOffice);
 
-// Average days from submission to the LAST terminal decision (Approved /
-// Rejected), so revision loops before a final decision are counted.
-function computeAvgProcessingDays(applications: AdminApplication[]): number | null {
-  const durations: number[] = [];
-  applications.forEach(app => {
-    const terminal = (app.history ?? []).filter(h => h.status === 'Approved' || h.status === 'Rejected');
-    const decision = terminal[terminal.length - 1];
-    if (!decision) return;
-    const start = new Date(app.createdAt).getTime();
-    const end = new Date(decision.changedAt).getTime();
-    if (Number.isNaN(start) || Number.isNaN(end) || end < start) return;
-    durations.push((end - start) / DAY_MS);
-  });
-  return durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
-}
-
-// Average number of revision requests before a resolved application's
-// final decision.
-function computeAvgRevisionCycles(applications: AdminApplication[]): number | null {
-  const counts: number[] = [];
-  applications.forEach(app => {
-    const history = app.history ?? [];
-    if (!history.some(h => h.status === 'Approved' || h.status === 'Rejected')) return;
-    counts.push(history.filter(h => h.status === 'Needs Revision').length);
-  });
-  return counts.length ? counts.reduce((a, b) => a + b, 0) / counts.length : null;
-}
-
-type Trend = { direction: 'up' | 'down' | 'flat'; text: string };
-
-function buildTrend(current: number | null, previous: number | null, suffix = ''): Trend | undefined {
-  if (current === null || previous === null || previous === 0) return undefined;
-  const delta = ((current - previous) / previous) * 100;
-  return {
-    direction: delta > 0.5 ? 'up' : delta < -0.5 ? 'down' : 'flat',
-    text: `${delta >= 0 ? '+' : ''}${delta.toFixed(0)}%${suffix} vs previous period`
-  };
-}
-
-function computeStats(set: AdminApplication[]) {
-  const count = (s: AppStatus) => set.filter(a => a.status === s).length;
-  const approved = count('Approved');
-  const rejected = count('Rejected');
-  const decided = approved + rejected;
-  return {
-    total: set.length,
-    approved,
-    rejected,
-    pending: count('Under Evaluation'),
-    revision: count('Needs Revision'),
-    approvalRate: decided > 0 ? (approved / decided) * 100 : null
-  };
-}
-
-// KPI tile with a "vs previous period" line. `goodDirection` decides
-// whether a rise reads as good (green) or bad (red).
-function MetricTile({ label, value, sub, icon, tone, trend, goodDirection = 'up' }: {
-  label: string; value: string; sub?: string; icon: React.ElementType; tone: Tone;
-  trend?: Trend; goodDirection?: 'up' | 'down';
-}) {
-  const good = trend?.direction === goodDirection;
-  const bad = !!trend && trend.direction !== 'flat' && !good;
-  const TrendIcon = trend?.direction === 'up' ? TrendingUp : trend?.direction === 'down' ? TrendingDown : null;
-  return (
-    <KpiCard
-      label={label}
-      value={value}
-      hint={sub}
-      icon={icon}
-      tone={tone}
-      footer={trend && (
-        <span className={`inline-flex items-center gap-1 text-xs font-medium ${good ? 'text-success-fg' : bad ? 'text-danger' : 'text-ink-subtle'}`}>
-          {TrendIcon && <TrendIcon className="size-3.5" aria-hidden />}
-          {trend.text}
-        </span>
-      )}
-    />
-  );
-}
-
-// Ranked horizontal bars as plain HTML: full labels, right-aligned counts,
-// and a bar for the share of the top row.
-function RankedBars({ rows, total }: { rows: { name: string; count: number }[]; total: number }) {
-  if (rows.length === 0) return <p className="text-sm text-ink-muted">No data for this period.</p>;
-  const max = Math.max(...rows.map(r => r.count));
-  return (
-    <ol className="space-y-3.5">
-      {rows.map((row, i) => (
-        <li key={row.name}>
-          <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="min-w-0 text-ink"><span className="mr-2 text-ink-subtle tabular-nums">{i + 1}</span>{row.name}</span>
-            <span className="shrink-0 font-medium text-ink tabular-nums">
-              {row.count}<span className="ml-1.5 text-xs font-normal text-ink-subtle">{total ? Math.round((row.count / total) * 100) : 0}%</span>
-            </span>
-          </div>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-neutral-bg">
-            <div className="h-full rounded-full bg-accent" style={{ width: `${(row.count / max) * 100}%` }} />
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function ChartSkeleton({ className = '' }: { className?: string }) {
-  return (
-    <Card className={className}>
-      <Skeleton className="h-3.5 w-36" />
-      <Skeleton className="mt-2 h-3 w-56" />
-      <Skeleton className="mt-6 h-56 w-full" />
-    </Card>
-  );
-}
-
-export default function AdminAnalytics({ applications, isLoading, error, onRefresh, id }: AdminAnalyticsProps) {
-  // null = automatic default from the data (see pickDefaultRange).
-  const [range, setRange] = useState<RangeOption | null>(null);
-  const effectiveRange: RangeOption = range ?? pickDefaultRange(applications);
-  const rangeConfig = RANGE_OPTIONS.find(r => r.key === effectiveRange)!;
-  const usedSmartDefault = range === null;
-
-  // Chart colours come from the design tokens in index.css.
   const colors = useMemo(() => ({
     accent: tokenColor('accent', '#006937'),
     grid: tokenColor('line', '#e2e8f0'),
     axis: tokenColor('ink-subtle', '#64748b'),
-    ink: tokenColor('ink', '#0f172a'),
     hover: tokenColor('surface-muted', '#f8fafc'),
     status: Object.fromEntries(STATUS_OPTIONS.map(s => [s, tokenColor(STATUS_META[s].token, '#94a3b8')])) as Record<AppStatus, string>
   }), []);
 
-  const scoped = useMemo(() => applications.filter(a => withinRange(a.createdAt, rangeConfig.days)), [applications, rangeConfig.days]);
-
-  // The previous period of equal length, for trend comparisons ('all time'
-  // has none).
-  const previousScoped = useMemo(() => {
-    if (rangeConfig.days === null) return null;
-    const start = Date.now() - rangeConfig.days * DAY_MS;
-    const prevStart = start - rangeConfig.days * DAY_MS;
-    return applications.filter(a => {
-      const t = new Date(a.createdAt).getTime();
-      return t >= prevStart && t < start;
-    });
-  }, [applications, rangeConfig.days]);
-
-  const stats = useMemo(() => computeStats(scoped), [scoped]);
-  const previousStats = useMemo(() => (previousScoped ? computeStats(previousScoped) : null), [previousScoped]);
-  const avgProcessingDays = useMemo(() => computeAvgProcessingDays(scoped), [scoped]);
-  const prevAvgProcessingDays = useMemo(() => (previousScoped ? computeAvgProcessingDays(previousScoped) : null), [previousScoped]);
-  const avgRevisionCycles = useMemo(() => computeAvgRevisionCycles(scoped), [scoped]);
-  const trendData = useMemo(() => buildWeeklyTrend(scoped), [scoped]);
-
-  const statusBreakdown = STATUS_OPTIONS
-    .map(status => ({ name: status, value: scoped.filter(a => a.status === status).length, color: colors.status[status] }))
-    .filter(d => d.value > 0);
-
-  const breakdownBy = (key: (a: AdminApplication) => string) => {
-    const map = new Map<string, number>();
-    scoped.forEach(a => { const k = key(a); map.set(k, (map.get(k) ?? 0) + 1); });
-    return Array.from(map.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 8);
-  };
-  const scholarshipBreakdown = useMemo(() => breakdownBy(a => a.scholarshipName), [scoped]); // eslint-disable-line react-hooks/exhaustive-deps
-  const programBreakdown = useMemo(() => breakdownBy(a => applicantProgram(a) || 'Unspecified'), [scoped]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const hasData = applications.length > 0;
   const firstLoad = !!isLoading && !hasData;
   const failedEmpty = !!error && !hasData && !isLoading;
+  const rangeText = describeRange(range);
 
-  const tooltipStyle = { borderRadius: 8, border: `1px solid ${colors.grid}`, fontSize: 12, boxShadow: '0 8px 24px -8px rgb(15 23 42 / 0.15)' };
-  const axisTick = { fontSize: 12, fill: colors.axis };
+  const exportCsv = () => {
+    const last = addDays(range.endExclusive, -1);
+    downloadCsv(`scholarship-statistics_${dayKey(range.start)}_to_${dayKey(last)}.csv`, toCsv(sortedRows, showOffice));
+  };
+
+  const toggleSort = (key: SortKey) => {
+    setSort(prev => (prev.key === key
+      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      // Text sorts A→Z first; numbers biggest first.
+      : { key, dir: key === 'name' || key === 'office' ? 'asc' : 'desc' }));
+  };
+
+  const header = (
+    <PageHeader
+      title="Statistics"
+      description="Submissions, outcomes and review times for the applications your office handles."
+      meta={!firstLoad && <span className="text-xs text-ink-subtle">Showing {rangeText}</span>}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {rangeKey === 'custom' && (
+            <>
+              <TextInput
+                type="date"
+                aria-label="From"
+                value={custom.from}
+                max={custom.to}
+                onChange={e => e.target.value && setCustom(c => ({ ...c, from: e.target.value }))}
+                className="w-40"
+              />
+              <span className="text-sm text-ink-subtle" aria-hidden>to</span>
+              <TextInput
+                type="date"
+                aria-label="To"
+                value={custom.to}
+                min={custom.from}
+                onChange={e => e.target.value && setCustom(c => ({ ...c, to: e.target.value }))}
+                className="w-40"
+              />
+            </>
+          )}
+          <Select value={rangeKey} onChange={v => changeRange(v as RangeKey)} className="w-44" label="Date range" disabled={firstLoad}>
+            {RANGE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+          </Select>
+        </div>
+      }
+    />
+  );
 
   let body: React.ReactNode;
   if (firstLoad) {
     body = (
       <div role="status" aria-label="Loading statistics" className="space-y-6">
         <KpiGrid>
-          {['Submissions', 'Approval rate', 'Avg. time to decision', 'Still open'].map(label => (
+          {['Submissions', 'Decided', 'Approval rate', 'Avg. time to decision'].map(label => (
             <KpiCard key={label} label={label} value="" loading />
           ))}
         </KpiGrid>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <ChartSkeleton className="lg:col-span-2" />
-          <ChartSkeleton />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+          <Card className="lg:col-span-2"><Skeleton className="h-64 w-full" /></Card>
+          <Card><Skeleton className="h-40 w-full" /></Card>
         </div>
       </div>
     );
@@ -293,137 +417,188 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
       <Card flush>
         <EmptyState
           icon={BarChart3}
-          title={hasData ? 'No applications in this period' : 'No applications yet'}
-          description={hasData ? `Nothing was submitted in the ${rangeConfig.label.toLowerCase()}. Try a longer range.` : 'Statistics appear once students start applying.'}
-          action={hasData && effectiveRange !== 'all'
-            ? <Button variant="primary" onClick={() => setRange('all')}>Show all time</Button>
-            : onRefresh && <Button icon={RefreshCw} onClick={onRefresh}>Refresh</Button>}
+          title={hasData ? 'No submissions in this range' : 'No applications yet'}
+          description={hasData ? `No applications were submitted in this range (${rangeText}). Try a longer range.` : 'Statistics appear once students start applying.'}
+          action={hasData && rangeKey !== 'schoolYear'
+            ? <Button onClick={() => changeRange('schoolYear')}>Show this school year</Button>
+            : undefined}
         />
       </Card>
     );
   } else {
+    const approvalRate = decided > 0 ? Math.round((counts.Approved / decided) * 100) : null;
+    const maxCount = Math.max(...series.buckets.map(b => b.count));
     body = (
       <>
         <KpiGrid>
-          <MetricTile
-            label="Submissions"
-            value={String(stats.total)}
-            sub={rangeConfig.label}
-            icon={Users}
-            tone="neutral"
-            trend={previousScoped ? buildTrend(stats.total, previousScoped.length) : undefined}
-          />
-          <MetricTile
+          <KpiCard label="Submissions" value={scoped.length} hint={rangeText} />
+          <KpiCard label="Decided" value={decided} hint={`approved ${counts.Approved} · rejected ${counts.Rejected}`} />
+          <KpiCard
             label="Approval rate"
-            value={stats.approvalRate !== null ? `${stats.approvalRate.toFixed(0)}%` : '—'}
-            sub={`${stats.approved} approved of ${stats.approved + stats.rejected} decided`}
-            icon={Percent}
-            tone="success"
-            trend={previousStats ? buildTrend(stats.approvalRate, previousStats.approvalRate, ' pts') : undefined}
+            value={approvalRate === null ? '—' : (
+              <>
+                {approvalRate}%
+                <span className="ml-2 text-sm font-normal tracking-normal text-ink-subtle">{counts.Approved} of {decided}</span>
+              </>
+            )}
+            hint={decided === 0 ? 'No decisions yet' : decided < SMALL_SAMPLE ? 'Small sample — read with care' : 'Of decided applications'}
           />
-          <MetricTile
-            label="Avg. time to decision"
-            value={avgProcessingDays !== null ? `${avgProcessingDays.toFixed(1)} days` : '—'}
-            sub={avgRevisionCycles !== null && avgRevisionCycles > 0 ? `${avgRevisionCycles.toFixed(1)} revision cycles on average` : 'Submission to final decision'}
-            icon={Timer}
-            tone="info"
-            trend={prevAvgProcessingDays !== null ? buildTrend(avgProcessingDays, prevAvgProcessingDays) : undefined}
-            goodDirection="down"
-          />
-          <MetricTile
-            label="Still open"
-            value={String(stats.pending + stats.revision)}
-            sub={`${stats.pending} under evaluation · ${stats.revision} needs revision`}
-            icon={Clock}
-            tone="warning"
-            trend={previousStats ? buildTrend(stats.pending + stats.revision, previousStats.pending + previousStats.revision) : undefined}
-            goodDirection="down"
-          />
+          <KpiCard label="Avg. time to decision" value={formatDays(avgDecision)} hint="Submission to final decision" />
         </KpiGrid>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <Card title="Weekly submissions" description="New applications received each week" className="lg:col-span-2">
-            <div className="h-64 sm:h-72" role="img" aria-label={`Weekly submissions chart, ${trendData.length} weeks`}>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+          <Card
+            title="Submissions"
+            description={series.unit === 'week' ? 'Per week (Monday to Sunday)' : 'Per day'}
+            className="lg:col-span-2"
+          >
+            <div className="h-64 sm:h-72" role="img" aria-label={`Submissions per ${series.unit}, ${rangeText}: ${series.buckets.map(b => `${b.label} ${b.count}`).join(', ')}`}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                  <CartesianGrid stroke={colors.grid} vertical={false} />
-                  <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} minTickGap={16} />
-                  <YAxis tick={axisTick} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={tooltipStyle} labelStyle={{ fontWeight: 600, color: colors.ink }} />
-                  <Area type="monotone" dataKey="submitted" name="Submitted" stroke={colors.accent} strokeWidth={2} fill={colors.accent} fillOpacity={0.08} dot={false} activeDot={{ r: 4 }} />
-                </AreaChart>
+                <BarChart data={series.buckets} margin={{ top: 8, right: 8, left: -20, bottom: 0 }} barCategoryGap="20%">
+                  <CartesianGrid stroke={colors.grid} strokeOpacity={0.7} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 12, fill: colors.axis }} axisLine={false} tickLine={false} minTickGap={12} interval="preserveStartEnd" />
+                  <YAxis
+                    tick={{ fontSize: 12, fill: colors.axis }}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                    domain={[0, Math.max(4, maxCount)]}
+                  />
+                  <ChartTooltip cursor={{ fill: colors.hover }} content={<SubmissionsTooltip />} />
+                  <Bar dataKey="count" name="Submissions" fill={colors.accent} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </Card>
 
-          <Card title="Status breakdown" description={`${stats.total} applications in this period`}>
+          <Card title="Status" description={`${scoped.length} ${scoped.length === 1 ? 'application' : 'applications'}`}>
             <div className="flex h-2.5 overflow-hidden rounded-full bg-neutral-bg" aria-hidden>
-              {statusBreakdown.map(entry => (
-                <div key={entry.name} style={{ width: `${(entry.value / stats.total) * 100}%`, backgroundColor: entry.color }} />
+              {STATUS_OPTIONS.map(status => counts[status] > 0 && (
+                <div key={status} style={{ width: `${(counts[status] / scoped.length) * 100}%`, backgroundColor: colors.status[status] }} />
               ))}
             </div>
-            <ul className="mt-5 divide-y divide-line">
-              {statusBreakdown.map(entry => (
-                <li key={entry.name} className="flex items-center justify-between py-2.5 text-sm">
-                  <span className="flex items-center gap-2 text-ink">
-                    <span aria-hidden className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: entry.color }} />
-                    {entry.name}
-                  </span>
-                  <span className="font-medium text-ink tabular-nums">
-                    {entry.value}
-                    <span className="ml-1.5 text-xs font-normal text-ink-subtle">{Math.round((entry.value / stats.total) * 100)}%</span>
-                  </span>
-                </li>
-              ))}
+            <ul className="mt-4 divide-y divide-line">
+              {STATUS_OPTIONS.map(status => {
+                const n = counts[status];
+                return (
+                  <li key={status} className={`flex items-center justify-between gap-3 py-2 text-sm ${n === 0 ? 'text-ink-subtle' : 'text-ink'}`}>
+                    <span className="flex items-center gap-2">
+                      <span aria-hidden className={`size-2.5 shrink-0 rounded-sm ${n === 0 ? 'opacity-40' : ''}`} style={{ backgroundColor: colors.status[status] }} />
+                      {STATUS_LABELS[status]}
+                    </span>
+                    <span className="tabular-nums">
+                      <span className={n === 0 ? '' : 'font-medium'}>{n}</span>
+                      <span className="ml-2 inline-block w-9 text-right text-xs text-ink-subtle">{Math.round((n / scoped.length) * 100)}%</span>
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </Card>
         </div>
 
-        <Card title="Weekly decisions" description="Approvals, rejections and revision requests recorded each week">
-          <div className="h-64 sm:h-72" role="img" aria-label="Weekly decisions chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={trendData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }} barCategoryGap="30%">
-                <CartesianGrid stroke={colors.grid} vertical={false} />
-                <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} minTickGap={16} />
-                <YAxis tick={axisTick} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={{ fontWeight: 600, color: colors.ink }} cursor={{ fill: colors.hover }} />
-                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} iconType="square" iconSize={10} />
-                <Bar dataKey="approved" name="Approved" stackId="d" fill={colors.status.Approved} />
-                <Bar dataKey="revision" name="Needs revision" stackId="d" fill={colors.status['Needs Revision']} />
-                <Bar dataKey="rejected" name="Rejected" stackId="d" fill={colors.status.Rejected} radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        <Card
+          flush
+          title="By scholarship"
+          description="Applications submitted in this range. Select a scholarship to see its applications."
+          actions={<Button size="sm" icon={Download} onClick={exportCsv}>Export CSV</Button>}
+        >
+          <Table label="Applications by scholarship" minWidth={showOffice ? '56rem' : '48rem'}>
+            <thead>
+              <tr>
+                <SortTh label="Scholarship" sortKey="name" sort={sort} onSort={toggleSort} />
+                {showOffice && <SortTh label="Office" sortKey="office" sort={sort} onSort={toggleSort} className="w-32" />}
+                <SortTh label="Submissions" sortKey="submissions" sort={sort} onSort={toggleSort} numeric className="w-28" />
+                <SortTh label="Approved" sortKey="approved" sort={sort} onSort={toggleSort} numeric className="w-24" />
+                <SortTh label="Rejected" sortKey="rejected" sort={sort} onSort={toggleSort} numeric className="w-24" />
+                <SortTh
+                  label="Pending"
+                  sortKey="pending"
+                  sort={sort}
+                  onSort={toggleSort}
+                  numeric
+                  className="w-24"
+                  hint="Under evaluation or needs revision"
+                />
+                <SortTh label="Avg. decision" sortKey="avgDecisionDays" sort={sort} onSort={toggleSort} numeric className="w-32" />
+                <SortTh label="Avg. revisions" sortKey="avgRevisionCycles" sort={sort} onSort={toggleSort} numeric className="w-32" />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedRows.map(r => (
+                <Tr key={r.id} onClick={() => onViewScholarship(r.id)}>
+                  <Td><RowLink onClick={() => onViewScholarship(r.id)}>{r.name}</RowLink></Td>
+                  {showOffice && (
+                    <Td><span className="block truncate">{r.office === ownOffice ? '' : OFFICE_LABELS[r.office]}</span></Td>
+                  )}
+                  <Td numeric><span className="font-medium text-ink">{r.submissions}</span></Td>
+                  <Td numeric><Count n={r.approved} /></Td>
+                  <Td numeric><Count n={r.rejected} /></Td>
+                  <Td numeric><Count n={r.pending} /></Td>
+                  <Td numeric>{formatDays(r.avgDecisionDays)}</Td>
+                  <Td numeric>{formatCycles(r.avgRevisionCycles)}</Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
         </Card>
-
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card title="Applications by scholarship"><RankedBars rows={scholarshipBreakdown} total={stats.total} /></Card>
-          <Card title="Applications by program"><RankedBars rows={programBreakdown} total={stats.total} /></Card>
-        </div>
       </>
     );
   }
 
   return (
     <div id={id} className="space-y-6">
-      <PageHeader
-        title="Statistics"
-        description="Application volume, outcomes, and processing performance across every scholarship."
-        actions={
-          <>
-            <Select value={effectiveRange} onChange={v => setRange(v as RangeOption)} className="w-48" label="Date range" disabled={firstLoad}>
-              {RANGE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.label}{usedSmartDefault && r.key === effectiveRange ? ' (auto)' : ''}</option>)}
-            </Select>
-            {onRefresh && <Button icon={RefreshCw} loading={isLoading} onClick={onRefresh}>Refresh</Button>}
-          </>
-        }
-      />
+      {header}
       {error && hasData && (
         <Alert tone="danger" title="Couldn't refresh statistics" action={onRefresh && <Button size="sm" onClick={onRefresh}>Try again</Button>}>
           {error} Showing the last loaded data.
         </Alert>
       )}
       {body}
+    </div>
+  );
+}
+
+// Zero counts are muted so the numbers that matter stand out.
+function Count({ n }: { n: number }) {
+  return <span className={n === 0 ? 'text-ink-subtle' : 'text-ink'}>{n}</span>;
+}
+
+function SortTh({ label, sortKey, sort, onSort, numeric, className = '', hint }: {
+  label: string;
+  sortKey: SortKey;
+  sort: { key: SortKey; dir: 'asc' | 'desc' };
+  onSort: (key: SortKey) => void;
+  numeric?: boolean;
+  className?: string;
+  hint?: string;
+}) {
+  const active = sort.key === sortKey;
+  const Arrow = sort.dir === 'asc' ? ArrowUp : ArrowDown;
+  const button = (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1 rounded-badge font-medium hover:text-ink ${active ? 'text-ink' : ''} ${numeric ? 'flex-row-reverse' : ''}`}
+    >
+      {label}
+      <Arrow className={`size-3 shrink-0 ${active ? '' : 'invisible'}`} aria-hidden />
+    </button>
+  );
+  return (
+    <Th sticky={false} numeric={numeric} className={className} sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      {hint ? <span className="inline-flex items-center gap-1">{button}<Tooltip content={hint} className="text-ink-subtle"><Info className="size-3.5" aria-hidden /><span className="sr-only">{hint}</span></Tooltip></span> : button}
+    </Th>
+  );
+}
+
+function SubmissionsTooltip({ active, payload, label }: { active?: boolean; payload?: { value?: number }[]; label?: string }) {
+  if (!active || !payload?.length) return null;
+  const n = Number(payload[0].value ?? 0);
+  return (
+    <div className="rounded-control bg-ink px-2.5 py-1.5 text-xs text-surface shadow-overlay">
+      <p className="font-medium">{label}</p>
+      <p className="tabular-nums">{n} {n === 1 ? 'submission' : 'submissions'}</p>
     </div>
   );
 }

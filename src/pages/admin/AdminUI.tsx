@@ -614,15 +614,18 @@ export function Table({ children, label, minWidth }: { children: React.ReactNode
   return minWidth ? <div className="relative overflow-x-auto overscroll-x-contain">{table}</div> : table;
 }
 
-export function Th({ children, className = '', numeric, sticky = true }: {
+export function Th({ children, className = '', numeric, sticky = true, sort }: {
   children?: React.ReactNode;
   className?: string;
   numeric?: boolean;
   sticky?: boolean;
+  // Sortable columns: the column's current sort (sets aria-sort).
+  sort?: 'ascending' | 'descending' | 'none';
 }) {
   return (
     <th
       scope="col"
+      aria-sort={sort}
       className={`${sticky ? 'sticky top-topbar z-10' : ''} h-10 border-b border-line bg-surface-muted px-4 text-xs font-medium whitespace-nowrap text-ink-muted first:pl-5 last:pr-5 ${
         numeric ? 'text-right' : 'text-left'
       } ${className}`}

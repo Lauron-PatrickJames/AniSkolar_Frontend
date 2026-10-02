@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { mockScholarships } from '../data/scholarships';
+import { Scholarship } from '../types';
 import { mockAnnouncements } from '../data/announcements';
 import ScholarshipCard from '../components/ScholarshipCard';
 import { ArrowRight, BookOpen, ShieldCheck, HelpCircle, ChevronDown, ChevronUp, Star, Users, DollarSign, Calendar, Info, AlertCircle, X } from 'lucide-react';
@@ -12,13 +13,14 @@ interface LandingPageProps {
   onLoginClick: () => void;
   onExploreClick: () => void;
   onViewScholarship: (id: string) => void;
+  scholarships?: Scholarship[];
 }
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   invalid_domain: 'Please sign in with your official DLSU-D email address (@dlsud.edu.ph). Other email accounts are not allowed.',
 };
 
-export default function LandingPage({ onLoginClick, onExploreClick, onViewScholarship }: LandingPageProps) {
+export default function LandingPage({ onLoginClick, onExploreClick, onViewScholarship, scholarships = mockScholarships }: LandingPageProps) {
   // Local state for Accordion FAQs
   const [openFaqIdx, setOpenFaqIdx] = useState<number | null>(0);
 
@@ -204,7 +206,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {mockScholarships.slice(0, 3).map((scholarship) => (
+            {scholarships.slice(0, 3).map((scholarship) => (
               <ScholarshipCard
                 key={scholarship.id}
                 scholarship={scholarship}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useUser, useAuth, useClerk } from '@clerk/react';
-import { StudentProfile, Application, Scholarship, Announcement } from './types';
-import { mockScholarships } from './data/scholarships';
+import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride } from './types';
+import { applyScholarshipOverrides, mockScholarships } from './data/scholarships';
 import { mockAnnouncements } from './data/announcements';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
 
@@ -164,6 +164,9 @@ export default function App() {
   // built-in sample announcements stay as a fallback if the feed can't be
   // reached, so the portal still renders offline / without a backend.
   const [announcements, setAnnouncements] = useState<Announcement[]>(mockAnnouncements);
+  // Scholarships with the AdSO's edits (status, deadline, details) from
+  // GET /api/scholarships merged over the defaults in data/scholarships.ts.
+  const [scholarships, setScholarships] = useState<Scholarship[]>(mockScholarships);
   const [authPhase, setAuthPhase] = useState<AuthPhase>('loading');
 
   useEffect(() => {
@@ -181,6 +184,23 @@ export default function App() {
         })));
       } catch {
         // Keep the fallback announcements.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/scholarships`);
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!cancelled && Array.isArray(body.scholarships)) {
+          setScholarships(applyScholarshipOverrides(mockScholarships, body.scholarships as ScholarshipOverride[]));
+        }
+      } catch {
+        // Keep the defaults.
       }
     })();
     return () => { cancelled = true; };
@@ -581,7 +601,7 @@ export default function App() {
     }
   };
 
-  const activeScholarship = mockScholarships.find(s => s.id === selectedScholarshipId) || mockScholarships[0];
+  const activeScholarship = scholarships.find(s => s.id === selectedScholarshipId) || scholarships[0];
 
   // Fetching the full application record before opening the resubmit form
   // (see handleResubmitApplication) — brief, but avoids a flash of the
@@ -674,6 +694,7 @@ export default function App() {
                   }
                 }}
                 onViewScholarship={handleViewScholarship}
+                scholarships={scholarships}
               />
             </PublicLayout>
           );
@@ -710,7 +731,7 @@ export default function App() {
               case 'explore':
                 return (
                   <ExploreGrants
-                    scholarships={mockScholarships}
+                    scholarships={scholarships}
                     applications={applications}
                     student={student}   // add this line
                     onViewDetails={handleViewScholarship}
@@ -753,7 +774,7 @@ export default function App() {
               default:
                 return (
                   <Dashboard
-                    scholarships={mockScholarships}
+                    scholarships={scholarships}
                     announcements={announcements}
                     applications={applications}
                     student={student}

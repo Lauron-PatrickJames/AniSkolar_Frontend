@@ -444,30 +444,6 @@ export const mockScholarships: Scholarship[] = [
     ],
     deadline: 'Contact the AdSO for the current schedule',
     status: 'Open'
-  },
-  {
-    id: 's11',
-    name: 'KALINGA Scholarship Initiatives',
-    category: 'Financial',
-    provider: SCHOLARSHIP_OFFICE_PROVIDER,
-    applicationMode: 'info',
-    availNote: 'Externally funded. Grants are given through partner programs, not through AniSkolar — contact the AdSO to learn how to qualify.',
-    description: 'KALINGA brings together externally funded scholarship initiatives that support DLSU-D students, including The Lasallian SPOON, the One Dasma Dormitory Scholarship Grant, and Alumni Legacy Night.',
-    benefits: [
-      'The Lasallian SPOON',
-      'One Dasma Dormitory Scholarship Grant',
-      'Alumni Legacy Night'
-    ],
-    eligibilityCriteria: { applicantType: 'any' },
-    eligibility: [
-      'Set by each partner program — contact the AdSO for details'
-    ],
-    requirements: [],
-    process: [
-      'Step 1: Contact the AdSO to ask which KALINGA initiatives are open and how to qualify.'
-    ],
-    deadline: 'Contact the AdSO for the current schedule',
-    status: 'Open'
   }
 ];
 

@@ -42,7 +42,7 @@ export interface Scholarship {
   applicationFormType?: ApplicationFormType;
   // 'online' (default): students apply through AniSkolar.
   // 'info': listed for information only — awarded by ranking, nomination
-  // or recruitment, or funded externally. No Apply button; the backend
+  // or recruitment. No Apply button; the backend
   // refuses applications. `availNote` says how the scholarship is awarded.
   applicationMode?: 'online' | 'info';
   availNote?: string;

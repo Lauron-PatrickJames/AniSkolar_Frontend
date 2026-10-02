@@ -40,6 +40,8 @@ export interface AdminDocument {
 
 export interface StandardInfo {
   firstName: string;
+  // Added with separate name parts; older applications don't have it.
+  middleName?: string;
   lastName: string;
   email: string;
   phone: string;
@@ -124,6 +126,16 @@ export interface AdminApplication {
   // Office that recorded the current status; 'LSO' on an office
   // application means the AdSO overrode the office's decision.
   decisionOffice?: string;
+  // Staff-only notes (POST /:id/internal-notes); never sent to applicants.
+  internalNotes?: InternalNote[];
+}
+
+export interface InternalNote {
+  text: string;
+  by?: string;       // admin email
+  byName?: string;
+  office?: string;   // office code
+  at: string;
 }
 
 // --- Applicant fields ------------------------------------------------------
@@ -135,11 +147,18 @@ function usesSectionForm(app: AdminApplication): boolean {
   return app.applicationFormType !== 'standard';
 }
 
+// The applicant's full name as submitted: first, middle (or the SFA
+// form's middle initial) and last, joined from the separate fields — the
+// raw value, for search and exports; display it with titleCaseName().
 export function applicantName(app: AdminApplication): string {
+  const join = (...parts: (string | undefined)[]) => parts.map(p => (p ?? '').trim()).filter(Boolean).join(' ');
   if (usesSectionForm(app) && app.personalInfo) {
-    return `${app.personalInfo.firstName} ${app.personalInfo.lastName}`;
+    const p = app.personalInfo as SfagPersonalInfo & { middleName?: string };
+    return join(p.firstName, p.middleName || p.middleInitial, p.lastName) || 'Unknown applicant';
   }
-  if (app.standardInfo) return `${app.standardInfo.firstName} ${app.standardInfo.lastName}`;
+  if (app.standardInfo) {
+    return join(app.standardInfo.firstName, app.standardInfo.middleName, app.standardInfo.lastName) || 'Unknown applicant';
+  }
   return 'Unknown applicant';
 }
 

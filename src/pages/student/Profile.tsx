@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import { StudentProfile } from '../../types';
-import {
-  User, Mail, GraduationCap, School, Layers, TrendingUp, Edit3, CheckCircle2, X,
-  Cake, Flag, MapPinned, Heart, MapPin, Phone, Smartphone, Users, ArrowRight,
-} from 'lucide-react';
+import { User, Mail, GraduationCap, School, Layers, TrendingUp, Edit3, CheckCircle2, X, Cake, Flag, MapPinned, Heart, MapPin, Phone, Smartphone, Users, ArrowRight, User as UserIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ProfileProps {
@@ -88,6 +85,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
 
   // Personal Details
   const [dateOfBirth, setDateOfBirth] = useState(toDateInputValue(student.dateOfBirth));
+  const [middleName, setMiddleName] = useState(student.middleName || '');
   const [nationality, setNationality] = useState(student.nationality || '');
   const [placeOfBirth, setPlaceOfBirth] = useState(student.placeOfBirth || '');
   const [civilStatus, setCivilStatus] = useState(student.civilStatus || '');
@@ -139,7 +137,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
     const updatedProfile: StudentProfile = {
       ...student,
       course, college, programCode, yearLevel, section, gpa,
-      dateOfBirth, nationality, placeOfBirth, civilStatus,
+      middleName, dateOfBirth, nationality, placeOfBirth, civilStatus,
       homeAddress, cityMunicipality, province, zipCode, country, telephoneNumber, mobileNumber,
       fatherName, motherName, guardianName, guardianRelationship, guardianAddress, guardianContactNo,
     };
@@ -238,6 +236,7 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
             </button>
           </div>
           <div className="space-y-3 sm:space-y-4">
+            <DetailRow icon={UserIcon} label="Middle Name" value={show(student.middleName)} missing={!student.middleName} />
             <DetailRow icon={Cake} label="Date of Birth" value={formatDateDisplay(student.dateOfBirth)} missing={!student.dateOfBirth} />
             <DetailRow icon={Flag} label="Nationality" value={show(student.nationality)} missing={!student.nationality} />
             <DetailRow icon={MapPinned} label="Place of Birth" value={show(student.placeOfBirth)} missing={!student.placeOfBirth} />
@@ -419,6 +418,11 @@ export default function Profile({ student, onUpdateProfile, id }: ProfileProps) 
                               ))}
                             </select>
                           </div>
+                        </div>
+                        <div>
+                          <label className={labelClass}>Middle Name</label>
+                          <input type="text" value={middleName} onChange={(e) => setMiddleName(e.target.value)} className={inputClass} placeholder="Leave blank if you don't have one" />
+                          <p className="mt-1 text-[11px] text-slate-400">Your first and last name come from your university account.</p>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>

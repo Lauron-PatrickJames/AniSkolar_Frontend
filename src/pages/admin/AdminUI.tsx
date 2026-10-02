@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
   AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock,
-  FileText, Inbox, Info, MoreHorizontal, RefreshCw, RotateCcw, RotateCw, Search, Send, X, XCircle
+  Check, Copy, FileText, Inbox, Info, MoreHorizontal, RefreshCw, RotateCcw, RotateCw, Search, Send, X, XCircle
 } from 'lucide-react';
 import { AppStatus, HistoryStatus } from './adminData';
 
@@ -115,17 +115,21 @@ export function Avatar({ name, avatarUrl, size = 'md' }: { name: string; avatarU
 
 // --- Buttons -----------------------------------------------------------------
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-secondary';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-secondary' | 'danger-ghost';
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-accent text-white shadow-card hover:bg-accent-hover',
   secondary: 'bg-surface text-ink ring-1 ring-inset ring-line-strong shadow-card hover:bg-surface-muted',
   ghost: 'text-ink-muted hover:bg-neutral-bg hover:text-ink',
   danger: 'bg-danger text-white shadow-card hover:bg-danger-hover',
-  'danger-secondary': 'bg-surface text-danger ring-1 ring-inset ring-danger/30 hover:bg-danger-bg'
+  'danger-secondary': 'bg-surface text-danger ring-1 ring-inset ring-danger/30 hover:bg-danger-bg',
+  // A destructive action that shouldn't compete with the main ones.
+  'danger-ghost': 'text-danger hover:bg-danger-bg'
 };
 
 const BUTTON_SIZES = {
+  // Icon-only, inline with text (e.g. copy next to a reference number).
+  xs: { box: 'h-6 px-2 text-xs gap-1', square: 'size-6', icon: 'size-3.5' },
   sm: { box: 'h-8 px-2.5 text-xs gap-1.5', square: 'size-8', icon: 'size-3.5' },
   md: { box: 'h-9 px-3.5 text-sm gap-2', square: 'size-9', icon: 'size-4' }
 };
@@ -136,7 +140,7 @@ function Spinner({ className = 'size-4' }: { className?: string }) {
 
 type ButtonProps = React.ComponentPropsWithRef<'button'> & {
   variant?: ButtonVariant;
-  size?: 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md';
   icon?: ElementType;
   iconRight?: ElementType;
   // Shows a spinner in place of the icon and disables the button.
@@ -1370,6 +1374,89 @@ export function Tooltip({ content, children, className = '', asChild }: {
       </span>
       {tooltip}
     </>
+  );
+}
+
+// --- Copy and toast ------------------------------------------------------------
+
+// Copies `value` to the clipboard; the icon and tooltip confirm it. Clicks
+// don't reach a clickable row behind it.
+export function CopyButton({ value, label, className = '' }: { value: string; label: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
+  const copy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // Older browsers / insecure origins: fall back to a hidden textarea.
+      const area = document.createElement('textarea');
+      area.value = value;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }
+    setCopied(true);
+  };
+  return (
+    <>
+      <IconButton icon={copied ? Check : Copy} label={copied ? 'Copied' : label} size="xs" onClick={copy} className={className} />
+      <span className="sr-only" aria-live="polite">{copied ? 'Copied to clipboard' : ''}</span>
+    </>
+  );
+}
+
+// A short confirmation at the bottom of the screen, with an optional
+// action ("Next application"). Disappears after `duration` ms, but not
+// while the pointer or keyboard focus is on it.
+export function Toast({ message, action, onClose, duration = 8000 }: {
+  message: React.ReactNode;
+  action?: { label: string; onClick: () => void };
+  onClose: () => void;
+  duration?: number;
+}) {
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (paused) return;
+    const t = setTimeout(onClose, duration);
+    return () => clearTimeout(t);
+  }, [paused, duration, onClose]);
+  return createPortal(
+    <div data-admin className="pointer-events-none fixed inset-x-0 bottom-4 z-60 flex justify-center px-4">
+      <div
+        role="status"
+        aria-live="polite"
+        onPointerEnter={() => setPaused(true)}
+        onPointerLeave={() => setPaused(false)}
+        onFocus={() => setPaused(true)}
+        onBlur={() => setPaused(false)}
+        className="pointer-events-auto flex max-w-lg items-center gap-3 rounded-card bg-ink py-2.5 pl-4 pr-2 text-sm text-surface shadow-overlay"
+      >
+        <CheckCircle2 className="size-4 shrink-0 text-success-solid" aria-hidden />
+        <span className="min-w-0">{message}</span>
+        {action && (
+          <button
+            type="button"
+            onClick={() => { action.onClick(); onClose(); }}
+            className="shrink-0 rounded-control px-2 py-1 font-medium text-surface underline-offset-2 hover:underline"
+          >
+            {action.label}
+          </button>
+        )}
+        <button type="button" onClick={onClose} aria-label="Dismiss" className="shrink-0 rounded-control p-1 text-surface/70 hover:text-surface">
+          <X className="size-4" aria-hidden />
+        </button>
+      </div>
+    </div>,
+    document.body
   );
 }
 

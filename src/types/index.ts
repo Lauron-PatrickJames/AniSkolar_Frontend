@@ -528,7 +528,13 @@ export interface StudentProfile {
   // inherit another account's localStorage data even without an
   // intervening logout.
   clerkId?: string;
+  // Full display name.
   name: string;
+  // Name parts, stored separately (never split from `name`): first and
+  // last from the university account, middle entered by the student.
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
   course: string;
   college: string;
   yearLevel: string;

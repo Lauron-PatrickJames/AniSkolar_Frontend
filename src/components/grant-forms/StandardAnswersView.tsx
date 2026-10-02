@@ -14,6 +14,7 @@ function formatDate(value?: string): string {
 
 export interface StandardProfileInfo {
   firstName: string;
+  middleName?: string;
   lastName: string;
   email: string;
   phone: string;
@@ -27,13 +28,14 @@ export function StandardProfileAnswers({ info }: { info: StandardProfileInfo }) 
   return (
     <AnswerGroup title="Personal & Academic Profile">
       <AnswerGrid>
-        <AnswerField label="First Name" value={info.firstName} />
-        <AnswerField label="Last Name" value={info.lastName} />
-        <AnswerField label="Student No." value={info.studentNumber} />
-        <AnswerField label="Email" value={info.email} />
-        <AnswerField label="Mobile" value={info.phone} />
-        <AnswerField label="Program" value={info.program} />
-        <AnswerField label="Year Level" value={info.yearLevel} />
+        <AnswerField summary label="First Name" value={info.firstName} />
+        <AnswerField summary label="Middle Name" value={info.middleName} />
+        <AnswerField summary label="Last Name" value={info.lastName} />
+        <AnswerField summary label="Student No." value={info.studentNumber} />
+        <AnswerField summary label="Email" value={info.email} />
+        <AnswerField summary label="Mobile" value={info.phone} />
+        <AnswerField summary label="Program" value={info.program} />
+        <AnswerField summary label="Year Level" value={info.yearLevel} />
         <AnswerField label="Cumulative GPA" value={info.gpa} />
       </AnswerGrid>
     </AnswerGroup>
@@ -53,11 +55,11 @@ export function SfagAnswers({ details }: { details: SfagApplicationDetails }) {
     <div className="space-y-7">
       <AnswerGroup title="Personal Information">
         <AnswerGrid>
-          <AnswerField label="Last Name" value={p.lastName} />
-          <AnswerField label="First Name" value={p.firstName} />
+          <AnswerField summary label="Last Name" value={p.lastName} />
+          <AnswerField summary label="First Name" value={p.firstName} />
           <AnswerField label="M.I. / Suffix" value={[p.middleInitial, p.suffix].filter(Boolean).join(' / ')} />
-          <AnswerField label="Student No." value={p.studentNumber} />
-          <AnswerField label="Course / Year" value={[p.course, p.yearLevel].filter(Boolean).join(' · ')} />
+          <AnswerField summary label="Student No." value={p.studentNumber} />
+          <AnswerField summary label="Course / Year" value={[p.course, p.yearLevel].filter(Boolean).join(' · ')} />
           <AnswerField label="Date of Birth" value={formatDate(p.dateOfBirth)} />
           <AnswerField label="Age" value={p.age} />
           <AnswerField label="Place of Birth" value={p.placeOfBirth} />
@@ -75,9 +77,9 @@ export function SfagAnswers({ details }: { details: SfagApplicationDetails }) {
           <AnswerField label="Municipality / City" value={c.municipality} />
           <AnswerField label="Province" value={c.province} />
           <AnswerField label="Country" value={c.country} />
-          <AnswerField label="Mobile" value={c.mobileNo} />
+          <AnswerField summary label="Mobile" value={c.mobileNo} />
           <AnswerField label="Landline" value={c.landlineNo} />
-          <AnswerField label="Email" value={c.email} />
+          <AnswerField summary label="Email" value={c.email} />
           <AnswerField label="Secondary School" value={c.secondarySchool ? `${c.secondarySchool} (${c.schoolType})` : ''} />
           <AnswerField label="School Address" value={c.schoolAddress} wide />
         </AnswerGrid>

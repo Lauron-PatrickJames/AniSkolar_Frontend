@@ -24,6 +24,7 @@ import {
   BackLink, DraftIndicator, FormBanner, PrivacyNote, RevisionNote, SectionNav, SectionPanel, SectionStatus,
   SubmittedScreen, WizardFooter, WizardHeader, WizardSection
 } from '../../components/grant-forms/WizardShell';
+import { middleInitialOf, profileNameParts } from '../../utils/names';
 import { SfagAnswers, StandardProfileAnswers } from '../../components/grant-forms/StandardAnswersView';
 
 interface ApplyScholarshipProps {
@@ -113,12 +114,12 @@ function calculateAge(dateOfBirth: string): string {
 }
 
 function emptyPersonalInfo(student: StudentProfile): SfagPersonalInfo {
-  const nameParts = student.name.split(' ');
+  const names = profileNameParts(student);
   const dateOfBirth = toDateInputValue(student.dateOfBirth);
   return {
-    lastName: nameParts.length > 1 ? nameParts[nameParts.length - 1] : '',
-    firstName: nameParts.slice(0, -1).join(' ') || student.name,
-    middleInitial: '',
+    lastName: names.lastName,
+    firstName: names.firstName,
+    middleInitial: middleInitialOf(names.middleName),
     suffix: '',
     studentNumber: student.studentNumber,
     course: student.course,
@@ -277,6 +278,7 @@ interface DraftData {
   assetsExpenses: SfagAssetsExpenses;
   agreement: SfagAgreement;
   firstName: string;
+  middleName: string;
   lastName: string;
   email: string;
   phone: string;
@@ -484,11 +486,17 @@ function StandardApplyScholarship({
   const storedStandard: Partial<Record<string, unknown>> =
     (existingApplication as unknown as { standardInfo?: Record<string, unknown> } | undefined)?.standardInfo ?? {};
   const existingPI = existingApplication?.personalInfo;
+  // Prefilled from the profile's stored name parts — never split from the
+  // full name (see utils/names.ts).
+  const profileNames = profileNameParts(student);
   const [firstName, setFirstName] = useState(asText(
-    existingPI?.firstName ?? storedStandard.firstName ?? savedDraft?.firstName ?? (student.name.split(' ')[0] || '')
+    existingPI?.firstName ?? storedStandard.firstName ?? savedDraft?.firstName ?? profileNames.firstName
+  ));
+  const [middleName, setMiddleName] = useState(asText(
+    storedStandard.middleName ?? savedDraft?.middleName ?? profileNames.middleName
   ));
   const [lastName, setLastName] = useState(asText(
-    existingPI?.lastName ?? storedStandard.lastName ?? savedDraft?.lastName ?? (student.name.split(' ').slice(1).join(' ') || '')
+    existingPI?.lastName ?? storedStandard.lastName ?? savedDraft?.lastName ?? profileNames.lastName
   ));
   const [email, setEmail] = useState(asText(existingPI?.email ?? storedStandard.email ?? savedDraft?.email ?? student.email));
   const [phone, setPhone] = useState(asText(existingPI?.phone ?? storedStandard.phone ?? savedDraft?.phone ?? student.mobileNumber));
@@ -532,6 +540,7 @@ function StandardApplyScholarship({
       assetsExpenses,
       agreement,
       firstName,
+      middleName,
       lastName,
       email,
       phone,
@@ -551,7 +560,7 @@ function StandardApplyScholarship({
     }
   }, [
     currentKey, visited, personalInfo, contactSchool, parentsGuardian, siblings,
-    assetsExpenses, agreement, firstName, lastName, email, phone, program,
+    assetsExpenses, agreement, firstName, middleName, lastName, email, phone, program,
     yearLevel, gpa, uploads, scholarship.id, student.studentNumber, student.clerkId, isResubmit, isSuccess
   ]);
 
@@ -798,7 +807,7 @@ function StandardApplyScholarship({
       formData.append('assetsExpenses', JSON.stringify(sfagDetails.assetsExpenses));
       formData.append('agreement', JSON.stringify(sfagDetails.agreement));
     } else {
-      formData.append('standardInfo', JSON.stringify({ firstName, lastName, email, phone, studentNumber, program, yearLevel, gpa }));
+      formData.append('standardInfo', JSON.stringify({ firstName, middleName, lastName, email, phone, studentNumber, program, yearLevel, gpa }));
     }
 
     const token = await getToken();
@@ -951,6 +960,7 @@ function StandardApplyScholarship({
         <SubHeading note="Prefilled from your student profile — please check each entry.">Student Details</SubHeading>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {textField({ key: 'firstName', label: 'First Name', required: true, value: firstName, onChange: setFirstName })}
+          {textField({ key: 'middleName', label: 'Middle Name', value: middleName, onChange: setMiddleName })}
           {textField({ key: 'lastName', label: 'Last Name', required: true, value: lastName, onChange: setLastName })}
           {textField({ key: 'email', label: 'Email Address', type: 'email', kind: 'email', required: true, value: email, onChange: setEmail })}
           {textField({ key: 'phone', label: 'Mobile Phone', type: 'tel', kind: 'phone', required: true, placeholder: '09171234567', value: phone, onChange: setPhone })}
@@ -1278,7 +1288,7 @@ function StandardApplyScholarship({
       <p className="text-xs text-slate-500">Review your answers below. Use the section list to go back and edit anything before submitting.</p>
       {isSfag
         ? <SfagAnswers details={buildSfagDetails()} />
-        : <StandardProfileAnswers info={{ firstName, lastName, email, phone, studentNumber, program, yearLevel, gpa }} />}
+        : <StandardProfileAnswers info={{ firstName, middleName, lastName, email, phone, studentNumber, program, yearLevel, gpa }} />}
       <div className="pt-6 border-t border-slate-100 space-y-2">
         <h4 className="font-display font-bold text-sm text-slate-900 mb-3">Documents</h4>
         {scholarship.requirements.map(req => {

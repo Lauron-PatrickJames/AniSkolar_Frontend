@@ -9,6 +9,7 @@ import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
 import AdminScholars from './AdminScholars';
 import ApplicationReview from './ApplicationReview';
 import ApplicationsList, { DEFAULT_FILTERS, ListFilters } from './ApplicationsList';
+import { filterApplications, statusTabFromUrl, writeStatusTabToUrl } from './applicationQueue';
 import { API_BASE_URL, AdminApplication, applicantName, authHeaders, normalizeApplication, titleCaseName } from './adminData';
 
 interface AdminDashboardProps {
@@ -45,7 +46,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [selectedScholar, setSelectedScholar] = useState<string | null>(null);
   // Scholarship open in the Scholarships page's detail view.
   const [selectedScholarship, setSelectedScholarship] = useState<string | null>(null);
-  const [listFilters, setListFilters] = useState<ListFilters>(DEFAULT_FILTERS);
+  // The Applications tab is remembered in the URL (?tab=…).
+  const [listFilters, setListFilters] = useState<ListFilters>(() => ({ ...DEFAULT_FILTERS, status: statusTabFromUrl() ?? DEFAULT_FILTERS.status }));
+  // The list order when an application was opened, for Prev / Next. A
+  // snapshot, so an application that leaves the tab after a decision
+  // still has a "next".
+  const [queueIds, setQueueIds] = useState<string[]>([]);
 
   // Set in the effect body (not only the initializer) so StrictMode's
   // mount → unmount → remount in development leaves it true.
@@ -55,7 +61,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     return () => { mounted.current = false; };
   }, []);
 
+  const lastFetch = useRef(0);
   const fetchApplications = useCallback(async () => {
+    lastFetch.current = Date.now();
     setIsLoading(true);
     setLoadError('');
     try {
@@ -79,14 +87,40 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The Applications pages refetch when the admin returns to the tab (other
+  // pages handle their own); at most every 30 seconds.
+  useEffect(() => {
+    if (mainView !== 'applications') return;
+    const onFocus = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastFetch.current > 30_000) fetchApplications();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [mainView, fetchApplications]);
+
+  useEffect(() => {
+    if (mainView === 'applications') writeStatusTabToUrl(listFilters.status);
+  }, [mainView, listFilters.status]);
+
   const pendingCount = useMemo(() => applications.filter(a => a.status === 'Under Evaluation').length, [applications]);
   const selected = selectedId ? applications.find(a => a._id === selectedId) ?? null : null;
 
   // PATCH /:id/status doesn't run the avatarUrl lookup that GET / does, so
   // keep the avatar already in state rather than reverting to initials.
+  // After a change, show the server's copy right away, then refetch.
   const mergeApplication = (updated: AdminApplication) => {
     const next = normalizeApplication(updated);
     setApplications(prev => prev.map(a => (a._id === next._id ? { ...next, avatarUrl: next.avatarUrl ?? a.avatarUrl } : a)));
+    fetchApplications();
+  };
+
+  const openApplication = (id: string, queue: string[]) => {
+    setQueueIds(queue);
+    setSelectedId(id);
   };
 
   const navigate = (view: MainView) => {
@@ -106,20 +140,26 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         return latest ? titleCaseName(applicantName(latest)) : selectedScholar;
       })()
     : null;
-  // Pages with their own heading (Scholars, Scholarships, Announcements,
-  // Statistics) show no title in the top bar; detail views (an application,
-  // a scholar) show a breadcrumb back to their list.
+  // Every page has its own heading, so the top bar shows no title on the
+  // list pages; detail views (an application, a scholar) show a breadcrumb
+  // back to their list.
   const breadcrumbs: Crumb[] =
     mainView === 'applications' && selected ? [sectionCrumb, { label: titleCaseName(applicantName(selected)) }]
     : mainView === 'lifecycle' && scholarName ? [sectionCrumb, { label: scholarName }]
-    : mainView === 'lifecycle' || mainView === 'scholarships' || mainView === 'announcements' || mainView === 'analytics' ? []
-    : [{ label: VIEW_TITLES[mainView] }];
+    : [];
 
   // Opens the Applications list filtered to one scholarship.
   const viewApplicationsFor = (scholarshipId: string) => {
     navigate('applications');
-    setListFilters({ ...DEFAULT_FILTERS, scholarship: scholarshipId });
+    setListFilters({ ...DEFAULT_FILTERS, status: 'All', scholarship: scholarshipId });
   };
+
+  // Prev / Next within the snapshot, skipping applications that are gone.
+  const existingIds = new Set(applications.map(a => a._id));
+  const queue = queueIds.filter(id => existingIds.has(id) || id === selectedId);
+  const queueIndex = selectedId ? queue.indexOf(selectedId) : -1;
+  const prevId = queueIndex > 0 ? queue[queueIndex - 1] : null;
+  const nextId = queueIndex >= 0 && queueIndex < queue.length - 1 ? queue[queueIndex + 1] : null;
 
   let page: React.ReactNode;
   if (mainView === 'analytics') {
@@ -146,7 +186,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onSelectStudent={setSelectedScholar}
         onOpenApplication={applicationId => {
           navigate('applications');
-          setSelectedId(applicationId);
+          // Opened from a scholar, not the list: no Prev / Next.
+          openApplication(applicationId, []);
         }}
       />
     );
@@ -170,6 +211,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         getToken={getToken}
         onBack={() => setSelectedId(null)}
         onUpdated={mergeApplication}
+        position={queueIndex >= 0 ? { index: queueIndex, total: queue.length } : null}
+        onPrev={prevId ? () => setSelectedId(prevId) : undefined}
+        onNext={nextId ? () => setSelectedId(nextId) : undefined}
+        onOpenScholar={studentNumber => { navigate('lifecycle'); setSelectedScholar(studentNumber); }}
         onAdminFieldsSaved={adminFields => setApplications(prev => prev.map(a => (a._id === selected._id ? { ...a, adminFields } : a)))}
       />
     );
@@ -180,7 +225,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         isLoading={isLoading}
         loadError={loadError}
         onReload={fetchApplications}
-        onOpen={app => setSelectedId(app._id)}
+        onOpen={app => openApplication(app._id, filterApplications(applications, listFilters).map(a => a._id))}
         filters={listFilters}
         onFiltersChange={setListFilters}
         adminOffice={adminOffice}

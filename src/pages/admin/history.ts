@@ -10,6 +10,8 @@ export type ActorKind = 'student' | 'admin' | 'system';
 export interface HistoryActor {
   kind: ActorKind;
   label: string;
+  // Admin actors: the office code, when known.
+  office?: string;
 }
 
 export interface HistoryEvent {
@@ -75,7 +77,7 @@ function resolveActor(entry: HistoryEntry, app: AdminApplication, studentName: s
   }
   const name = entry.changedByName || (entry.changedBy ? nameFromEmail(entry.changedBy) : 'Admin');
   const office = entryOffice(entry, app);
-  return { kind: 'admin', label: office ? `${officeDisplayName(office)} · ${name}` : name, id: entry.changedBy ?? name };
+  return { kind: 'admin', label: office ? `${officeDisplayName(office)} · ${name}` : name, office, id: entry.changedBy ?? name };
 }
 
 // Why an application was sent to the AdSO, worded from the office config.
@@ -141,7 +143,7 @@ export function buildApplicationHistory(app: AdminApplication, studentName: stri
       scholarshipName: app.scholarshipName,
       status: entry.status,
       label: historyLabel(entry.status),
-      actor: { kind: actor.kind, label: actor.label },
+      actor: { kind: actor.kind, label: actor.label, office: actor.office },
       actorId: actor.id,
       startedAt: at,
       order: i,
@@ -156,6 +158,21 @@ export function buildApplicationHistory(app: AdminApplication, studentName: stri
   return out
     .sort((a, b) => time(b.at) - time(a.at) || b.order - a.order)
     .map(({ actorId: _actorId, startedAt: _startedAt, order: _order, ...event }) => event);
+}
+
+const FINAL_DECISIONS = new Set<HistoryStatus>(['Approved', 'Rejected', 'Needs Revision']);
+
+// The most recent decision on an application (who, when, and the note).
+export function latestDecision(app: AdminApplication, studentName = ''): HistoryEvent | undefined {
+  return buildApplicationHistory(app, studentName).find(e => e.actor.kind === 'admin' && FINAL_DECISIONS.has(e.status));
+}
+
+// For an application routed through a partner office: that office's own
+// latest decision, shown to the AdSO above its decision panel.
+export function partnerOfficeDecision(app: AdminApplication, studentName = ''): HistoryEvent | undefined {
+  if (!app.office || app.office === 'LSO') return undefined;
+  return buildApplicationHistory(app, studentName)
+    .find(e => e.actor.kind === 'admin' && e.actor.office === app.office && FINAL_DECISIONS.has(e.status));
 }
 
 // Every application's history in one newest-first feed.

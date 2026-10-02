@@ -3,6 +3,7 @@ import { useAuth, useUser } from '@clerk/react';
 import { OFFICE_LABELS, OFFICE_SHORT_LABELS } from '../../data/scholarships';
 import AdminAnalytics from './AdminAnalytics';
 import AdminAnnouncements from './AdminAnnouncements';
+import ScholarshipsManager from './ScholarshipsManager';
 import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
 import AdminScholars from './AdminScholars';
 import ApplicationReview from './ApplicationReview';
@@ -29,9 +30,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     ? (OFFICE_LABELS[adminOffice as keyof typeof OFFICE_LABELS] ?? adminOffice)
     : adminOfficeRaw === 'ADSO' ? OFFICE_SHORT_LABELS.LSO : 'No office assigned';
 
-  // Announcements are the AdSO's alone; the server enforces the same rule.
-  const canManageAnnouncements = adminOfficeRaw === 'ADSO';
-  const hiddenViews: MainView[] = canManageAnnouncements ? [] : ['announcements'];
+  // Announcements and scholarship management are the AdSO's alone; the
+  // server enforces the same rule.
+  const isAdso = adminOfficeRaw === 'ADSO';
+  const hiddenViews: MainView[] = isAdso ? [] : ['announcements', 'scholarships'];
 
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -121,8 +123,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onSelectStudent={setSelectedScholar}
       />
     );
-  } else if (mainView === 'announcements' && canManageAnnouncements) {
+  } else if (mainView === 'announcements' && isAdso) {
     page = <AdminAnnouncements />;
+  } else if (mainView === 'scholarships' && isAdso) {
+    page = <ScholarshipsManager />;
   } else if (selected) {
     page = (
       <ApplicationReview

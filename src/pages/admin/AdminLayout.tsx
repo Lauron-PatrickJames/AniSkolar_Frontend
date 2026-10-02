@@ -1,22 +1,24 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
-import { BarChart3, Building2, ChevronRight, GraduationCap, LayoutList, LogOut, Megaphone, Menu, X } from 'lucide-react';
+import { Award, BarChart3, Building2, ChevronRight, GraduationCap, LayoutList, LogOut, Megaphone, Menu, X } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import { Avatar, Badge, IconButton } from './AdminUI';
 
-export type MainView = 'applications' | 'analytics' | 'lifecycle' | 'announcements';
+export type MainView = 'applications' | 'analytics' | 'lifecycle' | 'announcements' | 'scholarships';
 
 export const VIEW_TITLES: Record<MainView, string> = {
   applications: 'Applications',
   analytics: 'Statistics',
   lifecycle: 'Scholars',
-  announcements: 'Announcements'
+  announcements: 'Announcements',
+  scholarships: 'Scholarships'
 };
 
 const SECTIONS: { title: string; items: { id: MainView; icon: React.ElementType }[] }[] = [
   { title: 'Review', items: [{ id: 'applications', icon: LayoutList }, { id: 'lifecycle', icon: GraduationCap }] },
   { title: 'Insights', items: [{ id: 'analytics', icon: BarChart3 }] },
-  { title: 'Communication', items: [{ id: 'announcements', icon: Megaphone }] }
+  { title: 'Communication', items: [{ id: 'announcements', icon: Megaphone }] },
+  { title: 'Manage', items: [{ id: 'scholarships', icon: Award }] }
 ];
 
 export interface Crumb {

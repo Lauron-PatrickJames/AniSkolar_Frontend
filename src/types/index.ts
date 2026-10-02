@@ -59,6 +59,21 @@ export interface Scholarship {
   documentSlots?: DocumentSlot[];
 }
 
+// AdSO-edited content for a scholarship (GET /api/scholarships), merged
+// over the defaults in src/data/scholarships.ts by applyScholarshipOverrides.
+export interface ScholarshipOverride {
+  id: string;
+  status?: Scholarship['status'];
+  deadline?: string;
+  description?: string;
+  benefits?: string[];
+  eligibility?: string[];
+  process?: string[];
+  submissionNote?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
 export type ApplicationFormType = 'standard' | 'sfag' | 'polca' | 'alumni';
 export type ScholarshipOffice = 'LSO' | 'POLCA' | 'ALUMNI';
 

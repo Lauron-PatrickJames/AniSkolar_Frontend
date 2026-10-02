@@ -1,4 +1,4 @@
-import { DocumentSlot, Scholarship, ScholarshipOffice } from '../types';
+import { DocumentSlot, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../types';
 
 // Display names for the offices that review scholarships. Scholarships
 // without an `office` belong to the LSO.
@@ -257,3 +257,25 @@ export const mockScholarships: Scholarship[] = [
     applicationFormType: 'alumni'
   }
 ];
+
+// Fields the AdSO can change from the admin Scholarships page. Everything
+// else (name, office, form, eligibility rules, documents) is fixed in code.
+export const EDITABLE_SCHOLARSHIP_FIELDS = ['status', 'deadline', 'description', 'benefits', 'eligibility', 'process', 'submissionNote'] as const;
+
+// Merges AdSO overrides over the defaults above. Unknown ids are ignored.
+export function applyScholarshipOverrides(base: Scholarship[], overrides: ScholarshipOverride[]): Scholarship[] {
+  const byId = new Map(overrides.map(o => [o.id, o]));
+  return base.map(scholarship => {
+    const o = byId.get(scholarship.id);
+    if (!o) return scholarship;
+    const merged: Scholarship = { ...scholarship };
+    if (o.status) merged.status = o.status;
+    if (o.deadline) merged.deadline = o.deadline;
+    if (o.description) merged.description = o.description;
+    if (o.benefits?.length) merged.benefits = o.benefits;
+    if (o.eligibility?.length) merged.eligibility = o.eligibility;
+    if (o.process?.length) merged.process = o.process;
+    if (o.submissionNote) merged.submissionNote = o.submissionNote;
+    return merged;
+  });
+}

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth, useUser } from '@clerk/react';
 import { OFFICE_LABELS, OFFICE_SHORT_LABELS } from '../../data/scholarships';
+import { ScholarshipOffice } from '../../types';
 import AdminAnalytics from './AdminAnalytics';
 import AdminAnnouncements from './AdminAnnouncements';
 import ScholarshipsManager from './ScholarshipsManager';
@@ -105,18 +106,33 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         return latest ? applicantName(latest) : selectedScholar;
       })()
     : null;
-  // The Scholarships and Announcements pages carry their own heading (the
-  // Scholarships detail view adds a back link), so the top bar shows no
-  // title there.
+  // The Scholarships, Announcements and Statistics pages carry their own
+  // heading (the Scholarships detail view adds a back link), so the top bar
+  // shows no title there.
   const breadcrumbs: Crumb[] =
-    mainView === 'scholarships' || mainView === 'announcements' ? []
+    mainView === 'scholarships' || mainView === 'announcements' || mainView === 'analytics' ? []
     : mainView === 'applications' && selected ? [sectionCrumb, { label: applicantName(selected) }]
     : mainView === 'lifecycle' && scholarName ? [sectionCrumb, { label: scholarName }]
     : [{ label: VIEW_TITLES[mainView] }];
 
+  // Opens the Applications list filtered to one scholarship.
+  const viewApplicationsFor = (scholarshipId: string) => {
+    navigate('applications');
+    setListFilters({ ...DEFAULT_FILTERS, scholarship: scholarshipId });
+  };
+
   let page: React.ReactNode;
   if (mainView === 'analytics') {
-    page = <AdminAnalytics applications={applications} isLoading={isLoading} error={loadError} onRefresh={fetchApplications} />;
+    page = (
+      <AdminAnalytics
+        applications={applications}
+        isLoading={isLoading}
+        error={loadError}
+        onRefresh={fetchApplications}
+        ownOffice={(adminOffice ?? 'LSO') as ScholarshipOffice}
+        onViewScholarship={viewApplicationsFor}
+      />
+    );
   } else if (mainView === 'lifecycle') {
     page = (
       <AdminScholars
@@ -138,10 +154,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         ownOffice="LSO"
         selectedId={selectedScholarship}
         onSelect={setSelectedScholarship}
-        onViewApplications={scholarshipId => {
-          navigate('applications');
-          setListFilters({ ...DEFAULT_FILTERS, scholarship: scholarshipId });
-        }}
+        onViewApplications={viewApplicationsFor}
       />
     );
   } else if (selected) {

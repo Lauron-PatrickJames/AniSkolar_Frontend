@@ -42,18 +42,19 @@ Not merged into `main` yet.
   term, enter the student population, and review each scholarship:
   include/leave out, and set a category where the export has none.
 - FSE per scholar = Total Discount / Matriculation; FSE % and headcount %
-- Export (⋯ → Export academic year to Excel) writes one "FSE" sheet laid out
-  like the AdSO FSE workbook: 1st/2nd semester rows 12–13, FIRST SEM / SECOND
-  SEM blocks, head count computation and SPOON recipients, as live formulas.
-  Special programs need a funding source (internal / external / co-funded);
-  institutional FSE includes special programs. Midyear is not in the sheet.
   are out of the population. Summary rows: Internal academic,
   Internal non-academic, Mainstream, Externally funded, Special programs,
   Institutional (all four).
+- Special programs need a funding source (internal / external / co-funded);
+  institutional FSE includes special programs.
 - Repeated code blocks are merged and exact duplicate rows dropped.
 - Saved per academic year + term (`/api/fse`, AdSO only); saving the same
-  term again replaces it. Export → Excel from the ⋯ menu.
-- The browser reads the file with SheetJS. This environment could only
-  install `xlsx@0.18.5` from npm (has known advisories); on your machine
-  run `npm i https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz` in the
-  frontend to switch to the patched release (same API).
+  term again replaces it.
+- Export (⋯ → Export academic year to Excel) writes one "FSE" sheet laid out
+  like the AdSO FSE workbook: 1st/2nd semester rows 12–13, FIRST SEM / SECOND
+  SEM blocks, head count computation and SPOON recipients, as live formulas.
+  Midyear is not in the sheet.
+- The browser reads the file with SheetJS 0.20.3, installed from the
+  tarball in `vendor/xlsx-0.20.3.tgz` (the npm registry only has 0.18.5,
+  which has known advisories). Keep the tarball committed; `npm install`
+  needs it.

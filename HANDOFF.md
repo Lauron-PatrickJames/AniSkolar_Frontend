@@ -35,3 +35,20 @@ Not merged into `main` yet.
 - A server-side stats endpoint (`/api/applications/stats?from&to`) once
   the application count grows; the Statistics page computes in the
   browser today.
+
+## FSE report (AdSO → Insights → FSE report)
+- Upload the registrar's scholarship export per term (.xls/.xlsx, same
+  layout as the FSE template's "Raw" sheet), choose the academic year and
+  term, enter the student population, and review each scholarship:
+  include/leave out, and set a category where the export has none.
+- FSE per scholar = Total Discount / Matriculation; FSE % and headcount %
+  are out of the population. Summary rows: Internal academic,
+  Internal non-academic, Mainstream, Externally funded, Special programs,
+  Institutional (all four).
+- Repeated code blocks are merged and exact duplicate rows dropped.
+- Saved per academic year + term (`/api/fse`, AdSO only); saving the same
+  term again replaces it. Export → Excel from the ⋯ menu.
+- The browser reads the file with SheetJS. This environment could only
+  install `xlsx@0.18.5` from npm (has known advisories); on your machine
+  run `npm i https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz` in the
+  frontend to switch to the patched release (same API).

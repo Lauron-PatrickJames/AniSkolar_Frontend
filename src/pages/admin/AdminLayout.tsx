@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
-import { Award, BarChart3, Building2, ChevronRight, GraduationCap, LayoutList, LogOut, Megaphone, Menu, X } from 'lucide-react';
+import { Award, BarChart3, Building2, Calculator, ChevronRight, GraduationCap, LayoutList, LogOut, Megaphone, Menu, X } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import { Avatar, Badge, IconButton } from './AdminUI';
 
-export type MainView = 'applications' | 'analytics' | 'lifecycle' | 'announcements' | 'scholarships';
+export type MainView = 'applications' | 'analytics' | 'fse' | 'lifecycle' | 'announcements' | 'scholarships';
 
 export const VIEW_TITLES: Record<MainView, string> = {
   applications: 'Applications',
   analytics: 'Statistics',
+  fse: 'FSE report',
   lifecycle: 'Scholars',
   announcements: 'Announcements',
   scholarships: 'Scholarships'
@@ -16,7 +17,7 @@ export const VIEW_TITLES: Record<MainView, string> = {
 
 const SECTIONS: { title: string; items: { id: MainView; icon: React.ElementType }[] }[] = [
   { title: 'Review', items: [{ id: 'applications', icon: LayoutList }, { id: 'lifecycle', icon: GraduationCap }] },
-  { title: 'Insights', items: [{ id: 'analytics', icon: BarChart3 }] },
+  { title: 'Insights', items: [{ id: 'analytics', icon: BarChart3 }, { id: 'fse', icon: Calculator }] },
   { title: 'Communication', items: [{ id: 'announcements', icon: Megaphone }] },
   { title: 'Manage', items: [{ id: 'scholarships', icon: Award }] }
 ];

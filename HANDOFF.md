@@ -42,6 +42,11 @@ Not merged into `main` yet.
   term, enter the student population, and review each scholarship:
   include/leave out, and set a category where the export has none.
 - FSE per scholar = Total Discount / Matriculation; FSE % and headcount %
+- Export (⋯ → Export academic year to Excel) writes one "FSE" sheet laid out
+  like the AdSO FSE workbook: 1st/2nd semester rows 12–13, FIRST SEM / SECOND
+  SEM blocks, head count computation and SPOON recipients, as live formulas.
+  Special programs need a funding source (internal / external / co-funded);
+  institutional FSE includes special programs. Midyear is not in the sheet.
   are out of the population. Summary rows: Internal academic,
   Internal non-academic, Mainstream, Externally funded, Special programs,
   Institutional (all four).

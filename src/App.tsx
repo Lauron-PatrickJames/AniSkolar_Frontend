@@ -180,7 +180,7 @@ export default function App() {
         setAnnouncements(body.announcements.map((a: Announcement) => ({
           ...a,
           // The API returns image paths relative to the API server.
-          imageUrl: a.imageUrl ? `${API_BASE_URL}${a.imageUrl}` : null
+          imageUrls: (a.imageUrls ?? []).map(url => `${API_BASE_URL}${url}`)
         })));
       } catch {
         // Keep the fallback announcements.

@@ -13,6 +13,7 @@ interface AnnouncementCardProps {
 
 export default function AnnouncementCard({ announcement, id, isInitiallyExpanded = false }: AnnouncementCardProps) {
   const [isExpanded, setIsExpanded] = useState(isInitiallyExpanded);
+  const imageUrls = announcement.imageUrls ?? [];
   const relatedScholarship = announcement.scholarshipId
     ? mockScholarships.find(s => s.id === announcement.scholarshipId)
     : undefined;
@@ -113,13 +114,27 @@ export default function AnnouncementCard({ announcement, id, isInitiallyExpanded
             transition={{ duration: 0.25, ease: 'easeInOut' }}
           >
             <div className="px-4 sm:px-5 pb-6 pt-2 border-t border-slate-100 bg-slate-50/50">
-              {announcement.imageUrl && (
+              {imageUrls.length === 1 && (
                 <img
-                  src={announcement.imageUrl}
+                  src={imageUrls[0]}
                   alt=""
                   loading="lazy"
                   className="w-full max-h-80 object-cover rounded-lg border border-slate-100 mt-2 mb-4"
                 />
+              )}
+              {imageUrls.length > 1 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2 mb-4">
+                  {imageUrls.map((url, i) => (
+                    <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                      <img
+                        src={url}
+                        alt={`Image ${i + 1} of ${imageUrls.length}`}
+                        loading="lazy"
+                        className="aspect-square w-full object-cover rounded-lg border border-slate-100 hover:opacity-90 transition-opacity"
+                      />
+                    </a>
+                  ))}
+                </div>
               )}
               <div className="prose prose-slate max-w-none text-sm text-slate-700 whitespace-pre-line leading-relaxed font-normal break-words">
                 {announcement.content}

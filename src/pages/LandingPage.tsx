@@ -98,7 +98,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       {/* 1. Hero Section */}
       <section
         id="hero"
-        className="relative min-h-[85vh] flex items-center justify-center bg-cover bg-center text-white"
+        className="relative min-h-[95vh] flex items-center justify-center bg-cover bg-center text-white"
       style={{ backgroundImage: `linear-gradient(135deg, rgba(0, 112, 60, 0.3), rgba(0, 112, 60, 0.7)), url(${heroImage})` }}
       >
         {/* Decorative Grid Accent */}

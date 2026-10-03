@@ -38,13 +38,18 @@ interface AdminAnnouncement {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-  imageUrl: string | null;
+  images: AnnouncementImage[];
   fbEnabled: boolean;
   fbStatus: FbStatus;
   fbPostId: string | null;
   fbPermalink: string | null;
   fbError: string | null;
   fbLastSyncedAt: string | null;
+}
+
+interface AnnouncementImage {
+  id: string;
+  url: string;   // path on the API server
 }
 
 // Result of the Facebook step returned alongside a saved announcement.
@@ -54,15 +59,15 @@ interface FacebookResult {
   tokenExpired?: boolean;
 }
 
-const FB_DEFAULTS: Pick<AdminAnnouncement, 'imageUrl' | 'fbEnabled' | 'fbStatus' | 'fbPostId' | 'fbPermalink' | 'fbError' | 'fbLastSyncedAt'> = {
-  imageUrl: null, fbEnabled: false, fbStatus: 'not_posted', fbPostId: null, fbPermalink: null, fbError: null, fbLastSyncedAt: null
+const FB_DEFAULTS: Pick<AdminAnnouncement, 'images' | 'fbEnabled' | 'fbStatus' | 'fbPostId' | 'fbPermalink' | 'fbError' | 'fbLastSyncedAt'> = {
+  images: [], fbEnabled: false, fbStatus: 'not_posted', fbPostId: null, fbPermalink: null, fbError: null, fbLastSyncedAt: null
 };
 
 const normalize = (raw: Partial<AdminAnnouncement>): AdminAnnouncement => ({ ...FB_DEFAULTS, ...raw } as AdminAnnouncement);
 
 const SCHOLARSHIP_NAMES: Record<string, string> = Object.fromEntries(mockScholarships.map(s => [s.id, s.name]));
 
-const imageSrc = (url: string | null) => (url ? `${API_BASE_URL}${url}` : null);
+const imageSrc = (url: string) => `${API_BASE_URL}${url}`;
 
 const CATEGORY_ICONS: Record<Category, React.ElementType> = {
   General: Megaphone,
@@ -78,6 +83,8 @@ function facebookMessage(title: string, content: string): string {
 }
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+// Must match MAX_IMAGES in the backend's models/Announcement.js.
+const MAX_IMAGES = 10;
 
 // --- Editor (create + edit share one form) -----------------------------------
 
@@ -91,16 +98,20 @@ interface EditorState {
   scholarshipId: string;         // '' = not about a specific scholarship
   isPinned: boolean;
   fbEnabled: boolean;
-  existingImageUrl: string | null;  // image already saved on the announcement
+  existingImages: AnnouncementImage[];  // images already saved on the announcement
 }
 
-interface ImageChange {
-  file: File | null;   // newly picked image
-  remove: boolean;     // remove the saved image
+// One image in the editor, in display order: either already saved
+// (existingId) or newly picked (file, shown through an object URL).
+interface ImageItem {
+  key: string;
+  existingId?: string;
+  file?: File;
+  src: string;
 }
 
 const BLANK_FORM: EditorState = {
-  title: '', description: '', content: '', category: 'General', scholarshipId: '', isPinned: false, fbEnabled: true, existingImageUrl: null
+  title: '', description: '', content: '', category: 'General', scholarshipId: '', isPinned: false, fbEnabled: true, existingImages: []
 };
 
 const LIMITS = { title: 150, description: 500, content: 8000 };
@@ -117,7 +128,7 @@ function validate(form: EditorState): Partial<Record<TextField, string>> {
 
 // How the post will read on the Page. Plain, Facebook-like layout using the
 // admin tokens; no attempt to imitate Facebook's own styling.
-function FacebookPreview({ title, content, imageUrl }: { title: string; content: string; imageUrl: string | null }) {
+function FacebookPreview({ title, content, images }: { title: string; content: string; images: string[] }) {
   const message = facebookMessage(title, content);
   return (
     <div className="overflow-hidden rounded-control bg-surface ring-1 ring-line" aria-label="Facebook post preview">
@@ -133,7 +144,30 @@ function FacebookPreview({ title, content, imageUrl }: { title: string; content:
       <p className="whitespace-pre-line px-4 py-3 text-sm text-ink wrap-break-word">
         {message || <span className="text-ink-subtle">Your title and body will appear here.</span>}
       </p>
-      {imageUrl && <img src={imageUrl} alt="" className="max-h-72 w-full border-t border-line object-cover" />}
+      <PreviewImages images={images} />
+    </div>
+  );
+}
+
+// Roughly how Facebook lays out a multi-photo post: one large photo, or a
+// grid of up to four with "+N" on the last when there are more.
+function PreviewImages({ images }: { images: string[] }) {
+  if (images.length === 0) return null;
+  if (images.length === 1) {
+    return <img src={images[0]} alt="" className="max-h-72 w-full border-t border-line object-cover" />;
+  }
+  const shown = images.slice(0, 4);
+  const extra = images.length - shown.length;
+  return (
+    <div className="grid grid-cols-2 gap-0.5 border-t border-line bg-line">
+      {shown.map((src, i) => (
+        <div key={src} className={`relative ${shown.length === 3 && i === 0 ? 'col-span-2 aspect-2/1' : 'aspect-square'}`}>
+          <img src={src} alt="" className="size-full object-cover" />
+          {extra > 0 && i === shown.length - 1 && (
+            <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-xl font-semibold text-white">+{extra}</span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -141,12 +175,14 @@ function FacebookPreview({ title, content, imageUrl }: { title: string; content:
 function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
   initial: EditorState;
   onClose: () => void;
-  onSave: (form: EditorState, image: ImageChange, publish: boolean) => void;
+  onSave: (form: EditorState, images: ImageItem[], publish: boolean) => void;
   isSaving: boolean;
   error: string;
 }) {
   const [form, setForm] = useState<EditorState>(initial);
-  const [image, setImage] = useState<ImageChange>({ file: null, remove: false });
+  const [images, setImages] = useState<ImageItem[]>(() =>
+    initial.existingImages.map(img => ({ key: img.id, existingId: img.id, src: imageSrc(img.url) }))
+  );
   const [imageError, setImageError] = useState('');
   // Errors stay hidden until the first save attempt, then update live.
   const [attempted, setAttempted] = useState(false);
@@ -162,35 +198,45 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
   const errors = attempted ? validate(form) : {};
   const errorFields = Object.keys(errors) as TextField[];
 
-  // Object URL for a newly picked image, released when it changes.
-  const [pickedUrl, setPickedUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (!image.file) { setPickedUrl(null); return; }
-    const url = URL.createObjectURL(image.file);
-    setPickedUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [image.file]);
-  const previewImage = pickedUrl ?? (image.remove ? null : imageSrc(form.existingImageUrl));
+  // Object URLs for newly picked images are released when they're removed
+  // (removeImage) or when the editor closes (here).
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
+  useEffect(() => () => {
+    imagesRef.current.forEach(img => { if (img.file) URL.revokeObjectURL(img.src); });
+  }, []);
 
   const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setForm(f => ({ ...f, [key]: value }));
 
-  const pickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const pickImages = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!file) return;
-    if (!(file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name))) {
-      setImageError('Use a JPG image.');
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setImageError('The image must be under 10MB.');
-      return;
-    }
-    setImageError('');
-    setImage({ file, remove: false });
+    if (files.length === 0) return;
+    const problems: string[] = [];
+    const accepted = files.filter(file => {
+      if (!(file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name))) { problems.push(`${file.name} isn't a JPG.`); return false; }
+      if (file.size > MAX_IMAGE_BYTES) { problems.push(`${file.name} is over 10MB.`); return false; }
+      return true;
+    });
+    const room = MAX_IMAGES - images.length;
+    if (accepted.length > room) problems.push(`Only ${MAX_IMAGES} images are allowed; ${accepted.length - room} weren't added.`);
+    const added = accepted.slice(0, Math.max(room, 0)).map(file => ({
+      key: `new-${crypto.randomUUID()}`,
+      file,
+      src: URL.createObjectURL(file)
+    }));
+    setImageError(problems.join(' '));
+    setImages(prev => [...prev, ...added]);
   };
 
-  const removeImage = () => setImage({ file: null, remove: !!form.existingImageUrl });
+  const removeImage = (key: string) => {
+    setImageError('');
+    setImages(prev => {
+      const target = prev.find(img => img.key === key);
+      if (target?.file) URL.revokeObjectURL(target.src);
+      return prev.filter(img => img.key !== key);
+    });
+  };
 
   const submit = (publish: boolean) => {
     if (isSaving) return;
@@ -202,7 +248,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
       return;
     }
     setSavingAs(publish ? 'publish' : 'draft');
-    onSave(form, image, publish);
+    onSave(form, images, publish);
   };
 
   const counter = (key: TextField) => `${form[key].length}/${LIMITS[key]}`;
@@ -279,17 +325,33 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
             />
           </Field>
 
-          <Field label="Image" optional helper="One JPG, up to 10MB. Changing the image replaces the Facebook post." error={imageError || undefined}>
-            <div className="flex items-center gap-3">
-              {previewImage && (
-                <img src={previewImage} alt="Selected announcement image" className="size-16 shrink-0 rounded-control object-cover ring-1 ring-line" />
-              )}
-              <input ref={fileInput} type="file" accept=".jpg,.jpeg,image/jpeg" className="hidden" onChange={pickImage} disabled={isSaving} />
-              <Button size="sm" icon={ImagePlus} onClick={() => fileInput.current?.click()} disabled={isSaving}>
-                {previewImage ? 'Replace image' : 'Add image'}
-              </Button>
-              {previewImage && (
-                <Button size="sm" variant="ghost" icon={X} onClick={removeImage} disabled={isSaving}>Remove</Button>
+          <Field
+            label="Images"
+            optional
+            helper={`Up to ${MAX_IMAGES} JPGs, 10MB each, shown in this order. Changing the images replaces the Facebook post.`}
+            error={imageError || undefined}
+            labelAside={images.length > 0 ? `${images.length}/${MAX_IMAGES}` : undefined}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              {images.map((img, i) => (
+                <div key={img.key} className="relative">
+                  <img src={img.src} alt={`Image ${i + 1}`} className="size-16 rounded-control object-cover ring-1 ring-line" />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(img.key)}
+                    disabled={isSaving}
+                    aria-label={`Remove image ${i + 1}`}
+                    className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-surface text-ink-muted shadow-sm ring-1 ring-line hover:text-danger-fg disabled:opacity-50"
+                  >
+                    <X className="size-3" aria-hidden />
+                  </button>
+                </div>
+              ))}
+              <input ref={fileInput} type="file" accept=".jpg,.jpeg,image/jpeg" multiple className="hidden" onChange={pickImages} disabled={isSaving} />
+              {images.length < MAX_IMAGES && (
+                <Button size="sm" icon={ImagePlus} onClick={() => fileInput.current?.click()} disabled={isSaving}>
+                  {images.length > 0 ? 'Add more' : 'Add images'}
+                </Button>
               )}
             </div>
           </Field>
@@ -332,7 +394,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
           {form.fbEnabled && (
             <>
               <p className="text-xs font-medium text-ink-muted">Preview on Facebook</p>
-              <FacebookPreview title={form.title} content={form.content} imageUrl={previewImage} />
+              <FacebookPreview title={form.title} content={form.content} images={images.map(img => img.src)} />
             </>
           )}
         </div>
@@ -474,14 +536,14 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       scholarshipId: a.scholarshipId ?? '',
       isPinned: a.isPinned,
       fbEnabled: a.fbEnabled,
-      existingImageUrl: a.imageUrl
+      existingImages: a.images
     });
   };
 
-  // Multipart so the optional image travels with the fields. The backend
+  // Multipart so the optional images travel with the fields. The backend
   // saves first, then publishes/updates the Facebook post, and reports the
   // Facebook outcome separately so a Facebook failure never loses the save.
-  const saveAnnouncement = async (form: EditorState, image: ImageChange, publish: boolean) => {
+  const saveAnnouncement = async (form: EditorState, images: ImageItem[], publish: boolean) => {
     if (isSaving) return;
     setIsSaving(true);
     setSaveError('');
@@ -496,8 +558,11 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       data.append('isPinned', String(form.isPinned));
       data.append('status', publish ? 'published' : 'draft');
       data.append('fbEnabled', String(form.fbEnabled));
-      if (image.file) data.append('image', image.file, image.file.name);
-      else if (image.remove) data.append('removeImage', 'true');
+      // Saved images to keep, then new files; the backend appends new images
+      // after the kept ones, which matches the editor's order (new images
+      // are always added at the end).
+      data.append('keepImageIds', JSON.stringify(images.flatMap(img => (img.existingId ? [img.existingId] : []))));
+      images.forEach(img => { if (img.file) data.append('images', img.file, img.file.name); });
 
       const isEdit = !!form.id;
       const response = await fetch(`${API_BASE_URL}/api/announcements${isEdit ? `/${form.id}` : ''}`, {
@@ -715,7 +780,7 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onToggle
   const CategoryIcon = CATEGORY_ICONS[a.category] ?? Bell;
   // Falls back to the category icon if the image can't load.
   const [thumbFailed, setThumbFailed] = useState(false);
-  const thumb = thumbFailed ? null : imageSrc(a.imageUrl);
+  const thumb = thumbFailed || a.images.length === 0 ? null : imageSrc(a.images[0].url);
   const published = a.status === 'published';
   const meta = [
     a.category,

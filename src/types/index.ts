@@ -115,9 +115,9 @@ export interface Announcement {
   description: string;
   content: string;
   category: 'General' | 'Update' | 'Deadline' | 'Event';
-  // From GET /api/announcements/feed: the announcement's image (a path on
-  // the API server) and, when it was posted to the Facebook Page, its link.
-  imageUrl?: string | null;
+  // From GET /api/announcements/feed: the announcement's images (in display
+  // order) and, when it was posted to the Facebook Page, its link.
+  imageUrls?: string[];
   fbPermalink?: string | null;
   // The scholarship this announcement is about; it also shows on that
   // scholarship's details page.

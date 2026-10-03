@@ -4,6 +4,7 @@ import { OFFICE_LABELS, OFFICE_SHORT_LABELS } from '../../data/scholarships';
 import { ScholarshipOffice } from '../../types';
 import AdminAnalytics from './AdminAnalytics';
 import AdminAnnouncements from './AdminAnnouncements';
+import FseReportPage from './FseReportPage';
 import ScholarshipsManager from './ScholarshipsManager';
 import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
 import AdminScholars from './AdminScholars';
@@ -32,10 +33,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     ? (OFFICE_LABELS[adminOffice as keyof typeof OFFICE_LABELS] ?? adminOffice)
     : adminOfficeRaw === 'ADSO' ? OFFICE_SHORT_LABELS.LSO : 'No office assigned';
 
-  // Announcements and scholarship management are the AdSO's alone; the
-  // server enforces the same rule.
+  // Announcements, scholarship management and the FSE report are the
+  // AdSO's alone; the server enforces the same rule.
   const isAdso = adminOfficeRaw === 'ADSO';
-  const hiddenViews: MainView[] = isAdso ? [] : ['announcements', 'scholarships'];
+  const hiddenViews: MainView[] = isAdso ? [] : ['announcements', 'scholarships', 'fse'];
 
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -162,7 +163,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const nextId = queueIndex >= 0 && queueIndex < queue.length - 1 ? queue[queueIndex + 1] : null;
 
   let page: React.ReactNode;
-  if (mainView === 'analytics') {
+  if (mainView === 'fse' && isAdso) {
+    page = <FseReportPage getToken={getToken} />;
+  } else if (mainView === 'analytics') {
     page = (
       <AdminAnalytics
         applications={applications}

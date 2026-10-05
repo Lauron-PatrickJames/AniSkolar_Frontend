@@ -2,7 +2,7 @@ import React from 'react';
 import { Scholarship, Announcement, Application, StudentProfile } from '../../types';
 import DashboardCard from '../../components/DashboardCard';
 import AnnouncementCard from '../../components/AnnouncementCard';
-import { Award, Compass, FileText, AlertCircle, ArrowRight, UserCheck, Calendar, Bell, Calculator } from 'lucide-react';
+import { Award, Compass, FileText, AlertCircle, ArrowRight, UserCheck, Calendar, Bell, Calculator, RefreshCw } from 'lucide-react';
 import { getAvailableScholarships } from '../../utils/eligibility';
 import { motion } from 'motion/react';
 
@@ -26,6 +26,8 @@ export default function Dashboard({
   id
 }: DashboardProps) {
   const eligibleScholarships = getAvailableScholarships(scholarships, student);
+  // Renewal is for scholars only (an approved application).
+  const isScholar = applications.some(app => app.status === 'Approved');
 
   // Compute metrics dynamically from data
   const totalScholarships = eligibleScholarships.length;
@@ -169,6 +171,19 @@ export default function Dashboard({
                 </span>
                 <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               </button>
+
+              {isScholar && (
+                <button
+                  onClick={() => onNavigate('renewals')}
+                  className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
+                >
+                  <span className="flex items-center space-x-2.5 min-w-0">
+                    <RefreshCw className="w-4 h-4 text-brand-green shrink-0" />
+                    <span className="truncate">Renew My Scholarship</span>
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                </button>
+              )}
 
               <button
                 onClick={() => onNavigate('gpa-calculator')}

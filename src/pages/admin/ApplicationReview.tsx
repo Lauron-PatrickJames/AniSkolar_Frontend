@@ -87,10 +87,22 @@ export default function ApplicationReview({
 
   const program = applicantProgram(app);
   const yearLevel = applicantYearLevel(app);
+  // The application keeps what was submitted (what's being evaluated); the
+  // student's profile may have changed since.
+  const now = app.currentProfile;
+  const same = (a?: string, b?: string) => !a || !b || a.trim().toLowerCase() === b.trim().toLowerCase();
+  const profileChanged = !!now && (!same(now.course, program) || !same(now.yearLevel, yearLevel));
   const summary: [string, React.ReactNode][] = [
     ['Student no.', <span className="tabular-nums">{app.studentNumber}</span>],
     ['Program', program || yearLevel
-      ? <>{program}{program && yearLevel && ' · '}<span className="whitespace-nowrap">{yearLevel}</span></>
+      ? <>
+          {program}{program && yearLevel && ' · '}<span className="whitespace-nowrap">{yearLevel}</span>
+          {profileChanged && (
+            <span className="mt-0.5 block text-xs text-warning-fg">
+              Profile now: {[now!.course, now!.yearLevel].filter(Boolean).join(' · ')}
+            </span>
+          )}
+        </>
       : '—'],
     ['Email', applicantEmail(app) || '—'],
     ['Mobile', applicantPhone(app) || '—']
@@ -133,14 +145,20 @@ export default function ApplicationReview({
         )}
       />
 
-      <dl className="grid grid-cols-2 gap-x-8 gap-y-3 border-y border-line py-4 md:grid-cols-4">
-        {summary.map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <dt className="text-xs text-ink-subtle">{label}</dt>
-            <dd className={`mt-0.5 text-sm text-ink ${label === 'Program' ? 'wrap-break-word' : 'truncate'}`}>{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <section aria-label="Applicant details as submitted" className="border-y border-line py-4">
+        <p className="mb-3 text-xs text-ink-subtle">
+          As submitted {formatDate(app.createdAt)}
+          {profileChanged && ' · the student’s profile has changed since'}
+        </p>
+        <dl className="grid grid-cols-2 gap-x-8 gap-y-3 md:grid-cols-4">
+          {summary.map(([label, value]) => (
+            <div key={label} className="min-w-0">
+              <dt className="text-xs text-ink-subtle">{label}</dt>
+              <dd className={`mt-0.5 text-sm text-ink ${label === 'Program' ? 'wrap-break-word' : 'truncate'}`}>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         <Card flush className="min-w-0 lg:col-span-2" headerSlot={<Tabs<ReviewTab> tabs={tabs} value={activeTab} onChange={setActiveTab} label="Application sections" />}>

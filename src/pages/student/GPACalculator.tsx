@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, Plus, Trash2, RotateCcw, Info, AlertCircle, Copy, Check, Award } from 'lucide-react';
-import { StudentProfile } from '../../types';
+import { Calculator, Plus, Trash2, RotateCcw, Info, AlertCircle, Copy, Check, Award, CheckCircle, ChevronRight, Loader2, Save } from 'lucide-react';
+import { Application, ProfileChanges, SaveResult, Scholarship, StudentProfile } from '../../types';
+import { acceptsOnlineApplications } from '../../data/scholarships';
+import { GpaCheck, checkGpaRequirement, describeGpaRequirement, isContinuingStudent, toGpaNumber } from '../../utils/eligibility';
 
 interface CourseEntry {
   id: string;
@@ -73,12 +75,35 @@ const inputClass =
 const errorInputClass =
   'w-full px-3 py-2 border-2 border-rose-400 rounded-lg text-sm bg-rose-50/60 focus:outline-hidden focus:ring-2 focus:ring-rose-300 focus:border-rose-500 transition-all';
 
+function GpaCheckPill({ status }: { status: GpaCheck['status'] }) {
+  const styles = {
+    meets: { label: 'Meets it', className: 'bg-emerald-50 text-brand-green border-emerald-100', Icon: CheckCircle },
+    below: { label: 'Below', className: 'bg-amber-50 text-amber-800 border-amber-200', Icon: AlertCircle },
+    unknown: { label: 'Add grades to check', className: 'bg-slate-50 text-slate-500 border-slate-200', Icon: Info },
+    'not-applicable': { label: 'Not for freshmen', className: 'bg-slate-50 text-slate-500 border-slate-200', Icon: Info },
+  }[status];
+  const { Icon } = styles;
+  return (
+    <span className={`self-start shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold whitespace-nowrap ${styles.className}`}>
+      <Icon className="w-3.5 h-3.5" aria-hidden />
+      {styles.label}
+    </span>
+  );
+}
+
 interface GPACalculatorProps {
   student: StudentProfile;
+  // Checked against each scholarship's GPA rule (gpaRequirement).
+  scholarships: Scholarship[];
+  // Approved applications mark the scholarships the student holds.
+  applications: Application[];
+  // Saves the computed GPA as the profile GPA; resolves to whether it saved.
+  onUpdateProfile: (changes: ProfileChanges) => Promise<SaveResult>;
+  onViewScholarship: (id: string) => void;
   id?: string;
 }
 
-export default function GPACalculator({ student, id }: GPACalculatorProps) {
+export default function GPACalculator({ student, scholarships, applications, onUpdateProfile, onViewScholarship, id }: GPACalculatorProps) {
   // Load any saved draft for THIS student only, once on mount.
   const savedDraft = React.useMemo(
     () => loadGpaDraft(student.studentNumber),
@@ -138,11 +163,12 @@ export default function GPACalculator({ student, id }: GPACalculatorProps) {
   // with invalid units/grade are simply excluded from the total, same as
   // the original silent isNaN-skip behavior — just now visible as a red
   // border instead of being invisible.
-  const { gpa, totalUnits, totalPoints, includedCount, hasBelowHonorsThreshold } = useMemo(() => {
+  const { gpa, totalUnits, totalPoints, includedCount, hasBelowHonorsThreshold, lowestGrade } = useMemo(() => {
     let totalUnits = 0;
     let totalPoints = 0;
     let includedCount = 0;
     let hasBelowHonorsThreshold = false;
+    let lowestGrade: number | null = null;
     courses.forEach(course => {
       if (isValidUnits(course.units) && isValidGrade(course.grade)) {
         const units = parseFloat(course.units);
@@ -151,6 +177,7 @@ export default function GPACalculator({ student, id }: GPACalculatorProps) {
         totalPoints += units * grade;
         includedCount += 1;
         if (grade < 2.5) hasBelowHonorsThreshold = true;
+        if (lowestGrade === null || grade < lowestGrade) lowestGrade = grade;
       }
     });
     return {
@@ -158,9 +185,47 @@ export default function GPACalculator({ student, id }: GPACalculatorProps) {
       totalUnits,
       totalPoints,
       includedCount,
-      hasBelowHonorsThreshold
+      hasBelowHonorsThreshold,
+      lowestGrade
     };
   }, [courses]);
+
+  // Scholarships whose GPA rule matters to this student, checked against
+  // what's entered here. A rule for keeping a scholarship only matters to
+  // its holders; one for upperclassmen isn't shown to freshmen (unless they
+  // hold it). Held scholarships (an approved application) come first.
+  const heldIds = useMemo(
+    () => new Set(applications.filter(a => a.status === 'Approved').map(a => a.scholarshipId)),
+    [applications]
+  );
+  const continuing = isContinuingStudent(student);
+  const scholarshipChecks = useMemo(() => {
+    return scholarships
+      .filter(s => s.gpaRequirement)
+      .map(s => ({ scholarship: s, req: s.gpaRequirement!, held: heldIds.has(s.id) }))
+      .filter(({ req, held }) => held || (req.stage === 'apply' && (continuing || !req.continuingOnly)))
+      .map(row => ({
+        ...row,
+        check: includedCount === 0
+          ? ({ status: 'unknown', reasons: [] } as GpaCheck)
+          : checkGpaRequirement(row.req, { gpa, lowestGrade }, { continuing: row.held || continuing })
+      }))
+      .sort((a, b) => Number(b.held) - Number(a.held));
+  }, [scholarships, heldIds, continuing, includedCount, gpa, lowestGrade]);
+
+  // Saving the computed GPA to the profile, which Explore and the
+  // dashboard check scholarships against.
+  const profileGpa = toGpaNumber(student.gpa);
+  const roundedGpa = Math.round(gpa * 100) / 100;
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState('');
+  useEffect(() => { setSaveState('idle'); }, [roundedGpa]);
+  const saveAsProfileGpa = async () => {
+    setSaveState('saving');
+    const result = await onUpdateProfile({ gpa: roundedGpa.toFixed(2) });
+    setSaveError(result.error ?? '');
+    setSaveState(result.ok ? 'saved' : 'error');
+  };
 
   const invalidCount = courses.length - includedCount;
 
@@ -377,6 +442,83 @@ export default function GPACalculator({ student, id }: GPACalculatorProps) {
             >
               <RotateCcw className="w-3.5 h-3.5" />
               Reset
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Scholarship GPA check */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-100 space-y-1">
+          <h3 className="font-display font-bold text-base text-slate-900">Scholarship GPA check</h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            How the GPA and grades above compare with each scholarship's requirement. Scholarships look at your cumulative GPA, so enter all your courses so far to check against it.
+          </p>
+        </div>
+
+        {scholarshipChecks.length === 0 && (
+          <p className="px-6 py-5 text-xs text-slate-500 leading-relaxed">
+            {continuing
+              ? 'None of the scholarships you can apply for has a GPA requirement.'
+              : 'Freshman scholarships are based on your high school grades, so none of them checks your college GPA yet. Upperclassman scholarships will show here from your second year.'}
+          </p>
+        )}
+        <ul className="divide-y divide-slate-100">
+          {scholarshipChecks.map(({ scholarship, req, held, check }) => {
+            const tag = held
+              ? 'You hold this'
+              : req.audience
+                ? `${req.audience} only`
+                : acceptsOnlineApplications(scholarship) ? 'To apply' : 'To qualify';
+            return (
+              <li key={scholarship.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-start gap-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onViewScholarship(scholarship.id)}
+                      className="font-semibold text-sm text-slate-800 hover:text-brand-green text-left inline-flex items-center gap-0.5"
+                    >
+                      {scholarship.name}
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" aria-hidden />
+                    </button>
+                    <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                      held ? 'bg-emerald-50 text-brand-green' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {tag}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    {describeGpaRequirement(req)}
+                    {req.stage === 'keep' || (held && req.keepToo) ? ', every semester to keep it' : ''}
+                  </p>
+                  {check.status === 'below' && (
+                    <p className="text-xs text-amber-800 first-letter:uppercase">{check.reasons.join('; ')}.</p>
+                  )}
+                  {req.note && !held && <p className="text-[11px] text-slate-400 leading-snug">{req.note}</p>}
+                </div>
+                <GpaCheckPill status={check.status} />
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="px-6 py-5 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Profile GPA: <span className="font-bold text-slate-700">{profileGpa !== null ? profileGpa.toFixed(2) : 'not set'}</span>
+            {' · '}Explore Grants uses it to flag scholarships whose minimum you may not meet.
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            {saveState === 'saved' && <span className="text-xs font-semibold text-brand-green flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Saved</span>}
+            {saveState === 'error' && <span role="alert" className="text-xs font-semibold text-rose-600">{saveError || 'Couldn’t save. Try again.'}</span>}
+            <button
+              type="button"
+              onClick={saveAsProfileGpa}
+              disabled={includedCount === 0 || saveState === 'saving' || profileGpa === roundedGpa}
+              className="inline-flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2.5 rounded-lg transition-colors focus:outline-hidden"
+            >
+              {saveState === 'saving' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Use {roundedGpa.toFixed(2)} as my GPA
             </button>
           </div>
         </div>

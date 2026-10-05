@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useUser, useAuth, useClerk } from '@clerk/react';
-import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride } from './types';
+import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, SaveResult } from './types';
 import { acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships } from './data/scholarships';
 import { mockAnnouncements } from './data/announcements';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
@@ -23,6 +23,8 @@ import ApplyScholarship from './pages/student/ApplyScholarship';
 import Announcements from './pages/student/Announcements';
 import Profile from './pages/student/Profile';
 import GPACalculator from './pages/student/GPACalculator';
+import Renewals from './pages/student/Renewals';
+import DutyHours from './pages/student/DutyHours';
 
 // --- Persistence helpers -----------------------------------------------
 // Only page/navigation state lives here now — WHO is logged in is entirely
@@ -34,6 +36,9 @@ const SESSION_STORAGE_KEY = 'aniskolar_session';
 // dev. Set VITE_API_BASE_URL in your .env (or your host's env config) once
 // the backend isn't running on localhost anymore.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+// Pages only scholars (an approved application) can open.
+const SCHOLAR_ONLY_PAGES = ['renewals', 'duty-hours'];
 
 interface PersistedSession {
   currentPage: string;
@@ -90,6 +95,10 @@ function loadPersistedSession(): PersistedSession {
 interface HistoryEntryState {
   page: string;
   scholarshipId: string | null;
+  // The application form opened as a resubmission.
+  resubmit?: boolean;
+  // The page this entry was opened from, for in-page Back buttons.
+  prev?: { page: string; scholarshipId: string | null } | null;
 }
 
 // authPhase drives which screen shows while Clerk resolves who's signed in
@@ -160,6 +169,9 @@ export default function App() {
 
   const [student, setStudent] = useState<StudentProfile>(defaultStudent);
   const [applications, setApplications] = useState<Application[]>([]);
+  // False until the signed-in student's applications have been fetched, so
+  // scholar-only pages don't redirect a scholar away while they load.
+  const [applicationsLoaded, setApplicationsLoaded] = useState(false);
   // Published announcements from the API (GET /api/announcements/feed). The
   // built-in sample announcements stay as a fallback if the feed can't be
   // reached, so the portal still renders offline / without a backend.
@@ -206,8 +218,6 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  const isFirstRender = useRef(true);
-  const isPopStateUpdate = useRef(false);
 
   const role = (user?.publicMetadata as { role?: string } | undefined)?.role === 'admin'
     ? 'admin'
@@ -222,41 +232,57 @@ export default function App() {
     }
   }, [currentPage, selectedScholarshipId]);
 
-  useEffect(() => {
-    const initialState: HistoryEntryState = {
-      page: currentPage,
-      scholarshipId: selectedScholarshipId
-    };
-    window.history.replaceState(initialState, '', '');
+  // --- Browser history ------------------------------------------------------
+  // Every page change becomes a history entry, so the browser's Back and
+  // Forward buttons move between pages. Redirects (signing in, a page this
+  // student can't open, an old form) replace the entry instead, so Back
+  // doesn't bounce into them again. Admin pages keep their own history
+  // (AdminDashboard); their entries have no `page`, and are ignored here.
+  const replaceNextEntry = useRef(false);
+  const applicationsRef = useRef(applications);
+  applicationsRef.current = applications;
 
+  useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state as HistoryEntryState | null;
-      if (!state) return;
-      isPopStateUpdate.current = true;
-      setCurrentPage(state.page || 'landing');
+      if (!state || typeof state.page !== 'string') return;
+      let page = state.page;
+      // A form can't be restored from history: going back or forward to a
+      // resubmission, or to an application already sent, shows the
+      // scholarship's details instead (and the entry now says so).
+      if (page === 'apply-scholarship' &&
+          (state.resubmit || applicationsRef.current.some(app => app.scholarshipId === state.scholarshipId))) {
+        page = 'scholarship-details';
+        window.history.replaceState({ ...state, page, resubmit: false }, '');
+      }
+      setResubmitApplication(null);
+      setCurrentPage(page);
       setSelectedScholarshipId(state.scholarshipId ?? null);
     };
-
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    if (isPopStateUpdate.current) {
-      isPopStateUpdate.current = false;
-      return;
-    }
-    const nextState: HistoryEntryState = {
+    const replace = replaceNextEntry.current;
+    replaceNextEntry.current = false;
+    if (role === 'admin') return;
+    const current = window.history.state as HistoryEntryState | null;
+    const entry: HistoryEntryState = {
       page: currentPage,
-      scholarshipId: selectedScholarshipId
+      scholarshipId: selectedScholarshipId,
+      resubmit: currentPage === 'apply-scholarship' && !!resubmitApplication
     };
-    window.history.pushState(nextState, '', '');
-  }, [currentPage, selectedScholarshipId]);
+    // Already on this entry: the page loaded here, or Back / Forward was used.
+    if (current?.page === entry.page && (current.scholarshipId ?? null) === entry.scholarshipId) return;
+    if (replace || typeof current?.page !== 'string') {
+      window.history.replaceState({ ...entry, prev: current?.prev ?? null }, '');
+    } else {
+      window.history.pushState({ ...entry, prev: { page: current.page, scholarshipId: current.scholarshipId ?? null } }, '');
+    }
+    // resubmitApplication is read for the new entry only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, selectedScholarshipId, role]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -268,7 +294,8 @@ export default function App() {
   useEffect(() => {
     if (!userLoaded || isSignedIn) return;
     const authErrorCode = new URLSearchParams(window.location.search).get('error');
-    if (authErrorCode) {
+    if (authErrorCode && currentPage !== 'login') {
+      replaceNextEntry.current = true;
       setCurrentPage('login');
     }
   }, [userLoaded, isSignedIn]);
@@ -335,6 +362,7 @@ export default function App() {
       setAuthPhase('signed-out');
       setStudent(defaultStudent);
       setApplications([]);
+      setApplicationsLoaded(false);
       return;
     }
 
@@ -411,9 +439,14 @@ export default function App() {
 
         const token = await getToken();
         const apps = await fetchApplicationsForStudent(data.student.studentNumber, token);
-        if (!cancelled) setApplications(apps);
+        if (!cancelled) {
+          setApplications(apps);
+          setApplicationsLoaded(true);
+        }
 
         if (currentPage === 'login' || currentPage === 'landing') {
+          // Replaces the sign-in page, so Back doesn't return to it.
+          replaceNextEntry.current = true;
           setCurrentPage('dashboard');
         }
       } catch (err) {
@@ -504,6 +537,17 @@ export default function App() {
     }
   };
 
+  // In-page "Back to …" buttons: when the page they name is the one this
+  // page was opened from, step back in history (so Back and the browser's
+  // Back agree and pages don't pile up); otherwise open it.
+  const goBackTo = (page: string) => {
+    const prev = (window.history.state as HistoryEntryState | null)?.prev;
+    const samePlace = prev?.page === page &&
+      (page !== 'scholarship-details' || prev.scholarshipId === selectedScholarshipId);
+    if (samePlace) window.history.back();
+    else handleNavigate(page);
+  };
+
   const handleViewScholarship = (id: string) => {
     setSelectedScholarshipId(id);
     setResubmitApplication(null);
@@ -576,10 +620,9 @@ export default function App() {
   // look saved (toast + updated UI) but vanish on refresh since nothing
   // was ever sent to MongoDB. Falls back to the previous local state if
   // the request fails, so a failed save doesn't silently look successful.
-  const handleUpdateProfile = async (updated: StudentProfile) => {
-    const previous = student;
-    setStudent(updated);
-
+  // Sends only the changed fields; resolves to whether the server saved
+  // them and, if not, its message (e.g. a field verified by the office).
+  const handleUpdateProfile = async (changes: ProfileChanges): Promise<SaveResult> => {
     try {
       const token = await getToken();
       const res = await fetch(`${API_BASE_URL}/api/students/me`, {
@@ -588,22 +631,31 @@ export default function App() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify(updated)
+        body: JSON.stringify(changes)
       });
-
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setStudent(previous);
-        return;
+        return { ok: false, error: data.error || 'Your changes couldn’t be saved. Please try again.' };
       }
-
-      const data = await res.json();
       setStudent(data.student);
+      return { ok: true };
     } catch {
-      setStudent(previous);
+      return { ok: false, error: 'Couldn’t reach the server. Check your connection and try again.' };
     }
   };
 
   const activeScholarship = scholarships.find(s => s.id === selectedScholarshipId) || scholarships[0];
+
+  // Renewal and duty hours are for scholars only: a student with at least
+  // one approved application (the backend refuses everyone else too).
+  const isScholar = applications.some(app => app.status === 'Approved');
+  const onScholarOnlyPage = SCHOLAR_ONLY_PAGES.includes(currentPage);
+  useEffect(() => {
+    if (onScholarOnlyPage && applicationsLoaded && !isScholar) {
+      replaceNextEntry.current = true;
+      setCurrentPage('dashboard');
+    }
+  }, [onScholarOnlyPage, applicationsLoaded, isScholar]);
 
   // Fetching the full application record before opening the resubmit form
   // (see handleResubmitApplication) — brief, but avoids a flash of the
@@ -635,6 +687,7 @@ export default function App() {
         onComplete={completedStudent => {
           setStudent(completedStudent);
           setAuthPhase('ready');
+          replaceNextEntry.current = currentPage !== 'dashboard';
           setCurrentPage('dashboard');
         }}
       />
@@ -669,7 +722,7 @@ export default function App() {
     if (!isSignedIn) {
       switch (currentPage) {
         case 'login':
-          return <LoginPage onBackToLanding={() => handleNavigate('landing')} />;
+          return <LoginPage onBackToLanding={() => goBackTo('landing')} />;
         case 'scholarship-details':
           return (
             <PublicLayout onLoginClick={() => handleNavigate('login')} onLogoClick={() => handleNavigate('landing')}>
@@ -678,7 +731,7 @@ export default function App() {
                   scholarship={activeScholarship}
                   applications={applications}
                   announcements={announcements}
-                  onBack={() => handleNavigate('landing')}
+                  onBack={() => goBackTo('landing')}
                   onApply={handleApplyScholarship}
                 />
               </div>
@@ -707,10 +760,12 @@ export default function App() {
         dashboard: 'Student Portal Dashboard',
         explore: 'Scholarship Opportunities',
         'gpa-calculator': 'GPA Calculator',
+        renewals: 'Scholarship Renewal',
+        'duty-hours': 'Duty Hours',
         'scholarship-details': 'Scholarship Specifications',
         'apply-scholarship': 'Scholarship Digital Application',
         announcements: 'Office Announcements',
-        profile: 'Student Profile Verification'
+        profile: 'Profile'
       };
 
       const title = pageTitleMap[currentPage] || 'Student Portal';
@@ -742,14 +797,26 @@ export default function App() {
                   />
                 );
               case 'gpa-calculator':
-                return <GPACalculator student={student} />;
+                return (
+                  <GPACalculator
+                    student={student}
+                    scholarships={scholarships}
+                    applications={applications}
+                    onUpdateProfile={handleUpdateProfile}
+                    onViewScholarship={handleViewScholarship}
+                  />
+                );
+              case 'renewals':
+                return isScholar ? <Renewals /> : null;
+              case 'duty-hours':
+                return isScholar ? <DutyHours student={student} /> : null;
               case 'scholarship-details':
                 return (
                   <ScholarshipDetails
                     scholarship={activeScholarship}
                     applications={applications}
                     announcements={announcements}
-                    onBack={() => handleNavigate('explore')}
+                    onBack={() => goBackTo('explore')}
                     onApply={handleApplyScholarship}
                     onResubmit={handleResubmitApplication}
                   />
@@ -759,7 +826,7 @@ export default function App() {
                   <ApplyScholarship
                     scholarship={activeScholarship}
                     student={student}
-                    onBack={() => handleNavigate('scholarship-details')}
+                    onBack={() => goBackTo('scholarship-details')}
                     onSubmitApplication={handleSubmitApplication}
                     onResubmitApplication={handleResubmitApplicationSaved}
                     existingApplication={resubmitApplication ?? undefined}
@@ -772,6 +839,7 @@ export default function App() {
                   <Profile
                     student={student}
                     onUpdateProfile={handleUpdateProfile}
+                    onStudentUpdated={setStudent}
                   />
                 );
               case 'dashboard':

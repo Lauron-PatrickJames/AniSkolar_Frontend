@@ -305,6 +305,8 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
   };
 
   const set = (code: string, patch: Partial<ReviewRow>) => setRows(prev => prev.map(r => (r.code === code ? { ...r, ...patch } : r)));
+  // Parts of the export (its report pages), in order.
+  const parts = [...new Set(rows.map(r => r.part ?? 1))].sort((a, b) => a - b);
   const included = rows.filter(r => r.include);
   const unclassified = included.filter(r => !r.category);
   const noFunding = included.filter(r => r.category === 'special' && !r.specialFunding);
@@ -331,7 +333,7 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
         headers: await authHeaders(getToken, true),
         body: JSON.stringify({
           academicYear, term, population: pop, spoonRecipients: spoonCount, asOf: asOf || undefined, fileName,
-          scholarships: included.map(({ include: _include, ...s }) => ({ ...s, specialFunding: s.category === 'special' ? s.specialFunding : null }))
+          scholarships: included.map(({ include: _include, part: _part, discountRule: _rule, ...s }) => ({ ...s, specialFunding: s.category === 'special' ? s.specialFunding : null }))
         })
       });
       const body = await res.json().catch(() => ({}));
@@ -348,7 +350,7 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
     <Modal
       size="lg"
       title="Upload a term"
-      description="Use the registrar's scholarship export (.xls or .xlsx), like the Raw sheet of the FSE template."
+      description="Use the registrar's scholarship report for the term (.xls or .xlsx) — the one with TOTAL ASSESSMENT and TOTAL DISC columns — or the Raw sheet of the FSE template."
       onClose={onClose}
       dismissible={!saving}
       footer={
@@ -405,13 +407,40 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
 
             <div>
               <p className="mb-1 text-sm font-medium text-ink">Scholarships</p>
-              <p className="mb-2 text-xs text-ink-subtle">Leave out any the office doesn't count in the FSE, and set a category where the export has none.</p>
+              <p className="mb-2 text-xs text-ink-subtle">
+                Leave out any the office doesn't count in the FSE, and set a category where the export has none.
+                {parts.length > 1 && ' The export comes in parts (one per report page); “Set all to” classifies a whole part at once.'}
+              </p>
               {attempted && (errors.category || errors.funding || errors.empty) && <p className="mb-2 text-sm text-danger-fg">{errors.category || errors.funding || errors.empty}</p>}
-              <ul className="max-h-72 divide-y divide-line overflow-y-auto rounded-control ring-1 ring-inset ring-line">
-                {rows.map(r => (
+              <ul className="max-h-96 overflow-y-auto rounded-control ring-1 ring-inset ring-line">
+                {parts.map(part => {
+                  const partRows = rows.filter(r => (r.part ?? 1) === part);
+                  return (
+                    <li key={part}>
+                      {parts.length > 1 && (
+                        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-muted px-3 py-2">
+                          <span className="text-xs font-medium text-ink">
+                            Part {part} <span className="font-normal text-ink-subtle">· {partRows.length} scholarships · {partRows.reduce((n, r) => n + r.scholars.length, 0).toLocaleString()} scholars</span>
+                          </span>
+                          <Select
+                            value=""
+                            onChange={v => v && setRows(prev => prev.map(r => ((r.part ?? 1) === part && r.include ? { ...r, category: v as FseCategory } : r)))}
+                            label={`Set the category for all of part ${part}`}
+                            className="w-56"
+                          >
+                            <option value="">Set all to…</option>
+                            {(Object.keys(CATEGORY_LABELS) as FseCategory[]).map(c => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+                          </Select>
+                        </div>
+                      )}
+                      <ul className="divide-y divide-line">
+                {partRows.map(r => (
                   <li key={r.code} className={`flex flex-wrap items-center gap-3 px-3 py-2 ${r.include ? '' : 'opacity-60'}`}>
                     <Checkbox checked={r.include} onChange={include => set(r.code, { include })} label={<span className="font-mono text-xs">{r.code}</span>} />
-                    <span className="min-w-0 flex-1 truncate text-sm text-ink" title={r.name}>{r.name}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-ink" title={r.name}>{r.name}</span>
+                      {r.discountRule && <span className="block truncate text-xs text-ink-subtle" title={r.discountRule}>{r.discountRule}</span>}
+                    </span>
                     <span className="text-xs text-ink-subtle tabular-nums">{r.scholars.length}</span>
                     <Select
                       value={r.category ?? ''}
@@ -439,6 +468,10 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
                     {r.include && r.category === 'special' && !r.specialFunding && <Badge tone="warning">Needs funding</Badge>}
                   </li>
                 ))}
+                      </ul>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
 

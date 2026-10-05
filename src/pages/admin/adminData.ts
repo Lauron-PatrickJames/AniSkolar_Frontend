@@ -93,10 +93,25 @@ export interface SfagAgreement { certifyConsulted: boolean; certifyAccuracy: boo
 
 export type FormType = 'standard' | 'sfag' | 'polca' | 'alumni';
 
+// The student's profile now (GET /api/applications), to compare with the
+// details stored on the application when it was submitted.
+export interface CurrentProfile {
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  course?: string;
+  programCode?: string;
+  yearLevel?: string;
+  section?: string;
+  gpa?: number;
+  updatedAt?: string;
+}
+
 export interface AdminApplication {
   _id: string;
   studentNumber: string;
   avatarUrl?: string;
+  currentProfile?: CurrentProfile;
   scholarshipId: string;
   scholarshipName: string;
   applicationFormType: FormType;
@@ -288,18 +303,8 @@ export function isReturningScholar(applications: { createdAt: string }[]): boole
   return academicCycles(applications).length >= 2;
 }
 
-// Names are often stored in capitals ("JUAN DELA CRUZ"). Shows them in title
-// case; a name typed in mixed case ("Juan de la Cruz") is kept as typed.
-// Keep the raw value for search and exports.
-export function titleCaseName(raw: string): string {
-  const s = (raw ?? '').trim().replace(/\s+/g, ' ');
-  const letters = s.replace(/[^A-Za-zÀ-ÿ]/g, '');
-  if (!letters || (letters !== letters.toUpperCase() && letters !== letters.toLowerCase())) return s;
-  return s
-    .toLowerCase()
-    .replace(/(^|[\s\-'’(])([a-zà-ÿ])/g, (_m, before: string, ch: string) => before + ch.toUpperCase())
-    .replace(/\b(Ii|Iii|Iv|Vi|Vii|Viii)\b/g, m => m.toUpperCase());
-}
+// Shared with the student portal (utils/names.ts).
+export { titleCaseName } from '../../utils/names';
 
 // --- Requests ----------------------------------------------------------------
 

@@ -1,564 +1,218 @@
 import React, { useState } from 'react';
-import { StudentProfile } from '../../types';
-import { User, Mail, GraduationCap, School, Layers, TrendingUp, Edit3, CheckCircle2, X, Cake, Flag, MapPinned, Heart, MapPin, Phone, Smartphone, Users, ArrowRight, User as UserIcon } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { BadgeCheck, GraduationCap, Info, MapPin, Pencil, User, Users } from 'lucide-react';
+import { ProfileChanges, SaveResult, StudentProfile, VerificationGroup } from '../../types';
+import { Badge, Button, Toast } from '../admin/AdminUI';
+import EditProfileDialog from '../../components/profile/EditProfileDialog';
+import { DraftField, DraftSection } from '../../components/profile/profileForm';
+import { displayName, nameInitials, titleCaseName } from '../../utils/names';
+import {
+  addressLines, formatGpa, formatLongDate, formatPhone, guardianTypeOf, openCorrectionRequest, programDetails,
+  verificationOf, verificationText
+} from '../../utils/profile';
+
+// The student's profile: a header with who they are, then Academic,
+// Personal, Contact and Parents & guardian as label / value lists. Every
+// section opens the edit dialog on its own tab.
 
 interface ProfileProps {
   student: StudentProfile;
-  onUpdateProfile: (updated: StudentProfile) => void;
+  onUpdateProfile: (changes: ProfileChanges) => Promise<SaveResult>;
+  onStudentUpdated: (student: StudentProfile) => void;
   id?: string;
 }
 
-const inputClass =
-  'block w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all';
-const labelClass = 'block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5';
+const GROUPS: VerificationGroup[] = ['program', 'enrollment', 'gpa'];
 
-const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Separated', 'Divorced'];
+export default function Profile({ student, onUpdateProfile, onStudentUpdated, id }: ProfileProps) {
+  const [editing, setEditing] = useState<{ section: DraftSection; field?: DraftField } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
-const show = (v?: string | number | null) => (v === undefined || v === null || v === '' ? 'Not provided' : v);
+  const name = displayName(student);
+  const program = programDetails(student);
+  const verified = GROUPS.filter(g => verificationOf(student, g));
+  const allVerified = verified.length === GROUPS.length;
+  const edit = (section: DraftSection, field?: DraftField) => setEditing({ section, field });
+  const subtitle = [program.code || program.name, student.yearLevel, student.section].filter(Boolean).join(' · ');
 
-function formatDateDisplay(v?: string | null): string {
-  if (!v) return 'Not provided';
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return 'Not provided';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
-}
-
-function toDateInputValue(v?: string | null): string {
-  if (!v) return '';
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 10);
-}
-
-function DetailRow({ icon: Icon, label, value, accent, missing }: {
-  icon: React.ElementType; label: string; value: React.ReactNode; accent?: boolean; missing?: boolean;
-}) {
   return (
-    <div className="flex items-center space-x-3 sm:space-x-4">
-      <div className={`p-2 sm:p-2.5 rounded-xl border shrink-0 ${
-        missing ? 'bg-slate-50 border-dashed border-slate-200 text-slate-300'
-          : accent ? 'bg-emerald-50 border-emerald-100 text-brand-green'
-          : 'bg-slate-50 border-slate-100 text-slate-500'
-      }`}>
-        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+    <div id={id} data-admin className="space-y-6 text-ink">
+      {/* Header */}
+      <section aria-label="Your profile" className="rounded-card bg-surface p-5 shadow-card ring-1 ring-line sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          {student.avatarUrl && !avatarFailed ? (
+            <img src={student.avatarUrl} alt="" onError={() => setAvatarFailed(true)} className="size-16 shrink-0 rounded-full object-cover ring-1 ring-line" />
+          ) : (
+            <span aria-hidden className="flex size-16 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-lg font-semibold text-accent">{nameInitials(name)}</span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-title font-semibold text-ink">{name}</h2>
+                  {allVerified && <Badge tone="success" icon={BadgeCheck}>Verified</Badge>}
+                </div>
+                <p className="mt-1 text-sm text-ink-muted">
+                  <span className="tabular-nums">{student.studentNumber}</span>
+                  {subtitle && <> · {subtitle}</>}
+                </p>
+                <p className="mt-0.5 break-all text-sm text-ink-muted">{student.email}</p>
+              </div>
+              <Button icon={Pencil} onClick={() => edit('academic')} className="self-start">Edit profile</Button>
+            </div>
+          </div>
+        </div>
+        {!allVerified && (
+          <div className="mt-5 flex items-start gap-2.5 rounded-control bg-surface-muted px-3.5 py-3 text-sm">
+            <Info className="mt-0.5 size-4 shrink-0 text-ink-subtle" aria-hidden />
+            <div>
+              <p className="font-medium text-ink">Some details are self-reported</p>
+              <p className="mt-0.5 text-ink-muted">
+                Your program, year level and GPA are as you entered them. The scholarship office checks them against university records when it reviews your applications, and marks them verified.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+        <Section title="Academic" icon={GraduationCap} onEdit={() => edit('academic')}>
+          <Row label="Program" tag={<VerifyTag student={student} group="program" />}
+            value={program.name ? <>{program.name}{program.code && <span className="text-ink-subtle"> · {program.code}</span>}</> : null}
+            onAdd={() => edit('academic', 'programCode')} />
+          <Row label="Department" value={program.college} onAdd={() => edit('academic', 'programCode')} />
+          <Row label="Year level" tag={<VerifyTag student={student} group="enrollment" />} value={student.yearLevel} onAdd={() => edit('academic', 'yearLevel')} />
+          <Row label="Section" value={student.section} onAdd={() => edit('academic', 'section')} />
+          <Row label="Cumulative GPA" tag={<VerifyTag student={student} group="gpa" />} value={formatGpa(student.gpa)} onAdd={() => edit('academic', 'gpa')} />
+        </Section>
+
+        <Section title="Personal" icon={User} onEdit={() => edit('personal')}>
+          <Row label="Date of birth" value={formatLongDate(student.dateOfBirth)} onAdd={() => edit('personal', 'dateOfBirth')} />
+          <Row label="Place of birth" value={student.placeOfBirth} onAdd={() => edit('personal', 'placeOfBirth')} />
+          <Row label="Nationality" value={student.nationality} onAdd={() => edit('personal', 'nationality')} />
+          <Row label="Civil status" value={student.civilStatus} onAdd={() => edit('personal', 'civilStatus')} />
+        </Section>
+
+        <Section title="Contact" icon={MapPin} onEdit={() => edit('contact')}>
+          <Row label="University email" value={<span className="break-all">{student.email}</span>} />
+          <Row label="Mobile" value={formatPhone(student.mobileNumber)} onAdd={() => edit('contact', 'mobileNumber')} />
+          <Row label="Telephone" value={student.telephoneNumber} onAdd={() => edit('contact', 'telephoneNumber')} />
+          <Row label="Home address" value={<Lines lines={addressLines(student)} />} empty={!student.homeAddress && !student.cityMunicipality} onAdd={() => edit('contact', 'homeAddress')} />
+        </Section>
+
+        <Section title="Parents & guardian" icon={Users} onEdit={() => edit('family')}>
+          <Row label="Father" value={person(student.fatherName, student.fatherContactNo)} onAdd={() => edit('family', 'fatherName')} />
+          <Row label="Mother" value={person(student.motherName, student.motherContactNo)} onAdd={() => edit('family', 'motherName')} />
+          <Row label="Guardian" value={<Guardian student={student} />} empty={!guardianTypeOf(student)} onAdd={() => edit('family', 'guardianType')} />
+        </Section>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider leading-none">{label}</p>
-        <p className={`text-sm font-semibold mt-1 break-words sm:truncate ${
-          missing ? 'text-slate-300 italic font-medium' : accent ? 'text-brand-green' : 'text-slate-800'
-        }`}>
-          {value}
-        </p>
-      </div>
+
+      {editing && (
+        <EditProfileDialog
+          student={student}
+          initialSection={editing.section}
+          focusField={editing.field}
+          onSave={onUpdateProfile}
+          onStudentUpdated={onStudentUpdated}
+          onClose={saved => { setEditing(null); if (saved) setToast('Profile saved.'); }}
+        />
+      )}
+      {toast && <Toast message={toast} onClose={() => setToast(null)} duration={4000} />}
     </div>
   );
 }
 
-type EditTab = 'academic' | 'personal' | 'contact' | 'family';
+// --- Pieces ------------------------------------------------------------------------------
 
-const EDIT_TABS: { key: EditTab; label: string; icon: React.ElementType }[] = [
-  { key: 'academic', label: 'Academic', icon: GraduationCap },
-  { key: 'personal', label: 'Personal Details', icon: Cake },
-  { key: 'contact', label: 'Contact Info', icon: MapPin },
-  { key: 'family', label: 'Parents / Guardian', icon: Users },
-];
-
-// How long the Save Changes button stays disabled right after landing on
-// the Family tab — guards against a fast accidental double-click on Next
-// (which sits in the exact same spot Save Changes then occupies) from
-// submitting the form before the student ever sees the tab.
-const SUBMIT_GUARD_MS = 400;
-
-export default function Profile({ student, onUpdateProfile, id }: ProfileProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState<EditTab>('academic');
-  const [justSwitched, setJustSwitched] = useState(false);
-
-  // Academic
-  const [course, setCourse] = useState(student.course);
-  const [college, setCollege] = useState(student.college);
-  const [programCode, setProgramCode] = useState(student.programCode || '');
-  const [yearLevel, setYearLevel] = useState(student.yearLevel);
-  const [section, setSection] = useState(student.section || '');
-  const [gpa, setGpa] = useState(student.gpa);
-
-  // Personal Details
-  const [dateOfBirth, setDateOfBirth] = useState(toDateInputValue(student.dateOfBirth));
-  const [middleName, setMiddleName] = useState(student.middleName || '');
-  const [nationality, setNationality] = useState(student.nationality || '');
-  const [placeOfBirth, setPlaceOfBirth] = useState(student.placeOfBirth || '');
-  const [civilStatus, setCivilStatus] = useState(student.civilStatus || '');
-  const [avatarFailed, setAvatarFailed] = useState(false);
-
-  // Contact Information
-  const [homeAddress, setHomeAddress] = useState(student.homeAddress || '');
-  const [cityMunicipality, setCityMunicipality] = useState(student.cityMunicipality || '');
-  const [province, setProvince] = useState(student.province || '');
-  const [zipCode, setZipCode] = useState(student.zipCode || '');
-  const [country, setCountry] = useState(student.country || 'Philippines');
-  const [telephoneNumber, setTelephoneNumber] = useState(student.telephoneNumber || '');
-  const [mobileNumber, setMobileNumber] = useState(student.mobileNumber || '');
-
-  // Parents / Guardian
-  const [fatherName, setFatherName] = useState(student.fatherName || '');
-  const [motherName, setMotherName] = useState(student.motherName || '');
-  const [guardianName, setGuardianName] = useState(student.guardianName || '');
-  const [guardianRelationship, setGuardianRelationship] = useState(student.guardianRelationship || '');
-  const [guardianAddress, setGuardianAddress] = useState(student.guardianAddress || '');
-  const [guardianContactNo, setGuardianContactNo] = useState(student.guardianContactNo || '');
-
-  const [showToast, setShowToast] = useState(false);
-
-  const openEditor = (tab: EditTab = 'academic') => {
-    setActiveTab(tab);
-    setIsEditing(true);
-  };
-
-  const goToTab = (tab: EditTab) => {
-    setActiveTab(tab);
-    // Only the transition into the final (Family) tab needs the guard —
-    // that's the only spot where Next's position gets reused by Save Changes.
-    if (tab === 'family') {
-      setJustSwitched(true);
-      setTimeout(() => setJustSwitched(false), SUBMIT_GUARD_MS);
-    }
-  };
-
-  const goToNextTab = () => {
-    const nextTab = EDIT_TABS[EDIT_TABS.findIndex(t => t.key === activeTab) + 1].key;
-    goToTab(nextTab);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (justSwitched) return; // extra safety net alongside the disabled attribute
-
-    const updatedProfile: StudentProfile = {
-      ...student,
-      course, college, programCode, yearLevel, section, gpa,
-      middleName, dateOfBirth, nationality, placeOfBirth, civilStatus,
-      homeAddress, cityMunicipality, province, zipCode, country, telephoneNumber, mobileNumber,
-      fatherName, motherName, guardianName, guardianRelationship, guardianAddress, guardianContactNo,
-    };
-
-    onUpdateProfile(updatedProfile);
-    setIsEditing(false);
-
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
-  };
-
+function Section({ title, icon: Icon, onEdit, children }: { title: string; icon: React.ElementType; onEdit: () => void; children: React.ReactNode }) {
+  const headingId = `profile-${title.toLowerCase().replace(/[^a-z]+/g, '-')}`;
   return (
-    <div id={id} className="space-y-4 sm:space-y-6">
-      {/* Toast Notification */}
-      <AnimatePresence>
-        {showToast && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-4 sm:top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-xl shadow-xl flex items-center space-x-3 border border-slate-800 w-[calc(100%-2rem)] sm:w-auto justify-center"
-          >
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-            <span className="text-xs font-semibold">Profile updated successfully!</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <section aria-labelledby={headingId} className="rounded-card bg-surface shadow-card ring-1 ring-line">
+      <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+        <h3 id={headingId} className="flex items-center gap-2 text-sm font-semibold text-ink">
+          <Icon className="size-4 text-ink-subtle" aria-hidden />
+          {title}
+        </h3>
+        <Button size="sm" variant="ghost" onClick={onEdit} aria-label={`Edit ${title.toLowerCase()}`}>Edit</Button>
+      </header>
+      <dl className="divide-y divide-line px-5">{children}</dl>
+    </section>
+  );
+}
 
-      {/* Main Profile Info Banner */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-        <div className="h-24 sm:h-32 bg-linear-to-r from-brand-green/80 to-slate-900/90 relative overflow-hidden">
-          <div
-            className="absolute inset-0 opacity-[0.07]"
-            style={{
-              backgroundImage: 'radial-gradient(circle, white 1.5px, transparent 1.5px)',
-              backgroundSize: '18px 18px'
-            }}
-          />
-        </div>
-
-        <div className="px-4 sm:px-6 pb-6 sm:pb-8 relative">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between -mt-12 sm:-mt-16 mb-4 sm:mb-6 gap-4">
-            {student.avatarUrl && !avatarFailed ? (
-              <img
-                src={student.avatarUrl}
-                alt={student.name}
-                onError={() => setAvatarFailed(true)}
-                className="w-20 h-20 sm:w-28 sm:h-28 rounded-2xl object-cover shadow-lg border-2 border-white shrink-0"
-              />
-            ) : (
-              <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-2xl bg-brand-green text-white flex items-center justify-center font-display font-black text-2xl sm:text-4xl shadow-lg border-4 border-white shrink-0">
-                {student.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-              </div>
+// One label / value line. An empty value shows "Not provided" with an Add link.
+function Row({ label, value, tag, onAdd, empty }: {
+  label: string;
+  value: React.ReactNode;
+  tag?: React.ReactNode;
+  onAdd?: () => void;
+  // Overrides the emptiness check for composite values.
+  empty?: boolean;
+}) {
+  const isEmpty = empty ?? (value === null || value === undefined || value === '');
+  return (
+    <div className="grid grid-cols-1 gap-x-4 gap-y-0.5 py-3 sm:grid-cols-[9.5rem_minmax(0,1fr)]">
+      <dt className="text-sm text-ink-subtle">{label}</dt>
+      <dd className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1 text-sm text-ink">
+        {isEmpty ? (
+          <span className="text-ink-subtle">
+            Not provided
+            {onAdd && (
+              <>
+                {' · '}
+                <button type="button" onClick={onAdd} className="font-medium text-accent hover:underline" aria-label={`Add ${label.toLowerCase()}`}>Add</button>
+              </>
             )}
-
-            <button
-              onClick={() => openEditor('academic')}
-              className="inline-flex items-center justify-center space-x-1.5 self-start sm:self-auto text-xs font-bold uppercase tracking-wider text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-4 sm:px-5 py-2.5 sm:py-3 rounded-lg transition-colors focus:outline-hidden w-full sm:w-auto"
-            >
-              <Edit3 className="w-4 h-4 text-slate-500" />
-              <span>Edit Profile</span>
-            </button>
-          </div>
-
-          <div className="space-y-1">
-            <h2 className="font-display font-black text-xl sm:text-2xl text-slate-900 tracking-tight break-words">{student.name}</h2>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">{student.studentNumber}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Grid of Profile Details */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* Academic Status */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900">Academic Status</h3>
-            <button onClick={() => openEditor('academic')} className="text-slate-300 hover:text-brand-green transition-colors p-1 -m-1">
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="space-y-3 sm:space-y-4">
-            <DetailRow icon={GraduationCap} label="Course / Program" value={show(student.course)} missing={!student.course} />
-            <DetailRow icon={School} label="College Department" value={show(student.college)} missing={!student.college} />
-            <DetailRow icon={Layers} label="Year Level / Section" value={`${show(student.yearLevel)}${student.section ? ` — ${student.section}` : ''}`} missing={!student.yearLevel} />
-            <DetailRow icon={TrendingUp} label="Cumulative GPA" value={student.gpa ? `${student.gpa} / 4.00` : 'Not provided'} accent={!!student.gpa} missing={!student.gpa} />
-          </div>
-        </div>
-
-        {/* Personal Details */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900">Personal Details</h3>
-            <button onClick={() => openEditor('personal')} className="text-slate-300 hover:text-brand-green transition-colors p-1 -m-1">
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="space-y-3 sm:space-y-4">
-            <DetailRow icon={UserIcon} label="Middle Name" value={show(student.middleName)} missing={!student.middleName} />
-            <DetailRow icon={Cake} label="Date of Birth" value={formatDateDisplay(student.dateOfBirth)} missing={!student.dateOfBirth} />
-            <DetailRow icon={Flag} label="Nationality" value={show(student.nationality)} missing={!student.nationality} />
-            <DetailRow icon={MapPinned} label="Place of Birth" value={show(student.placeOfBirth)} missing={!student.placeOfBirth} />
-            <DetailRow icon={Heart} label="Civil Status" value={show(student.civilStatus)} missing={!student.civilStatus} />
-          </div>
-        </div>
-
-        {/* Contact Information */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900">Contact Information</h3>
-            <button onClick={() => openEditor('contact')} className="text-slate-300 hover:text-brand-green transition-colors p-1 -m-1">
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="space-y-3 sm:space-y-4">
-            <DetailRow icon={Mail} label="University Email" value={student.email} />
-            <DetailRow
-              icon={MapPin}
-              label="Home Address"
-              value={show(
-                [student.homeAddress, student.cityMunicipality, student.province, student.zipCode, student.country]
-                  .filter(Boolean)
-                  .join(', ') || undefined
-              )}
-              missing={!student.homeAddress}
-            />
-            <DetailRow icon={Phone} label="Telephone Number" value={show(student.telephoneNumber)} missing={!student.telephoneNumber} />
-            <DetailRow icon={Smartphone} label="Mobile Number" value={show(student.mobileNumber)} missing={!student.mobileNumber} />
-          </div>
-        </div>
-
-        {/* Parents / Guardian Information */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4 sm:space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h3 className="font-display font-extrabold text-sm sm:text-base text-slate-900">Parents / Guardian Information</h3>
-            <button onClick={() => openEditor('family')} className="text-slate-300 hover:text-brand-green transition-colors p-1 -m-1">
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div className="space-y-3 sm:space-y-4">
-            <DetailRow icon={User} label="Father" value={show(student.fatherName)} missing={!student.fatherName} />
-            <DetailRow icon={User} label="Mother" value={show(student.motherName)} missing={!student.motherName} />
-            <DetailRow
-              icon={Users}
-              label="Guardian"
-              value={student.guardianName ? `${student.guardianName}${student.guardianRelationship ? ` (${student.guardianRelationship})` : ''}` : 'Not provided'}
-              missing={!student.guardianName}
-            />
-            <DetailRow icon={Phone} label="Guardian Contact No." value={show(student.guardianContactNo)} missing={!student.guardianContactNo} />
-          </div>
-        </div>
-      </div>
-
-      {/* Edit Profile Modal */}
-      <AnimatePresence>
-        {isEditing && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-0 sm:p-4">
-            <motion.div
-              initial={{ scale: 0.98, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.98, opacity: 0 }}
-              className="bg-white sm:rounded-2xl border-0 sm:border border-slate-200 shadow-2xl max-w-3xl w-full h-full sm:h-auto sm:max-h-[85vh] flex flex-col overflow-hidden"
-            >
-              <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                <span className="font-display font-bold text-sm sm:text-base text-slate-800">Edit Portal Profile</span>
-                <button onClick={() => setIsEditing(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form
-                onSubmit={handleSubmit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && activeTab !== 'family') {
-                    e.preventDefault();
-                  }
-                }}
-                className="flex-1 flex min-h-0 relative"
-              >
-                {/* Tab rail (desktop) */}
-                <div className="w-44 shrink-0 border-r border-slate-100 bg-slate-50/50 py-3 hidden sm:block">
-                  {EDIT_TABS.map(tab => {
-                    const Icon = tab.icon;
-                    const isActive = activeTab === tab.key;
-                    return (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        onClick={() => goToTab(tab.key)}
-                        className={`w-full flex items-center gap-2 px-4 py-3 text-xs font-bold text-left transition-colors border-l-2 ${
-                          isActive
-                            ? 'border-brand-green text-brand-green bg-white'
-                            : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-                        }`}
-                      >
-                        <Icon className="w-4 h-4 shrink-0" />
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Mobile tab select */}
-                <div className="sm:hidden absolute top-0 left-0 right-0 border-b border-slate-100 bg-white z-10 px-2 py-2 flex gap-1 overflow-x-auto">
-                  {EDIT_TABS.map(tab => (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() => goToTab(tab.key)}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors shrink-0 ${
-                        activeTab === tab.key ? 'bg-brand-green text-white' : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Tab content */}
-                <div className="flex-1 min-w-0 flex flex-col">
-                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 mt-11 sm:mt-0">
-                    {activeTab === 'academic' && (
-                      <div className="space-y-4">
-                        <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-500 flex items-start sm:items-center gap-2">
-                          <Mail className="w-3.5 h-3.5 shrink-0 mt-0.5 sm:mt-0" />
-                          <span>Signed in as <span className="font-semibold text-slate-700 break-all">{student.email}</span> — name and email are managed by your account, not this form.</span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className={labelClass}>Course</label>
-                            <input type="text" value={course} onChange={(e) => setCourse(e.target.value)} className={inputClass} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>College Department</label>
-                            <input type="text" value={college} onChange={(e) => setCollege(e.target.value)} className={inputClass} />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          <div>
-                            <label className={labelClass}>Program Code</label>
-                            <input type="text" placeholder="e.g. BSIT" value={programCode} onChange={(e) => setProgramCode(e.target.value)} className={inputClass} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>Year Level</label>
-                            <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} className={inputClass}>
-                              <option value="1st Year">1st Year</option>
-                              <option value="2nd Year">2nd Year</option>
-                              <option value="3rd Year">3rd Year</option>
-                              <option value="4th Year">4th Year</option>
-                              <option value="5th Year">5th Year</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className={labelClass}>Section</label>
-                            <input type="text" placeholder="e.g. IT-4A" value={section} onChange={(e) => setSection(e.target.value)} className={inputClass} />
-                          </div>
-                        </div>
-                        <div>
-                          <label className={labelClass}>Cumulative GPA</label>
-                          <input type="number" step="0.01" min="1" max="5" value={gpa} onChange={(e) => setGpa(e.target.value)} className={inputClass} />
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTab === 'personal' && (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className={labelClass}>Date of Birth</label>
-                            <input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className={inputClass} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>Civil Status</label>
-                            <select value={civilStatus} onChange={(e) => setCivilStatus(e.target.value)} className={inputClass}>
-                              <option value="">Select...</option>
-                              {CIVIL_STATUS_OPTIONS.map(opt => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                        <div>
-                          <label className={labelClass}>Middle Name</label>
-                          <input type="text" value={middleName} onChange={(e) => setMiddleName(e.target.value)} className={inputClass} placeholder="Leave blank if you don't have one" />
-                          <p className="mt-1 text-[11px] text-slate-400">Your first and last name come from your university account.</p>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className={labelClass}>Nationality</label>
-                            <input type="text" value={nationality} onChange={(e) => setNationality(e.target.value)} className={inputClass} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>Place of Birth</label>
-                            <input type="text" value={placeOfBirth} onChange={(e) => setPlaceOfBirth(e.target.value)} className={inputClass} />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTab === 'contact' && (
-                      <div className="space-y-4">
-                        <div>
-                          <label className={labelClass}>Complete Home Address</label>
-                          <input type="text" value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} className={inputClass} />
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          <div>
-                            <label className={labelClass}>City / Municipality</label>
-                            <input type="text" value={cityMunicipality} onChange={(e) => setCityMunicipality(e.target.value)} className={inputClass} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>Province</label>
-                            <input type="text" value={province} onChange={(e) => setProvince(e.target.value)} className={inputClass} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>Zip Code</label>
-                            <input type="text" value={zipCode} onChange={(e) => setZipCode(e.target.value)} className={inputClass} />
-                          </div>
-                        </div>
-                        <div>
-                          <label className={labelClass}>Country</label>
-                          <input type="text" value={country} onChange={(e) => setCountry(e.target.value)} className={inputClass} />
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className={labelClass}>Telephone Number</label>
-                            <input type="tel" value={telephoneNumber} onChange={(e) => setTelephoneNumber(e.target.value)} className={inputClass} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>Mobile Number</label>
-                            <input type="tel" value={mobileNumber} onChange={(e) => setMobileNumber(e.target.value)} className={inputClass} />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTab === 'family' && (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className={labelClass}>Father</label>
-                            <input type="text" value={fatherName} onChange={(e) => setFatherName(e.target.value)} className={inputClass} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>Mother</label>
-                            <input type="text" value={motherName} onChange={(e) => setMotherName(e.target.value)} className={inputClass} />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className={labelClass}>Guardian</label>
-                            <input type="text" value={guardianName} onChange={(e) => setGuardianName(e.target.value)} className={inputClass} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>Relationship (Guardian)</label>
-                            <input type="text" placeholder="e.g. Aunt, Grandparent" value={guardianRelationship} onChange={(e) => setGuardianRelationship(e.target.value)} className={inputClass} />
-                          </div>
-                        </div>
-                        <div>
-                          <label className={labelClass}>Guardian Address</label>
-                          <input type="text" value={guardianAddress} onChange={(e) => setGuardianAddress(e.target.value)} className={inputClass} />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Guardian Contact No.</label>
-                          <input type="tel" value={guardianContactNo} onChange={(e) => setGuardianContactNo(e.target.value)} className={inputClass} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Footer: tab progress + actions */}
-                  <div className="border-t border-slate-100 px-4 sm:px-6 py-3 sm:py-4 flex flex-col-reverse sm:flex-row items-center justify-between gap-3 shrink-0 bg-white">
-                    <div className="hidden sm:flex items-center gap-1.5">
-                      {EDIT_TABS.map((tab, idx) => (
-                        <React.Fragment key={tab.key}>
-                          {idx > 0 && <div className="w-3 h-px bg-slate-200" />}
-                          <button
-                            type="button"
-                            onClick={() => goToTab(tab.key)}
-                            className={`w-2 h-2 rounded-full transition-colors ${
-                              activeTab === tab.key ? 'bg-brand-green' : 'bg-slate-200 hover:bg-slate-300'
-                            }`}
-                            aria-label={`Go to ${tab.label}`}
-                          />
-                        </React.Fragment>
-                      ))}
-                    </div>
-                    <div className="flex gap-3 w-full sm:w-auto sm:ml-auto">
-                      <button
-                        type="button"
-                        onClick={() => setIsEditing(false)}
-                        className="flex-1 sm:flex-none px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-100 rounded-lg transition-colors focus:outline-hidden"
-                      >
-                        Cancel
-                      </button>
-                      {activeTab !== 'family' ? (
-                        <button
-                          type="button"
-                          onClick={goToNextTab}
-                          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark rounded-lg transition-colors shadow-sm focus:outline-hidden"
-                        >
-                          <span>Next</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      ) : (
-                        <button
-                          type="submit"
-                          disabled={justSwitched}
-                          className="flex-1 sm:flex-none px-5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark rounded-lg transition-colors shadow-sm focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Save Changes
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </form>
-            </motion.div>
-          </div>
+          </span>
+        ) : (
+          <span className="min-w-0 wrap-break-word">{value}</span>
         )}
-      </AnimatePresence>
+        {!isEmpty && tag}
+      </dd>
     </div>
+  );
+}
+
+function Lines({ lines }: { lines: string[] }) {
+  return <>{lines.map((l, i) => <span key={i} className="block">{l}</span>)}</>;
+}
+
+function person(name?: string, contact?: string): React.ReactNode {
+  if (!name) return null;
+  return (
+    <>
+      <span className="block">{titleCaseName(name)}</span>
+      {contact && <span className="block text-ink-muted tabular-nums">{formatPhone(contact)}</span>}
+    </>
+  );
+}
+
+function Guardian({ student }: { student: StudentProfile }) {
+  const type = guardianTypeOf(student);
+  const contact = student.guardianContactNo ? <span className="block text-ink-muted tabular-nums">{formatPhone(student.guardianContactNo)}</span> : null;
+  if (type === 'father' || type === 'mother') {
+    return <><span className="block">{type === 'father' ? 'Father' : 'Mother'} <span className="text-ink-subtle">(same as above)</span></span>{contact}</>;
+  }
+  if (type === 'other') {
+    return (
+      <>
+        <span className="block">{titleCaseName(student.guardianName ?? '')}{student.guardianRelationship && <span className="text-ink-subtle"> · {student.guardianRelationship}</span>}</span>
+        {contact}
+        {student.guardianAddress && <span className="block text-ink-muted">{student.guardianAddress}</span>}
+      </>
+    );
+  }
+  return null;
+}
+
+// "Verified" (with who and when) or "Self-reported"; "Correction requested"
+// while a request is open.
+function VerifyTag({ student, group }: { student: StudentProfile; group: VerificationGroup }) {
+  if (openCorrectionRequest(student, group)) return <Badge tone="warning">Correction requested</Badge>;
+  const v = verificationOf(student, group);
+  return (
+    <span title={verificationText(student, group)}>
+      {v ? <Badge tone="success" icon={BadgeCheck}>Verified</Badge> : <Badge>Self-reported</Badge>}
+    </span>
   );
 }

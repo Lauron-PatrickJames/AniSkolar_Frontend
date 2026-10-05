@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Compass, Megaphone, UserCircle, LogOut, X, ChevronLeft, ChevronRight, Award, Calculator } from 'lucide-react';
+import { LayoutDashboard, Compass, Megaphone, UserCircle, LogOut, X, ChevronLeft, ChevronRight, Award, Calculator, RefreshCw, Clock } from 'lucide-react';
 import { StudentProfile } from '../types';
 import logo from '/src/assets/logo.png';
 
@@ -10,6 +10,8 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onLogout: () => void;
+  // Scholars (an approved application) also get Renewal and Duty Hours.
+  isScholar?: boolean;
   id?: string;
 }
 
@@ -20,11 +22,16 @@ export default function Sidebar({
   isOpen,
   onClose,
   onLogout,
+  isScholar = false,
   id
 }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
     { id: 'explore', name: 'Explore Grants', icon: Compass },
+    ...(isScholar ? [
+      { id: 'renewals', name: 'Renewal', icon: RefreshCw },
+      { id: 'duty-hours', name: 'Duty Hours', icon: Clock },
+    ] : []),
     { id: 'gpa-calculator', name: 'GPA Calculator', icon: Calculator },
     { id: 'announcements', name: 'Announcements', icon: Megaphone },
     { id: 'profile', name: 'Profile', icon: UserCircle }

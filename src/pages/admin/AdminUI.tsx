@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useId, useLayoutEffect, us
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
-  AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock,
+  AlertCircle, AlertTriangle, ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock,
   Check, Copy, FileText, Inbox, Info, MoreHorizontal, RefreshCw, RotateCcw, RotateCw, Search, Send, X, XCircle
 } from 'lucide-react';
 import { AppStatus, HistoryStatus } from './adminData';
@@ -414,7 +414,8 @@ function useFieldProps(props: { id?: string; 'aria-describedby'?: string; 'aria-
 }
 
 const CONTROL =
-  'block w-full rounded-control border-0 bg-surface text-sm text-ink ring-1 ring-inset ring-line-strong placeholder:text-ink-subtle transition-shadow ' +
+  // 16px text on phones so iOS doesn't zoom into a focused field.
+  'block w-full rounded-control border-0 bg-surface text-base sm:text-sm text-ink ring-1 ring-inset ring-line-strong placeholder:text-ink-subtle transition-shadow ' +
   'focus:ring-2 focus:ring-accent focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-subtle ' +
   'aria-[invalid=true]:ring-danger aria-[invalid=true]:focus:ring-danger';
 
@@ -474,6 +475,419 @@ export function SearchInput({ value, onChange, placeholder, label, className = '
         className={`${CONTROL} h-9 pl-9 pr-3`}
       />
     </div>
+  );
+}
+
+// --- Popovers (combobox list, date picker) ---------------------------------------
+
+// Where to draw a popover under (or, without room, above) its anchor. The
+// popover is portalled to <body> with fixed positioning, so a scrolling
+// dialog body doesn't clip it; it follows the anchor on scroll and resize.
+function usePopoverPosition(open: boolean, anchorRef: React.RefObject<HTMLElement | null>, popoverHeight: number) {
+  const [style, setStyle] = useState<React.CSSProperties>({});
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const r = anchorRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const below = window.innerHeight - r.bottom;
+      const placeAbove = below < popoverHeight + 8 && r.top > below;
+      setStyle({
+        position: 'fixed',
+        left: Math.max(8, Math.min(r.left, window.innerWidth - Math.max(r.width, 288) - 8)),
+        minWidth: r.width,
+        ...(placeAbove ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
+      });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [open, anchorRef, popoverHeight]);
+  return style;
+}
+
+// Closes a popover on a pointer press outside it and its anchor.
+function useDismissOnOutsidePress(open: boolean, refs: React.RefObject<HTMLElement | null>[], onDismiss: () => void) {
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (refs.some(r => r.current?.contains(e.target as Node))) return;
+      onDismissRef.current();
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+}
+
+// Case- and accent-insensitive text for matching ("Dasmariñas" ~ "dasmarinas").
+const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+export interface ComboboxOption { value: string; label: string; hint?: string }
+
+// A text input that filters a list of options as you type (WAI-ARIA
+// combobox with a listbox popup). Picking an option sets `value`; typed
+// text that isn't an option reverts on blur. A `value` that isn't among
+// the options (older free-text data) is shown as is until changed.
+export function Combobox({ value, onChange, options, placeholder, disabled, emptyText = 'No matches', onBlur, label }: {
+  value: string;
+  onChange: (value: string) => void;
+  options: ComboboxOption[];
+  placeholder?: string;
+  disabled?: boolean;
+  emptyText?: string;
+  onBlur?: () => void;
+  // Accessible name when not inside a <Field>.
+  label?: string;
+}) {
+  const field = useFieldProps({});
+  const listId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const selected = options.find(o => o.value === value);
+  const selectedText = selected?.label ?? value;
+  const [query, setQuery] = useState(selectedText);
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState(false);
+  const [active, setActive] = useState(0);
+
+  useEffect(() => { if (!open) setQuery(selectedText); }, [selectedText, open]);
+
+  const filtered = useMemo(() => {
+    const q = fold(query.trim());
+    return !typed || !q ? options : options.filter(o => fold(o.label).includes(q) || (o.hint && fold(o.hint).includes(q)));
+  }, [options, query, typed]);
+
+  const style = usePopoverPosition(open, wrapRef, 256);
+  const close = () => { setOpen(false); setTyped(false); setQuery(selectedText); };
+  useDismissOnOutsidePress(open, [wrapRef, listRef], close);
+
+  const openList = () => {
+    if (disabled) return;
+    setOpen(true);
+    const i = options.findIndex(o => o.value === value);
+    setActive(i >= 0 ? i : 0);
+  };
+  const choose = (o: ComboboxOption) => {
+    onChange(o.value);
+    setQuery(o.label);
+    setOpen(false);
+    setTyped(false);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [active, open]);
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) { openList(); return; }
+      const n = filtered.length;
+      if (n) setActive(i => (e.key === 'ArrowDown' ? (i + 1) % n : (i - 1 + n) % n));
+    } else if (e.key === 'Enter' && open) {
+      e.preventDefault();
+      if (filtered[active]) choose(filtered[active]);
+    } else if (e.key === 'Escape' && open) {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    } else if (e.key === 'Tab' && open) {
+      // Tabbing away keeps an exact match ("cavite" -> Cavite).
+      const exact = filtered.find(o => fold(o.label) === fold(query.trim()));
+      if (typed && exact) choose(exact); else close();
+    }
+  };
+
+  const activeId = open && filtered[active] ? `${listId}-${active}` : undefined;
+  return (
+    <div ref={wrapRef} className="relative min-w-0">
+      <input
+        ref={inputRef}
+        {...field}
+        type="text"
+        role="combobox"
+        aria-label={field.id ? undefined : label}
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={activeId}
+        autoComplete="off"
+        disabled={disabled}
+        placeholder={placeholder}
+        value={query}
+        onChange={e => { setQuery(e.target.value); setTyped(true); setActive(0); if (!open) setOpen(true); }}
+        onClick={() => (open ? undefined : openList())}
+        onFocus={e => e.currentTarget.select()}
+        onKeyDown={onKeyDown}
+        onBlur={() => onBlur?.()}
+        className={`${CONTROL} h-9 truncate pl-3 pr-9`}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-hidden
+        disabled={disabled}
+        onClick={() => { if (open) close(); else { openList(); inputRef.current?.focus(); } }}
+        className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-ink-subtle disabled:cursor-not-allowed"
+      >
+        <ChevronDown className={`size-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && createPortal(
+        <div data-admin style={{ ...style, zIndex: 70 }}>
+          <ul
+            ref={listRef}
+            id={listId}
+            role="listbox"
+            aria-label={label}
+            className="max-h-64 w-full max-w-[calc(100vw-1rem)] overflow-y-auto rounded-control bg-surface py-1 text-sm text-ink shadow-overlay"
+          >
+            {filtered.length === 0 && <li className="px-3 py-2 text-ink-subtle">{emptyText}</li>}
+            {filtered.map((o, i) => (
+              <li
+                key={o.value}
+                id={`${listId}-${i}`}
+                data-index={i}
+                role="option"
+                aria-selected={o.value === value}
+                onMouseDown={e => e.preventDefault()}
+                onMouseEnter={() => setActive(i)}
+                onClick={() => { choose(o); inputRef.current?.focus(); }}
+                className={`flex cursor-pointer items-center justify-between gap-3 px-3 py-2 ${i === active ? 'bg-accent-subtle' : ''}`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{o.label}</span>
+                  {o.hint && <span className="block truncate text-xs text-ink-subtle">{o.hint}</span>}
+                </span>
+                {o.value === value && <Check className="size-4 shrink-0 text-accent" aria-hidden />}
+              </li>
+            ))}
+          </ul>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const toIso = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fromIso = (s: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+};
+const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const addMonths = (d: Date, n: number) => {
+  const target = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const last = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  return new Date(target.getFullYear(), target.getMonth(), Math.min(d.getDate(), last));
+};
+
+export function formatDateLong(iso: string): string {
+  const d = fromIso(iso);
+  return d ? `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}` : '';
+}
+
+// A date field shown like a text input ("January 20, 2005") that opens a
+// calendar: month and year selects, then a grid of days. Keyboard: arrows
+// move a day / week, Page Up/Down a month, Home/End the week, Enter picks,
+// Escape closes. `value` and `min`/`max` are YYYY-MM-DD.
+export function DatePicker({ value, onChange, min, max, placeholder = 'Select a date', disabled, onBlur, defaultMonth }: {
+  value: string;
+  onChange: (value: string) => void;
+  min?: string;
+  max?: string;
+  placeholder?: string;
+  disabled?: boolean;
+  onBlur?: () => void;
+  // Where the calendar opens when there's no value yet (YYYY-MM-DD), e.g.
+  // about 18 years ago for a birthday. Defaults to today.
+  defaultMonth?: string;
+}) {
+  const field = useFieldProps({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const minDate = min ? fromIso(min) : new Date(1900, 0, 1);
+  const maxDate = max ? fromIso(max) : new Date(new Date().getFullYear() + 10, 11, 31);
+  const clamp = (d: Date) => (minDate && d < minDate ? minDate : maxDate && d > maxDate ? maxDate : d);
+  const [open, setOpen] = useState(false);
+  const startDate = () => clamp(fromIso(value) ?? (defaultMonth ? fromIso(defaultMonth) : null) ?? new Date());
+  const [focusDate, setFocusDate] = useState<Date>(startDate);
+  const style = usePopoverPosition(open, triggerRef, 360);
+
+  const close = (refocus = true) => {
+    setOpen(false);
+    if (refocus) triggerRef.current?.focus();
+    onBlur?.();
+  };
+  useDismissOnOutsidePress(open, [triggerRef, popRef], () => close(false));
+
+  const openPicker = () => {
+    if (disabled) return;
+    setFocusDate(startDate());
+    setOpen(true);
+  };
+
+  // Keep keyboard focus on the focused day while the grid is open.
+  useEffect(() => {
+    if (!open) return;
+    const el = gridRef.current?.querySelector<HTMLElement>(`[data-date="${toIso(focusDate)}"]`);
+    if (el && popRef.current?.contains(document.activeElement) && document.activeElement?.getAttribute('data-date')) el.focus();
+  }, [focusDate, open]);
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => gridRef.current?.querySelector<HTMLElement>('[tabindex="0"]')?.focus());
+  }, [open]);
+
+  const pick = (d: Date) => {
+    onChange(toIso(d));
+    close();
+  };
+
+  const onGridKey = (e: React.KeyboardEvent) => {
+    const moves: Record<string, () => Date> = {
+      ArrowLeft: () => addDays(focusDate, -1),
+      ArrowRight: () => addDays(focusDate, 1),
+      ArrowUp: () => addDays(focusDate, -7),
+      ArrowDown: () => addDays(focusDate, 7),
+      PageUp: () => addMonths(focusDate, e.shiftKey ? -12 : -1),
+      PageDown: () => addMonths(focusDate, e.shiftKey ? 12 : 1),
+      Home: () => addDays(focusDate, -focusDate.getDay()),
+      End: () => addDays(focusDate, 6 - focusDate.getDay()),
+    };
+    if (moves[e.key]) {
+      e.preventDefault();
+      setFocusDate(clamp(moves[e.key]()));
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      pick(focusDate);
+    }
+  };
+
+  // Escape closes the calendar (not the dialog behind it); Tab cycles
+  // within it, since it's portalled outside the dialog's focus trap.
+  const onPopKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    } else if (e.key === 'Tab') {
+      const items = Array.from(popRef.current?.querySelectorAll<HTMLElement>('select, button:not([disabled])') ?? [])
+        .filter(el => el.tabIndex !== -1);
+      if (!items.length) return;
+      const i = items.indexOf(document.activeElement as HTMLElement);
+      e.preventDefault();
+      const next = e.shiftKey ? (i <= 0 ? items.length - 1 : i - 1) : (i + 1) % items.length;
+      items[next].focus();
+    }
+  };
+
+  const year = focusDate.getFullYear();
+  const month = focusDate.getMonth();
+  const first = new Date(year, month, 1);
+  const days = Array.from({ length: 42 }, (_, i) => addDays(first, i - first.getDay()));
+  const years: number[] = [];
+  for (let y = (maxDate ?? new Date()).getFullYear(); y >= (minDate ?? new Date(1900, 0, 1)).getFullYear(); y--) years.push(y);
+  const selectedIso = value;
+  const todayIso = toIso(new Date());
+  const inRange = (d: Date) => (!minDate || d >= minDate) && (!maxDate || d <= maxDate);
+  const selectClass = `${CONTROL} h-8 appearance-none pl-2.5 pr-7 text-sm font-medium`;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        {...field}
+        disabled={disabled}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => (open ? close() : openPicker())}
+        onKeyDown={e => { if (e.key === 'ArrowDown') { e.preventDefault(); openPicker(); } }}
+        className={`${CONTROL} flex h-9 items-center justify-between gap-2 px-3 text-left`}
+      >
+        <span className={value ? 'text-ink' : 'text-ink-subtle'}>{value ? formatDateLong(value) : placeholder}</span>
+        <CalendarDays className="size-4 shrink-0 text-ink-subtle" aria-hidden />
+      </button>
+      {open && createPortal(
+        <div data-admin style={{ ...style, zIndex: 70 }}>
+          <div
+            ref={popRef}
+            role="dialog"
+            aria-label="Choose a date"
+            onKeyDown={onPopKey}
+            className="w-80 max-w-[calc(100vw-1rem)] rounded-card bg-surface p-3 text-ink shadow-overlay"
+          >
+            <div className="mb-2 flex items-center gap-1.5">
+              <IconButton icon={ChevronLeft} label="Previous month" onClick={() => setFocusDate(clamp(addMonths(focusDate, -1)))} />
+              <div className="relative flex-1">
+                <select aria-label="Month" value={month} onChange={e => setFocusDate(clamp(new Date(year, Number(e.target.value), Math.min(focusDate.getDate(), new Date(year, Number(e.target.value) + 1, 0).getDate()))))} className={selectClass}>
+                  {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-subtle" aria-hidden />
+              </div>
+              <div className="relative w-[5.5rem] shrink-0">
+                <select aria-label="Year" value={year} onChange={e => setFocusDate(clamp(new Date(Number(e.target.value), month, Math.min(focusDate.getDate(), new Date(Number(e.target.value), month + 1, 0).getDate()))))} className={selectClass}>
+                  {years.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-subtle" aria-hidden />
+              </div>
+              <IconButton icon={ChevronRight} label="Next month" onClick={() => setFocusDate(clamp(addMonths(focusDate, 1)))} />
+            </div>
+            <div ref={gridRef} role="grid" aria-label={`${MONTHS[month]} ${year}`} onKeyDown={onGridKey}>
+              <div role="row" className="grid grid-cols-7 text-center text-xs text-ink-subtle">
+                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => <span key={d} role="columnheader" className="py-1">{d}</span>)}
+              </div>
+              {Array.from({ length: 6 }, (_, w) => (
+                <div key={w} role="row" className="grid grid-cols-7">
+                  {days.slice(w * 7, w * 7 + 7).map(d => {
+                    const iso = toIso(d);
+                    const outside = d.getMonth() !== month;
+                    const isSelected = iso === selectedIso;
+                    const isFocus = iso === toIso(focusDate);
+                    const enabled = inRange(d);
+                    return (
+                      <span key={iso} role="gridcell" aria-selected={isSelected}>
+                        <button
+                          type="button"
+                          data-date={iso}
+                          tabIndex={isFocus ? 0 : -1}
+                          disabled={!enabled}
+                          aria-label={formatDateLong(iso)}
+                          aria-current={iso === todayIso ? 'date' : undefined}
+                          onClick={() => pick(d)}
+                          onFocus={() => { if (!isFocus) setFocusDate(d); }}
+                          className={`mx-auto flex size-9 items-center justify-center rounded-control text-sm tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-30 ${
+                            isSelected ? 'bg-accent font-semibold text-white' : outside ? 'text-ink-subtle hover:bg-neutral-bg' : 'text-ink hover:bg-neutral-bg'
+                          } ${iso === todayIso && !isSelected ? 'ring-1 ring-inset ring-line-strong' : ''}`}
+                        >
+                          {d.getDate()}
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            {value && (
+              <div className="mt-2 flex justify-end border-t border-line pt-2">
+                <Button size="sm" variant="ghost" onClick={() => { onChange(''); close(); }}>Clear</Button>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 
@@ -869,7 +1283,7 @@ const MODAL_SIZES = { sm: 'sm:max-w-md', md: 'sm:max-w-2xl', lg: 'sm:max-w-4xl' 
 // Escape or backdrop click (unless `dismissible` is false, e.g. while
 // saving), and returns focus to whatever opened it. Mount it only while
 // open: {open && <Modal …/>}.
-export function Modal({ title, description, children, footer, onClose, size = 'md', dismissible = true, initialFocusRef, role = 'dialog', icon, bodyClassName = 'p-5' }: {
+export function Modal({ title, description, children, footer, onClose, size = 'md', dismissible = true, initialFocusRef, role = 'dialog', icon, bodyClassName = 'p-5', sheet = false }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   children?: React.ReactNode;
@@ -881,6 +1295,9 @@ export function Modal({ title, description, children, footer, onClose, size = 'm
   role?: 'dialog' | 'alertdialog';
   icon?: React.ReactNode;
   bodyClassName?: string;
+  // A fixed-height dialog (its body scrolls, so switching content doesn't
+  // resize it) that fills the screen on phones. For long forms.
+  sheet?: boolean;
 }) {
   const titleId = useId();
   const descId = useId();
@@ -930,7 +1347,7 @@ export function Modal({ title, description, children, footer, onClose, size = 'm
   }, []);
 
   return createPortal(
-    <div data-admin className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+    <div data-admin className={`fixed inset-0 z-50 flex justify-center sm:items-center sm:p-6 ${sheet ? 'items-stretch' : 'items-end'}`}>
       <motion.div
         aria-hidden
         className="absolute inset-0 bg-ink/50"
@@ -949,7 +1366,9 @@ export function Modal({ title, description, children, footer, onClose, size = 'm
         initial={{ opacity: 0, y: 8, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-        className={`relative flex max-h-[92dvh] w-full flex-col rounded-t-card bg-surface text-ink shadow-overlay outline-none sm:max-h-[88dvh] sm:rounded-card ${MODAL_SIZES[size]}`}
+        className={`relative flex w-full flex-col bg-surface text-ink shadow-overlay outline-none sm:rounded-card ${MODAL_SIZES[size]} ${
+          sheet ? 'h-dvh sm:h-[min(44rem,88dvh)]' : 'max-h-[92dvh] rounded-t-card sm:max-h-[88dvh]'
+        }`}
       >
         <header className="flex shrink-0 items-start gap-3 border-b border-line px-5 py-4">
           {icon}

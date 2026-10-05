@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { getAvailableScholarships } from '../../utils/eligibility';
+import { getAvailableScholarships, profileGpaWarning } from '../../utils/eligibility';
 import { Scholarship, Application, StudentProfile } from '../../types';
 import ScholarshipCard from '../../components/ScholarshipCard';
 import { Search, SlidersHorizontal, Info, BookmarkCheck } from 'lucide-react';
@@ -14,7 +14,8 @@ interface ExploreGrantsProps {
   id?: string;
 }
 
-type CategoryFilter = 'All' | 'Academic' | 'Financial' | 'Athletic' | 'Leadership' | 'Others';
+// 'Applied' shows only the scholarships the student has applied to.
+type CategoryFilter = 'All' | 'Academic' | 'Financial' | 'Athletic' | 'Leadership' | 'Others' | 'Applied';
 
 export default function ExploreGrants({
   scholarships,
@@ -28,27 +29,34 @@ export default function ExploreGrants({
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('All');
 
   // Categories list
-  const categories: CategoryFilter[] = ['All', 'Academic', 'Financial', 'Athletic', 'Leadership', 'Others'];
+  const categories: CategoryFilter[] = ['All', 'Academic', 'Financial', 'Athletic', 'Leadership', 'Others', ...(applications.length ? ['Applied' as const] : [])];
 
-  // Track which scholarships the user has applied to
-  const appliedScholarshipIds = useMemo(() => {
-    return new Set(applications.map(app => app.scholarshipId));
+  // The student's latest application per scholarship (the API lists them
+  // newest first).
+  const applicationByScholarship = useMemo(() => {
+    const byId = new Map<string, Application>();
+    for (const app of applications) {
+      if (!byId.has(app.scholarshipId)) byId.set(app.scholarshipId, app);
+    }
+    return byId;
   }, [applications]);
 
-  // Filter & Search Logic
-  const eligibleScholarships = useMemo(
-    () => getAvailableScholarships(scholarships, student),
-    [scholarships, student]
-  );
+  // Scholarships open to this student, plus every one they've applied to —
+  // even if it's since closed or no longer matches their year level.
+  const eligibleScholarships = useMemo(() => {
+    const available = new Set(getAvailableScholarships(scholarships, student).map(s => s.id));
+    return scholarships.filter(s => available.has(s.id) || applicationByScholarship.has(s.id));
+  }, [scholarships, student, applicationByScholarship]);
 
   const filteredScholarships = useMemo(() => {
     return eligibleScholarships.filter(scholarship => {
-      const matchesCategory = activeCategory === 'All' || scholarship.category === activeCategory;
+      const matchesCategory = activeCategory === 'All'
+        || (activeCategory === 'Applied' ? applicationByScholarship.has(scholarship.id) : scholarship.category === activeCategory);
       const matchesSearch = scholarship.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             scholarship.description.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [eligibleScholarships, activeCategory, searchQuery]);
+  }, [eligibleScholarships, activeCategory, searchQuery, applicationByScholarship]);
 
   return (
     <div id={id} className="space-y-6">
@@ -86,7 +94,7 @@ export default function ExploreGrants({
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
               }`}
             >
-              {category}
+              {category === 'Applied' ? `My Applications (${applicationByScholarship.size})` : category}
             </button>
           ))}
         </div>
@@ -97,7 +105,12 @@ export default function ExploreGrants({
         <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 flex items-start gap-3">
           <BookmarkCheck className="w-5 h-5 text-brand-green shrink-0 mt-0.5" />
           <div className="text-xs text-brand-green-dark">
-            <span className="font-bold">You have {applications.length} submitted application(s).</span> You can view your active submissions status badge or submit additional applications for different eligible slots.
+            <span className="font-bold">You have {applications.length} submitted application{applications.length === 1 ? '' : 's'}.</span> Each one shows its status on its card.{' '}
+            {activeCategory !== 'Applied' && (
+              <button type="button" onClick={() => setActiveCategory('Applied')} className="font-bold underline hover:text-brand-green focus:outline-hidden">
+                Show only my applications
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -128,7 +141,9 @@ export default function ExploreGrants({
               scholarship={scholarship}
               onViewDetails={onViewDetails}
               onApply={onApply}
-              isApplied={appliedScholarshipIds.has(scholarship.id)}
+              isApplied={applicationByScholarship.has(scholarship.id)}
+              applicationStatus={applicationByScholarship.get(scholarship.id)?.status}
+              warning={applicationByScholarship.has(scholarship.id) ? null : profileGpaWarning(scholarship, student)}
             />
           ))}
         </div>

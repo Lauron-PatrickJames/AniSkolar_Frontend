@@ -81,7 +81,7 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
       params.delete('error');
       const newSearch = params.toString();
       const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}${window.location.hash}`;
-      window.history.replaceState({}, '', newUrl);
+      window.history.replaceState(window.history.state, '', newUrl);
     }
   }, []);
 

@@ -37,7 +37,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       params.delete('error');
       const newSearch = params.toString();
       const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}${window.location.hash}`;
-      window.history.replaceState({}, '', newUrl);
+      window.history.replaceState(window.history.state, '', newUrl);
     }
   }, []);
 

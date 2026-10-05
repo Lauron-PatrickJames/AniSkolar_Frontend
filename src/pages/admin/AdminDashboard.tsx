@@ -5,6 +5,8 @@ import { ScholarshipOffice } from '../../types';
 import AdminAnalytics from './AdminAnalytics';
 import AdminAnnouncements from './AdminAnnouncements';
 import FseReportPage from './FseReportPage';
+import RenewalsPage from './RenewalsPage';
+import DutyHoursPage from './DutyHoursPage';
 import ScholarshipsManager from './ScholarshipsManager';
 import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
 import AdminScholars from './AdminScholars';
@@ -15,6 +17,14 @@ import { API_BASE_URL, AdminApplication, applicantName, authHeaders, normalizeAp
 
 interface AdminDashboardProps {
   onLogout: () => void;
+}
+
+// What an admin history entry restores.
+interface AdminSnapshot { view: MainView; app: string | null; scholar: string | null; scholarship: string | null }
+interface AdminHistoryState { admin?: AdminSnapshot; prev?: AdminSnapshot | null }
+
+function sameSnapshot(a: AdminSnapshot | null | undefined, b: AdminSnapshot): boolean {
+  return !!a && a.view === b.view && a.app === b.app && a.scholar === b.scholar && a.scholarship === b.scholarship;
 }
 
 // Admin entry point: loads applications once for every section, owns the
@@ -36,7 +46,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   // Announcements, scholarship management and the FSE report are the
   // AdSO's alone; the server enforces the same rule.
   const isAdso = adminOfficeRaw === 'ADSO';
-  const hiddenViews: MainView[] = isAdso ? [] : ['announcements', 'scholarships', 'fse'];
+  const hiddenViews: MainView[] = isAdso ? [] : ['announcements', 'scholarships', 'fse', 'dutyHours'];
 
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -132,7 +142,53 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setSelectedScholarship(null);
   };
 
-  const sectionCrumb: Crumb = { label: VIEW_TITLES[mainView], onClick: () => navigate(mainView) };
+  // --- Browser history ------------------------------------------------------
+  // Each admin page (section, open application, scholar or scholarship) is
+  // a history entry under `admin`, so the browser's Back and Forward move
+  // between them. Prev / Next within the queue replace the entry, so Back
+  // returns to the list rather than through every application viewed.
+  const snapshot: AdminSnapshot = { view: mainView, app: selectedId, scholar: selectedScholar, scholarship: selectedScholarship };
+  const replaceNextEntry = useRef(true);  // the first entry replaces the one the admin landed on
+  useEffect(() => {
+    const replace = replaceNextEntry.current;
+    replaceNextEntry.current = false;
+    const current = window.history.state as AdminHistoryState | null;
+    if (sameSnapshot(current?.admin, snapshot)) return;
+    if (replace || !current?.admin) window.history.replaceState({ admin: snapshot, prev: current?.admin ? current.prev ?? null : null }, '');
+    else window.history.pushState({ admin: snapshot, prev: current.admin }, '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainView, selectedId, selectedScholar, selectedScholarship]);
+
+  const applySnapshot = (s: AdminSnapshot) => {
+    if (hiddenViews.includes(s.view)) return;
+    setMainView(s.view);
+    setSelectedId(s.app);
+    setSelectedScholar(s.scholar);
+    setSelectedScholarship(s.scholarship);
+  };
+  useEffect(() => {
+    const onPop = (event: PopStateEvent) => {
+      const s = (event.state as AdminHistoryState | null)?.admin;
+      if (s) applySnapshot(s);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdso]);
+
+  // Back to the current section's list: a history step when that's where
+  // this page was opened from, otherwise it opens the list.
+  const backToList = () => {
+    const list: AdminSnapshot = { view: mainView, app: null, scholar: null, scholarship: null };
+    if (sameSnapshot((window.history.state as AdminHistoryState | null)?.prev, list)) window.history.back();
+    else applySnapshot(list);
+  };
+  const stepTo = (id: string) => {
+    replaceNextEntry.current = true;
+    setSelectedId(id);
+  };
+
+  const sectionCrumb: Crumb = { label: VIEW_TITLES[mainView], onClick: backToList };
   const scholarName = selectedScholar
     ? (() => {
         const latest = applications
@@ -165,6 +221,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   let page: React.ReactNode;
   if (mainView === 'fse' && isAdso) {
     page = <FseReportPage getToken={getToken} />;
+  } else if (mainView === 'dutyHours' && isAdso) {
+    page = <DutyHoursPage getToken={getToken} />;
+  } else if (mainView === 'renewals') {
+    page = <RenewalsPage getToken={getToken} isAdso={isAdso} />;
   } else if (mainView === 'analytics') {
     page = (
       <AdminAnalytics
@@ -186,7 +246,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         apiBaseUrl={API_BASE_URL}
         onRefresh={fetchApplications}
         selectedStudentNumber={selectedScholar}
-        onSelectStudent={setSelectedScholar}
+        onSelectStudent={studentNumber => (studentNumber ? setSelectedScholar(studentNumber) : backToList())}
         onOpenApplication={applicationId => {
           navigate('applications');
           // Opened from a scholar, not the list: no Prev / Next.
@@ -201,7 +261,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       <ScholarshipsManager
         ownOffice="LSO"
         selectedId={selectedScholarship}
-        onSelect={setSelectedScholarship}
+        onSelect={id => (id ? setSelectedScholarship(id) : backToList())}
         onViewApplications={viewApplicationsFor}
       />
     );
@@ -212,11 +272,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         app={selected}
         adminOffice={adminOffice}
         getToken={getToken}
-        onBack={() => setSelectedId(null)}
+        onBack={backToList}
         onUpdated={mergeApplication}
         position={queueIndex >= 0 ? { index: queueIndex, total: queue.length } : null}
-        onPrev={prevId ? () => setSelectedId(prevId) : undefined}
-        onNext={nextId ? () => setSelectedId(nextId) : undefined}
+        onPrev={prevId ? () => stepTo(prevId) : undefined}
+        onNext={nextId ? () => stepTo(nextId) : undefined}
         onOpenScholar={studentNumber => { navigate('lifecycle'); setSelectedScholar(studentNumber); }}
         onAdminFieldsSaved={adminFields => setApplications(prev => prev.map(a => (a._id === selected._id ? { ...a, adminFields } : a)))}
       />

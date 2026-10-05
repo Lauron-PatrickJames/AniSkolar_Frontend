@@ -4,9 +4,15 @@ import * as XLSX from 'xlsx';
 //   FSE of a scholar  = total discount (incl. counted subsidies) / matriculation
 //   Headcount %       = scholars / student population
 //   FSE %             = total FSE / student population
-// The rows come from the registrar's scholarship export (the "Raw" sheet of
-// the FSE template): a header row with Matriculation / Discount / Total
-// Discount, then for each scholarship a "CODE:" row followed by its scholars.
+// The rows come from the registrar's scholarship export: a header row, then
+// for each scholarship a "CODE:" row followed by its scholars and a SUB
+// TOTAL. Two layouts are read:
+//   - the registrar's report (ID, NAME OF STUDENT, PROG, UNITS, fee columns,
+//     TOTAL ASSESSMENT, TOTAL DISC): matriculation is TOTAL ASSESSMENT. Its
+//     header is one column left of the data (rows start with a running
+//     number), and it runs several pages, each ending in a GRAND TOTAL;
+//   - the "Raw" sheet of the FSE template (Matriculation / Discount / Total
+//     Discount, with fund source and subcategory beside each CODE:).
 
 export type FseCategory = 'internalAcademic' | 'internalNonAcademic' | 'external' | 'special';
 export type FseTerm = '1st Semester' | '2nd Semester' | 'Midyear';
@@ -56,6 +62,11 @@ export interface FseScholarship {
   // Who funds a special program; the FSE sheet splits its headcount by it.
   specialFunding?: FseSpecialFunding | null;
   scholars: FseScholar[];
+  // Upload review only (not saved): which part of the export it came from
+  // (the registrar's report runs several pages, each ending in a GRAND
+  // TOTAL) and its discount rule, e.g. "TUITION: 50%/LAB: 0%/…".
+  part?: number;
+  discountRule?: string;
 }
 
 export interface FseReport {
@@ -94,8 +105,16 @@ export interface ParseResult {
   warnings: string[];
 }
 
+// The export names a few scholarships' category outright, e.g. "ACADEMIC
+// SCHOLARSHIP - 50% … (INTERNALLY, ACADEMIC)".
+function classifyFromName(name: string): FseCategory | null {
+  const m = /\((internally|externally)[^)]*\)/i.exec(name);
+  if (!m) return null;
+  return classify(m[1], /non[\s-]*academic/i.test(m[0]) ? 'non academic' : 'academic');
+}
+
 // Reads the registrar export. Prefers a sheet named "Raw"; otherwise the
-// first sheet with a "Matriculation" header and "CODE:" rows.
+// first sheet with a Matriculation / Total Assessment header and "CODE:" rows.
 export function parseRegistrarWorkbook(data: ArrayBuffer): ParseResult {
   const wb = XLSX.read(data, { type: 'array' });
   const order = [...wb.SheetNames].sort((a, b) => Number(b.trim().toLowerCase() === 'raw') - Number(a.trim().toLowerCase() === 'raw'));
@@ -104,18 +123,26 @@ export function parseRegistrarWorkbook(data: ArrayBuffer): ParseResult {
     const parsed = parseRows(rows);
     if (parsed) return { sheetName: name, ...parsed };
   }
-  throw new Error("Couldn't find the scholarship list. Upload the registrar's FSE export (a sheet with Matriculation and Discount columns and CODE: rows).");
+  throw new Error("Couldn't find the scholarship list. Upload the registrar's scholarship export (a sheet with TOTAL ASSESSMENT or Matriculation and discount columns, and CODE: rows).");
 }
 
+const MATRIC_HEADER = /matriculation|total assessment/;
+
+// A student ID: 8–10 digits, in one of the first columns.
+const studentIdAt = (row: unknown[]) => row.findIndex((c, i) => i <= 4 && /^\d{8,10}$/.test(text(c)));
+
 function parseRows(rows: unknown[][]): Omit<ParseResult, 'sheetName'> | null {
-  const headerIndex = rows.findIndex(r => r.some(c => /matriculation/i.test(text(c))));
+  const norm = (c: unknown) => text(c).toLowerCase().replace(/\s+/g, ' ');
+  const headerIndex = rows.findIndex(r => r.some(c => MATRIC_HEADER.test(norm(c))));
   if (headerIndex < 0) return null;
-  const header = rows[headerIndex].map(c => text(c).toLowerCase().replace(/\s+/g, ' '));
+  const header = rows[headerIndex].map(norm);
   const col = (re: RegExp) => header.findIndex(h => re.test(h));
-  const matricCol = col(/matriculation/);
-  const totalCol = col(/total discount/);
+  const matricCol = col(MATRIC_HEADER);
+  const totalCol = col(/total disc/);           // "Total Discount" or "TOTAL DISC"
   const discountCol = header.findIndex(h => /discount/.test(h) && !/total/.test(h));
   const allowanceCols = header.map((h, i) => (/allowance|financial assistance/.test(h) ? i : -1)).filter(i => i >= 0);
+  const idCol = header.findIndex(h => h === 'id' || /student (no|number|id)/.test(h));
+  const progCol = header.findIndex(h => h === 'prog' || /^program/.test(h));
   if (discountCol < 0 && totalCol < 0) return null;
 
   // Keyed by code: the export can repeat a scholarship's block.
@@ -123,45 +150,94 @@ function parseRows(rows: unknown[][]): Omit<ParseResult, 'sheetName'> | null {
   const seen = new Set<string>();
   const warnings: string[] = [];
   let current: FseScholarship | null = null;
+  let part = 1;
   let orphans = 0;
   let noMatric = 0;
   let duplicates = 0;
+  const overOne = new Set<string>();
+  let overOneCount = 0;
+  const seenIds = new Set<string>();
+  let conflicting = 0;
+  const conflictCodes = new Set<string>();
+  // This block's rows, to check against its SUB TOTAL line.
+  let blockAssessment = 0;
+  let blockDiscount = 0;
+  const offTotals: string[] = [];
 
   for (const row of rows.slice(headerIndex + 1)) {
+    const first = norm(row[0]);
+    // Each page of the registrar's report ends in a GRAND TOTAL.
+    if (/^grand total/.test(first)) { part++; current = null; continue; }
+    // The SUB TOTAL should repeat the block's total assessment and total
+    // discount; if neither appears, rows are missing or extra.
+    if (/^sub ?total/.test(first)) {
+      if (current && (blockAssessment || blockDiscount)) {
+        const amounts = row.map(num);
+        const has = (v: number) => amounts.some(a => Math.abs(a - v) < 0.05);
+        if (!has(blockAssessment) || !has(blockDiscount)) offTotals.push(current.code);
+      }
+      blockAssessment = 0;
+      blockDiscount = 0;
+      continue;
+    }
     const codeAt = row.findIndex(c => text(c).toUpperCase() === 'CODE:');
     if (codeAt >= 0) {
+      blockAssessment = 0;
+      blockDiscount = 0;
       const code = text(row[codeAt + 1]);
       current = byCode.get(code) ?? null;
       if (!current) {
+        const name = text(row[codeAt + 2]).replace(/\s+/g, ' ');
+        // The template's Raw sheet has fund source and subcategory before CODE:.
+        const fundSource = codeAt >= 2 ? text(row[0]) : '';
+        const subcategory = codeAt >= 2 ? text(row[1]) : '';
+        const rule = text(row[codeAt + 3]).replace(/\s+/g, ' ');
         current = {
           code,
-          name: text(row[codeAt + 2]).replace(/\s+/g, ' '),
-          fundSource: text(row[0]),
-          subcategory: text(row[1]),
-          category: classify(text(row[0]), text(row[1])),
-          scholars: []
+          name,
+          fundSource,
+          subcategory,
+          category: classify(fundSource, subcategory) ?? classifyFromName(name),
+          scholars: [],
+          part,
+          discountRule: /tuition:/i.test(rule) ? rule : undefined
         };
         byCode.set(code, current);
       }
       continue;
     }
-    // Scholar rows: a running number, the student ID, (name), program.
-    const studentId = text(row[3]);
-    if (!/^\d{5,}$/.test(studentId)) continue;   // subtotal / blank rows
-    const matriculation = num(row[matricCol]);
+    // Scholar rows: a running number, the student ID, (name), program, …
+    // Subtotal, page and repeated header rows have no student ID.
+    const idAt = studentIdAt(row);
+    if (idAt < 0) continue;
+    const studentId = text(row[idAt]);
+    // The report's header sits one column left of its data; line the
+    // columns up by where the ID is.
+    const shift = idCol >= 0 ? idAt - idCol : 0;
+    const at = (c: number) => row[c + shift];
+    const matriculation = num(at(matricCol));
     if (!current) { orphans++; continue; }
     if (matriculation <= 0) { noMatric++; continue; }
-    const discount = discountCol >= 0 ? num(row[discountCol]) : 0;
-    const allowances = allowanceCols.reduce((sum, i) => sum + num(row[i]), 0);
-    const totalDiscount = totalCol >= 0 && num(row[totalCol]) > 0 ? num(row[totalCol]) : discount + allowances;
+    const discount = discountCol >= 0 ? num(at(discountCol)) : 0;
+    const allowances = allowanceCols.reduce((sum, i) => sum + num(at(i)), 0);
+    const totalDiscount = totalCol >= 0 && num(at(totalCol)) > 0 ? num(at(totalCol)) : discount + allowances;
+    blockAssessment += matriculation;
+    blockDiscount += totalDiscount;
     // The same student with the same amounts under the same code is a
     // repeated row in the export, not a second scholarship.
     const key = `${current.code}|${studentId}|${matriculation}|${totalDiscount}`;
     if (seen.has(key)) { duplicates++; continue; }
     seen.add(key);
+    // The same student under the same code with *different* amounts is
+    // kept (it can't be told which is right) but flagged: it usually means
+    // two versions of a list were pasted into the file.
+    const idKey = `${current.code}|${studentId}`;
+    if (seenIds.has(idKey)) { conflicting++; conflictCodes.add(current.code); }
+    seenIds.add(idKey);
+    if (totalDiscount > matriculation + 0.005) { overOne.add(current.code); overOneCount++; }
     current.scholars.push({
       studentId,
-      program: text(row[5]) || undefined,
+      program: text(progCol >= 0 ? at(progCol) : row[5]) || undefined,
       matriculation,
       discount,
       allowances,
@@ -175,6 +251,15 @@ function parseRows(rows: unknown[][]): Omit<ParseResult, 'sheetName'> | null {
   if (duplicates) warnings.push(`${duplicates} repeated row(s) (same student, scholarship and amounts) were removed.`);
   if (orphans) warnings.push(`${orphans} row(s) appeared before any CODE: row and were skipped.`);
   if (noMatric) warnings.push(`${noMatric} scholar row(s) had no matriculation amount and were skipped.`);
+  if (conflicting) {
+    warnings.push(`${conflicting} student(s) appear twice under the same code with different amounts (code${conflictCodes.size > 1 ? 's' : ''} ${[...conflictCodes].join(', ')}), so they're counted twice. The file may contain two versions of that list — keep only the registrar's.`);
+  }
+  if (offTotals.length) {
+    warnings.push(`The rows under code${offTotals.length > 1 ? 's' : ''} ${offTotals.join(', ')} don’t add up to the SUB TOTAL in the file, so some scholars may be missing from the export. Ask the registrar for a complete export before saving.`);
+  }
+  if (overOneCount) {
+    warnings.push(`${overOneCount} scholar(s) have a total discount above their total assessment, so their FSE is above 1.00 (codes ${[...overOne].join(', ')}). Check these with the registrar before saving.`);
+  }
   const empty = scholarships.filter(s => s.scholars.length === 0).length;
   if (empty) warnings.push(`${empty} scholarship(s) have no scholars this term.`);
   return { scholarships: scholarships.filter(s => s.scholars.length > 0), warnings };

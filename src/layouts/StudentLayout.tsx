@@ -48,6 +48,7 @@ export default function StudentLayout({
         isOpen={isSidebarOpen}
         onClose={closeSidebar}
         onLogout={onLogout}
+        isScholar={applications.some(app => app.status === 'Approved')}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen relative">

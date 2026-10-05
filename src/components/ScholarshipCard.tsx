@@ -1,5 +1,12 @@
 import React from 'react';
-import { Scholarship } from '../types';
+import { Application, Scholarship } from '../types';
+
+const APPLICATION_STATUS_STYLES: Record<Application['status'], string> = {
+  'Under Evaluation': 'bg-amber-50 text-amber-800 border-amber-200',
+  'Needs Revision': 'bg-orange-50 text-orange-800 border-orange-200',
+  Approved: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  Rejected: 'bg-rose-50 text-rose-800 border-rose-200',
+};
 import { Calendar, Award, DollarSign, Dumbbell, Users, CheckCircle, ChevronRight, AlertCircle, Bookmark } from 'lucide-react';
 import { motion } from 'motion/react';
 import { acceptsOnlineApplications } from '../data/scholarships';
@@ -9,6 +16,10 @@ interface ScholarshipCardProps {
   onViewDetails: (id: string) => void;
   onApply?: (id: string) => void;
   isApplied?: boolean;
+  // The student's application status, shown on the card.
+  applicationStatus?: Application['status'];
+  // e.g. the student's profile GPA is below the scholarship's minimum.
+  warning?: string | null;
   id?: string;
   key?: React.Key;
 }
@@ -18,6 +29,8 @@ export default function ScholarshipCard({
   onViewDetails,
   onApply,
   isApplied = false,
+  applicationStatus,
+  warning,
   id
 }: ScholarshipCardProps) {
   const showsRequirements = scholarship.requirements.length > 0;
@@ -87,6 +100,13 @@ export default function ScholarshipCard({
           {scholarship.name}
         </h3>
 
+        {applicationStatus && (
+          <p className={`mb-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold ${APPLICATION_STATUS_STYLES[applicationStatus]}`}>
+            <CheckCircle className="w-3.5 h-3.5" aria-hidden />
+            Your application: {applicationStatus === 'Under Evaluation' ? 'Under evaluation' : applicationStatus === 'Needs Revision' ? 'Needs revision' : applicationStatus}
+          </p>
+        )}
+
         {/* Description */}
         <p className="text-sm text-slate-600 line-clamp-3 leading-relaxed mb-4">
           {scholarship.description}
@@ -95,6 +115,13 @@ export default function ScholarshipCard({
         {scholarship.scheduleLabel && (
           <p className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-100 text-xs text-amber-900">
             <span className="font-bold">{scholarship.scheduleLabel}:</span> {scholarship.schedule || 'To be announced.'}
+          </p>
+        )}
+
+        {warning && (
+          <p className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-100 text-xs text-amber-900 flex items-start gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px text-amber-600" aria-hidden />
+            <span>{warning}</span>
           </p>
         )}
 

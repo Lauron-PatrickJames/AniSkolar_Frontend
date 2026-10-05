@@ -3,6 +3,7 @@ import { Bell, User, LogOut, Settings, Shield, ChevronDown, Menu } from 'lucide-
 import { StudentProfile, Application } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { buildNotifications, markAllRead, markRead, clearAll, NotificationItem } from '../utils/notifications';
+import { displayName, nameInitials } from '../utils/names';
 
 interface NavbarProps {
   pageTitle: string;
@@ -37,7 +38,10 @@ export default function Navbar({
 }: NavbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [avatarFailed, setAvatarFailed] = useState(false); // add this
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  // Title case for display ("Patrick James Secuya Lauron"); the full name
+  // shows on hover where it's truncated.
+  const fullName = displayName(student);
   const [notifications, setNotifications] = useState<NotificationItem[]>(() =>
     buildNotifications(student, applications)
   );
@@ -222,17 +226,17 @@ export default function Navbar({
             {student.avatarUrl && !avatarFailed ? (
               <img
                 src={student.avatarUrl}
-                alt={student.name}
+                alt=""
                 onError={() => setAvatarFailed(true)}
                 className="w-8 h-8 rounded-full object-cover border border-emerald-100 shadow-inner shrink-0"
               />
             ) : (
               <div className="w-8 h-8 rounded-full bg-brand-green text-white font-display font-bold text-xs flex items-center justify-center border border-emerald-100 shadow-inner shrink-0">
-                {student.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                {nameInitials(fullName)}
               </div>
             )}
             <div className="hidden md:block min-w-0">
-              <p className="text-xs font-bold text-slate-700 leading-none truncate max-w-35">{student.name}</p>
+              <p className="text-xs font-bold text-slate-700 leading-none truncate max-w-40" title={fullName}>{fullName}</p>
               <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">{student.studentNumber}</p>
             </div>
             <motion.div
@@ -257,8 +261,8 @@ export default function Navbar({
                   className="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-16 sm:top-auto sm:mt-2 w-auto sm:w-56 bg-white rounded-xl border border-slate-200 shadow-xl z-20 py-1 divide-y divide-slate-100"
                 >
                   <div className="p-4 text-left min-w-0">
-                    <p className="text-xs font-bold text-slate-800 leading-tight truncate">{student.name}</p>
-                    <p className="text-[10px] text-slate-500 truncate mt-1">{student.email}</p>
+                    <p className="text-xs font-bold text-slate-800 leading-tight truncate" title={fullName}>{fullName}</p>
+                    <p className="text-[10px] text-slate-500 truncate mt-1" title={student.email}>{student.email}</p>
                     <p className="text-[10px] font-bold text-brand-green mt-1.5 px-1.5 py-0.5 rounded-sm bg-brand-green/10 inline-block truncate max-w-full">
                       {student.course}
                     </p>

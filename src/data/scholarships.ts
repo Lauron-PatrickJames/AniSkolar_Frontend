@@ -107,9 +107,21 @@ export const mockScholarships: Scholarship[] = [
     id: 's1',
     name: 'Student Financial Aid (SFA) Grant',
     eligibilityCriteria: {
-      minGpa: undefined, // varies: 85% for freshmen vs 2.50 GPA for upperclassmen — handle in filter below
       applicantType: 'any'
     },
+    gpaRequirement: {
+      stage: 'apply',
+      minGpa: 2.5,
+      noFailingGrade: true,
+      continuingOnly: true,
+      // Confirmed by the AdSO: grantees keep a 2.50 GPA every semester to renew.
+      keepToo: true,
+      note: 'Incoming freshmen qualify with a general average of 85% instead.'
+    },
+    retentionConditions: [
+      'Maintain a GPA of at least 2.50 every semester',
+      'No failing grades'
+    ],
     category: 'Financial',
     provider: {
       ...SCHOLARSHIP_OFFICE_PROVIDER,
@@ -212,6 +224,7 @@ export const mockScholarships: Scholarship[] = [
       'Enrolled in the maximum number of units required by the curriculum',
       'Good moral standing for the whole scholarship period'
     ],
+    gpaRequirement: { stage: 'keep', minGpa: 2.5, noFailingGrade: true },
     documentSlots: POLCA_DOCUMENT_SLOTS,
     requirements: requirementLabels(POLCA_DOCUMENT_SLOTS),
     process: [
@@ -287,6 +300,12 @@ export const mockScholarships: Scholarship[] = [
       'Tuition discounts exclude miscellaneous, laboratory, and other fees.'
     ],
     eligibilityCriteria: { applicantType: 'continuing' },
+    gpaRequirement: {
+      stage: 'apply',
+      minGrade: 3.25,
+      continuingOnly: true,
+      note: 'Awarded to the top 30% of upperclassmen by GPA, so meeting the grade floor alone doesn’t guarantee it.'
+    },
     eligibility: [
       'GPA within the top 30% of upperclassmen',
       'No grade lower than 3.25',
@@ -440,6 +459,14 @@ export const mockScholarships: Scholarship[] = [
       'Amounts are subject to the availability of the ROTC fund.'
     ],
     eligibilityCriteria: { applicantType: 'continuing' },
+    gpaRequirement: {
+      stage: 'apply',
+      minGpa: 2.0,
+      noFailingGrade: true,
+      continuingOnly: true,
+      audience: 'NROTC officers',
+      note: 'Also requires an earned rank, active duty and a recommendation.'
+    },
     eligibility: [
       'GPA of at least 2.0 with no failing grade',
       'Good moral character',

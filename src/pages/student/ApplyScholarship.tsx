@@ -227,7 +227,7 @@ function isValidDateOfBirth(value: string): boolean {
 function isValidGpa(value: string): boolean {
   const n = parseFloat(value);
   if (isNaN(n)) return false;
-  return n >= 1.0 && n <= 5.0;
+  return n >= 0 && n <= 4;
 }
 
 function isValidAge(value: string): boolean {
@@ -246,7 +246,7 @@ function messageForField(value: string, kind: FieldKind): string | undefined {
     case 'phone':
       return isValidPhMobile(value) ? undefined : 'Use a valid PH mobile number, e.g. 09171234567.';
     case 'gpa':
-      return isValidGpa(value) ? undefined : 'Enter a GPA between 1.00 and 5.00.';
+      return isValidGpa(value) ? undefined : 'Enter a GPA between 0.00 and 4.00.';
     case 'date':
       return isValidDateOfBirth(value) ? undefined : 'Enter a valid date of birth (age 15–100).';
     default:
@@ -682,7 +682,7 @@ function StandardApplyScholarship({
     if (isBlank(gpa)) {
       errs.gpa = REQUIRED_MSG;
     } else if (!isValidGpa(gpa)) {
-      errs.gpa = 'Enter a GPA between 1.00 and 5.00.';
+      errs.gpa = 'Enter a GPA between 0.00 and 4.00.';
     }
     return errs;
   };
@@ -967,7 +967,7 @@ function StandardApplyScholarship({
           {textField({ key: 'studentNumber', label: 'Student Number', disabled: true, value: studentNumber, onChange: () => {} })}
           {textField({ key: 'program', label: 'Academic Program (Course)', required: true, value: program, onChange: setProgram })}
           {selectField({ key: 'yearLevel', label: 'Year Level', required: true, value: yearLevel, onChange: setYearLevel, options: YEAR_LEVEL_OPTIONS, placeholder: 'Select…' })}
-          {textField({ key: 'gpa', label: 'Cumulative GPA', kind: 'gpa', required: true, placeholder: 'e.g. 1.75', value: gpa, onChange: setGpa, hint: 'Scale: 1.00 (highest) – 5.00 (lowest)' })}
+          {textField({ key: 'gpa', label: 'Cumulative GPA', kind: 'gpa', required: true, placeholder: 'e.g. 3.25', value: gpa, onChange: setGpa, hint: 'Scale: 4.00 (highest) – 0.00 (lowest)' })}
         </div>
       </Block>
     </div>

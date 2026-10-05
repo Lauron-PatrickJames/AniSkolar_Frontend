@@ -1,3 +1,22 @@
+// DLSU-D grades run 0.00–4.00, higher is better; 0.00 is a failing grade.
+export interface GpaRequirement {
+  // 'apply': needed to qualify. 'keep': needed to keep the scholarship
+  // each semester (retention).
+  stage: 'apply' | 'keep';
+  minGpa?: number;        // at least this GPA
+  minGrade?: number;      // no single grade lower than this
+  noFailingGrade?: boolean;
+  // Only upperclassmen are held to it (e.g. SFA freshmen qualify by their
+  // high school average instead).
+  continuingOnly?: boolean;
+  // What a GPA can't confirm, e.g. ranking in the top 30%.
+  note?: string;
+  // Only members of this group can get it, e.g. 'NROTC officers'.
+  audience?: string;
+  // An 'apply' rule that grantees must also keep every semester to renew.
+  keepToo?: boolean;
+}
+
 export interface Scholarship {
   id: string;
   name: string;
@@ -7,8 +26,6 @@ export interface Scholarship {
   eligibility: string[]; // keep as-is for display
   eligibilityCriteria?: {
     yearLevels?: string[];       // e.g. ['1st Year'] — omit if open to all
-    minGpa?: number;             // lower number = better GPA in your scale
-    maxGpa?: number;
     applicantType?: 'incoming' | 'continuing' | 'any';
     // --- Apply-time rules (checked in the application form, see
     // checkApplyEligibility in utils/eligibility.ts). These need answers
@@ -24,6 +41,10 @@ export interface Scholarship {
   // Conditions a grantee must keep while holding the scholarship. Shown on
   // the details page only; never used to block an application.
   retentionConditions?: string[];
+  // The scholarship's GPA rule in a form the GPA calculator, Explore and
+  // the dashboard can check (utils/eligibility.ts). The wording students
+  // read stays in `eligibility` / `retentionConditions`.
+  gpaRequirement?: GpaRequirement;
   requirements: string[];
   process: string[];
   deadline: string;
@@ -519,6 +540,32 @@ export interface Application {
   storedDocuments?: StoredDocument[];
 }
 
+export type GuardianType = 'father' | 'mother' | 'other';
+
+// A partial profile update for PATCH /api/students/me (values as sent).
+export type ProfileChanges = Record<string, string | number | boolean | undefined>;
+export interface SaveResult { ok: boolean; error?: string }
+
+// Groups of academic details verified together (Student.verification):
+// program (program, course, college), enrollment (year level, section), gpa.
+export type VerificationGroup = 'program' | 'enrollment' | 'gpa';
+
+export interface FieldVerification {
+  verifiedAt: string;
+  verifiedBy?: string;
+  verifiedByName?: string;
+  office?: string;      // 'LSO' (AdSO), 'POLCA', 'ALUMNI'
+}
+
+export interface CorrectionRequest {
+  _id?: string;
+  group: VerificationGroup;
+  message: string;
+  status: 'open' | 'resolved';
+  createdAt: string;
+  resolvedAt?: string;
+}
+
 export interface StudentProfile {
   studentNumber: string;
   // The Clerk user id this profile is linked to (models/Student.js's
@@ -561,9 +608,20 @@ export interface StudentProfile {
 
   // Parents / Guardian Information
   fatherName?: string;
+  fatherContactNo?: string;
   motherName?: string;
+  motherContactNo?: string;
+  // Who the guardian is; 'father' / 'mother' mirror that parent into the
+  // guardian fields on save (backend routes/students.js).
+  guardianType?: GuardianType;
   guardianName?: string;
   guardianRelationship?: string;
   guardianAddress?: string;
+  guardianAddressSameAsHome?: boolean;
   guardianContactNo?: string;
+
+  // Academic details are self-reported until an office verifies them,
+  // per group; a verified group can't be edited by the student.
+  verification?: Partial<Record<VerificationGroup, FieldVerification>>;
+  correctionRequests?: CorrectionRequest[];
 }

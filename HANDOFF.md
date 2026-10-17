@@ -266,6 +266,21 @@ Follow-ups:
   Kundirana, NBCMSEF and CCTI are awarded without application and aren't
   in AniSkolar (they still appear in the FSE report from the registrar).
 
+## File storage (2026-10-17)
+- Uploaded files (application/renewal documents, announcement images) go to
+  Azure Blob Storage when the backend has `AZURE_STORAGE_CONNECTION_STRING`
+  (private container, default `aniskolar-files`); otherwise MongoDB GridFS.
+  Same ObjectIds either way, so records don't change; reads fall back to
+  GridFS for files not moved yet (`utils/gridfs.js`: putFile / openFile /
+  readFile / deleteFile). Move existing files with
+  `scripts/move-files-to-azure.js` (dry run → `--apply` →
+  `--delete-from-mongodb`). See the backend README "File storage".
+- Hosting plan: frontend on Vercel; backend on one always-on instance
+  (Heroku Basic with GitHub Student credits — ticket pending; it has to stay
+  on for the scheduled-post timer and the created-scholarships cache);
+  MongoDB Atlas in Singapore; files on Azure (Azure for Students); domain
+  aniskolar.com (to buy). Clerk's free plan is enough.
+
 ## Open ideas (not done)
 - Duty hours: let the AdSO set required hours and deadline per term
   instead of each scholar typing them; head sign-off on logged hours

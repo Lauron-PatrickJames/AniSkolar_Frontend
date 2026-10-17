@@ -1,9 +1,14 @@
 # AniSkolar — hand-off notes
 
 Work branch: `claude/youthful-hawking-4wghiu` in both repos (frontend + backend).
-Not merged into `main` yet.
+Not merged into `main` yet. The repos moved to the Lauron-PatrickJames
+GitHub account (Lauron-PatrickJames/AniSkolar_Frontend and
+AniSkolar_Backend); update your `origin` with `git remote set-url` if you
+cloned the old addresses.
 
 ## After pulling
+0. Backend: run `npm install`. `node_modules` is no longer in git
+   (2026-10-17); it was committed early on by mistake.
 1. Restart the backend (new models: `Counter`, name parts on `Student`,
    `internalNotes` on `Application`).
 2. Backfill student name parts from Clerk (backend folder):
@@ -75,6 +80,14 @@ Not merged into `main` yet.
   grantees may also hold one internal scholarship of up to ₱10,000 — the
   office handles that by hand. Externally funded grants (DOST, CHED…)
   aren't in AniSkolar and have no limit.
+- **Student numbers:** 9 digits; the first 4 are the year the student
+  first enrolled at DLSU-D (1990 to next year), e.g. 202330864. Students
+  from DLSU-D high school / senior high keep their number into college
+  (e.g. a 2017 number in college), so the year says nothing about year
+  level or freshman status — don't use it for eligibility. Checked in
+  `CompleteProfilePage.tsx` and the backend's `routes/students.js`
+  (`validStudentNumber`, which also rejects non-strings so the value is
+  safe in a query).
 - **Reference numbers:** `<CODE>-<AY start year>-<SEQ>`, e.g.
   `ENT-2026-0001`, `SFAG-2026-0001`, from `utils/referenceCode.js` only. Old references
   are kept as they are.
@@ -158,7 +171,7 @@ Not merged into `main` yet.
   links, and refuses edits to verified groups (409).
   New: POST /api/students/me/correction-requests {group, message};
   PATCH /api/students/:studentNumber/verification {group, verified} (AdSO).
-- Frontend data: `src/data/programs.ts` (TO CONFIRM with Registrar),
+- Frontend data: `src/data/programs.ts` (see "Programs list" below),
   `src/data/phLocations.ts` (PSGC provinces → cities).
 - Helpers: `src/utils/profile.ts`, `displayName`/`titleCaseName` in
   `src/utils/names.ts`; AdminUI gained `Combobox`, `DatePicker`,
@@ -182,8 +195,6 @@ Not merged into `main` yet.
 Follow-ups:
 - AdSO screen to verify academic details and work through correction
   requests (the endpoints exist; no admin UI yet).
-- Confirm `programs.ts` / `programs.js` with the Registrar; confirm the
-  9-digit student number rule.
 - Run `scripts/fix-application-names.js --apply` when agreed.
 
 ## Scholarship status announcements + scheduled posts (2026-10-06)
@@ -275,11 +286,51 @@ Follow-ups:
   readFile / deleteFile). Move existing files with
   `scripts/move-files-to-azure.js` (dry run → `--apply` →
   `--delete-from-mongodb`). See the backend README "File storage".
+- Done on 2026-10-17: Azure storage account `aniskolarfiles` (Southeast
+  Asia, LRS, private). All 22 existing files copied and checked
+  byte-for-byte, then deleted from MongoDB; new uploads land in Azure
+  (25 files in total). The connection string is only in the backend's
+  `.env` — never commit it. Document downloads send
+  `Cache-Control: private, no-store`.
 - Hosting plan: frontend on Vercel; backend on one always-on instance
   (Heroku Basic with GitHub Student credits — ticket pending; it has to stay
   on for the scheduled-post timer and the created-scholarships cache);
   MongoDB Atlas in Singapore; files on Azure (Azure for Students); domain
   aniskolar.com (to buy). Clerk's free plan is enough.
+
+## Programs list and contact details (2026-10-17)
+- `src/data/programs.ts` / backend `data/programs.js` (keep identical):
+  38 undergraduate programs from dlsud.edu.ph/all-programs (Oct 2026),
+  with names as the site writes them. Kept on purpose: the 5 Bachelor of
+  Secondary Education majors (the site lists BSEd without majors) and BS
+  Environmental and Sanitary Engineering (`BSEnSE`, CEAT), an SFAG
+  priority course missing from the site. Multimedia Arts is under CEAT.
+  Removed as discontinued: AB Philosophy, Elementary and Physical
+  Education, BS Chemistry, BS Mathematics, BS Hospitality / Tourism
+  Management, and the old BSBA majors. Codes are AniSkolar's own (the site
+  has none). Existing students were all BSIT, so nobody was affected.
+- AdSO contact as on dlsud.edu.ph/scholarship: scholarship@dlsud.edu.ph,
+  AdSO_admissions@dlsud.edu.ph, Ayuntamiento de Gonzalez Bldg., Brgy.
+  Fatima 1, Dasmariñas City, Cavite 4115, local 3029 (footer and
+  `SCHOLARSHIP_OFFICE_PROVIDER`). The SFAG keeps local 3126 from its
+  guidelines.
+- The official scholarship page otherwise matches `scholarships.ts`. It
+  still lists the Performing Arts Group (PAG) scholarship, which was
+  removed because PAG declined to partner — to be decided with the group.
+  KALINGA initiatives (Lasallian Spoon, One Dasma Dormitory, Alumni
+  Legacy Night) are externally funded, so they stay out. The site's SFAG
+  PDF is the older A.Y. 2025–26 version and gives no duty hours.
+
+## Still needed
+- From the AdSO: duty hours for 75% and 50% grants (and confirm 25% = 36;
+  100% = 180), EBPSP documents (current ones are assumed), Heraldo
+  Filipino details.
+- Group decisions: re-add PAG or not; whether the closing announcement
+  starts unticked. (A "keep this one" button for a second internal
+  scholarship was considered and dropped.)
+- Deployment: buy aniskolar.com; Heroku student credits (support ticket
+  open); then Procfile/engines, Vercel config, production env vars,
+  Clerk production instance + DNS, Microsoft OAuth app, Facebook Page.
 
 ## Open ideas (not done)
 - Duty hours: let the AdSO set required hours and deadline per term

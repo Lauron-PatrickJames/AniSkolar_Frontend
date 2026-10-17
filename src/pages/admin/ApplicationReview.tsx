@@ -8,14 +8,15 @@ import { SfagAnswers, StandardProfileAnswers } from '../../components/grant-form
 import { mockScholarships, officeDisplayName } from '../../data/scholarships';
 import { GrantApplicationDetails, PolcaAdminFields, Scholarship, SfagApplicationDetails } from '../../types';
 import { isGrantFormType, toGrantDetails } from '../../utils/grantForms';
+import { useDocumentUrl } from '../../utils/documents';
 import {
   API_BASE_URL, AdminApplication, AdminDocument, AppStatus, applicantEmail, applicantName, applicantPhone,
-  applicantProgram, applicantYearLevel, authHeaders, documentUrl, formatBytes, formatDate, formatDateTime,
+  applicantProgram, applicantYearLevel, authHeaders, formatBytes, formatDate, formatDateTime,
   historyLabel, isOfficeApp, normalizeApplication, titleCaseName
 } from './adminData';
 import {
   Alert, Avatar, Badge, Button, ButtonVariant, Card, ConfirmDialog, CopyButton, EmptyState, Field, IconButton,
-  LinkButton, PageHeader, Quote, StatusBadge, STATUS_META, Tabs, Textarea, Toast, Tooltip
+  LinkButton, PageHeader, Quote, Select, StatusBadge, STATUS_META, Tabs, Textarea, Toast, Tooltip
 } from './AdminUI';
 import HistoryList from './HistoryList';
 import { buildApplicationHistory, latestDecision, partnerOfficeDecision, relativeTime } from './history';
@@ -164,7 +165,7 @@ export default function ApplicationReview({
         <Card flush className="min-w-0 lg:col-span-2" headerSlot={<Tabs<ReviewTab> tabs={tabs} value={activeTab} onChange={setActiveTab} label="Application sections" />}>
           <div role="tabpanel" aria-label={tabs.find(t => t.key === activeTab)?.label} className="p-5 sm:p-6">
             {activeTab === 'form' && <FormTab app={app} scholarship={scholarship} grantDetails={grantDetails} />}
-            {activeTab === 'documents' && <DocumentsTab docs={app.documents} missing={missing} />}
+            {activeTab === 'documents' && <DocumentsTab docs={app.documents} missing={missing} getToken={getToken} />}
             {activeTab === 'activity' && <HistoryList events={events} empty="No history recorded for this application yet." label="Application activity" />}
           </div>
         </Card>
@@ -188,6 +189,9 @@ export default function ApplicationReview({
             }}
           />
           <InternalNotes app={app} getToken={getToken} onSaved={notes => onUpdated({ ...app, internalNotes: notes })} />
+          {!adminOffice && app.scholarshipId === 's1' && app.status === 'Approved' && (
+            <SfagGrantCard app={app} getToken={getToken} onSaved={updated => { onUpdated(updated); setToast('Saved the grant percentage.'); }} />
+          )}
           {app.applicationFormType === 'polca' && (
             <PolcaAdminFieldsCard
               applicationId={app._id}
@@ -273,7 +277,7 @@ function missingDocuments(app: AdminApplication, scholarship: Scholarship | unde
   return scholarship.requirements.filter(req => !present.has(req));
 }
 
-function DocumentsTab({ docs, missing }: { docs: AdminDocument[]; missing: string[] }) {
+function DocumentsTab({ docs, missing, getToken }: { docs: AdminDocument[]; missing: string[]; getToken: () => Promise<string | null> }) {
   const [selectedId, setSelectedId] = useState<string | null>(docs[0]?.fileId ?? null);
   const selected = docs.find(d => d.fileId === selectedId) ?? null;
 
@@ -316,7 +320,7 @@ function DocumentsTab({ docs, missing }: { docs: AdminDocument[]; missing: strin
             })}
           </ul>
           <div className="min-w-0 xl:col-span-3">
-            {selected && <DocumentPreview key={selected.fileId} doc={selected} />}
+            {selected && <DocumentPreview key={selected.fileId} doc={selected} getToken={getToken} />}
           </div>
         </div>
       )}
@@ -324,15 +328,20 @@ function DocumentsTab({ docs, missing }: { docs: AdminDocument[]; missing: strin
   );
 }
 
-function DocumentPreview({ doc }: { doc: AdminDocument }) {
+function DocumentPreview({ doc, getToken }: { doc: AdminDocument; getToken: () => Promise<string | null> }) {
   const [failed, setFailed] = useState(false);
-  const url = documentUrl(doc.fileId);
+  // Fetched with the session token (the file route needs it).
+  const { url, error } = useDocumentUrl(doc.fileId, getToken);
   const isImage = doc.mimetype?.startsWith('image/');
   const isPdf = doc.mimetype === 'application/pdf';
   return (
     <figure className="space-y-2">
       <div className="flex h-[26rem] items-center justify-center overflow-hidden rounded-control bg-surface-muted ring-1 ring-inset ring-line">
-        {isImage && !failed ? (
+        {error ? (
+          <p className="px-6 text-center text-sm text-ink-muted">{error}</p>
+        ) : !url ? (
+          <p className="px-6 text-center text-sm text-ink-muted">Loading…</p>
+        ) : isImage && !failed ? (
           <img src={url} alt={doc.docType} className="max-h-full max-w-full object-contain" onError={() => setFailed(true)} />
         ) : isPdf ? (
           <iframe src={url} title={doc.docType} className="size-full bg-surface" />
@@ -342,12 +351,69 @@ function DocumentPreview({ doc }: { doc: AdminDocument }) {
       </div>
       <figcaption className="flex flex-wrap items-center justify-between gap-2">
         <span className="min-w-0 truncate text-xs text-ink-subtle">{doc.filename}</span>
-        <span className="flex gap-2">
-          <LinkButton href={url} target="_blank" rel="noreferrer" size="sm" icon={ExternalLink}>Open</LinkButton>
-          <LinkButton href={url} download={doc.filename} size="sm" icon={Download}>Download</LinkButton>
-        </span>
+        {url && (
+          <span className="flex gap-2">
+            <LinkButton href={url} target="_blank" rel="noreferrer" size="sm" icon={ExternalLink}>Open</LinkButton>
+            <LinkButton href={url} download={doc.filename} size="sm" icon={Download}>Download</LinkButton>
+          </span>
+        )}
       </figcaption>
     </figure>
+  );
+}
+
+// --- SFAG grant percentage ---------------------------------------------------------
+
+// The tuition discount granted on an approved SFAG application. It sets
+// the scholar's required duty hours (Duty hours → Hours per grant).
+function SfagGrantCard({ app, getToken, onSaved }: {
+  app: AdminApplication;
+  getToken: () => Promise<string | null>;
+  onSaved: (updated: AdminApplication) => void;
+}) {
+  const [value, setValue] = useState(app.sfagPercentage ? String(app.sfagPercentage) : '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const saved = app.sfagPercentage ? String(app.sfagPercentage) : '';
+
+  const save = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/applications/${app._id}/sfag-percentage`, {
+        method: 'PATCH',
+        headers: await authHeaders(getToken, true),
+        body: JSON.stringify({ percentage: value ? Number(value) : null }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Couldn't save the grant percentage.");
+      onSaved({ ...app, sfagPercentage: body.application?.sfagPercentage ?? null, sfagPercentageSetBy: body.application?.sfagPercentageSetBy, sfagPercentageSetAt: body.application?.sfagPercentageSetAt });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save the grant percentage.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card
+      title="Grant percentage"
+      description="Tuition discount granted. It sets the scholar's duty hours."
+      footer={value !== saved ? <Button size="sm" variant="primary" onClick={save} loading={busy}>Save</Button> : undefined}
+    >
+      <div className="space-y-2">
+        {error && <Alert tone="danger">{error}</Alert>}
+        <Field label="Percentage">
+          <Select value={value} onChange={setValue} disabled={busy}>
+            <option value="">Not set</option>
+            {[100, 75, 50, 25].map(p => <option key={p} value={String(p)}>{p}%</option>)}
+          </Select>
+        </Field>
+        {app.sfagPercentageSetAt && value === saved && (
+          <p className="text-xs text-ink-subtle">Set {formatDateTime(app.sfagPercentageSetAt)}{app.sfagPercentageSetBy ? ` by ${app.sfagPercentageSetBy}` : ''}</p>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -387,6 +453,9 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
   const [confirming, setConfirming] = useState<Decision | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Scholarships the applicant already holds, when approving needs an
+  // acknowledgement (only one internally funded scholarship is credited).
+  const [otherHeld, setOtherHeld] = useState<string[] | null>(null);
   const last = latestDecision(app, name);
   // The AdSO looking at a partner office's decided application it hasn't
   // ruled on itself (the office's decision is shown above).
@@ -402,6 +471,7 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
       return;
     }
     setNoteError('');
+    setOtherHeld(null);
     setConfirming(status);
   };
 
@@ -412,9 +482,13 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
       const response = await fetch(`${API_BASE_URL}/api/applications/${app._id}/status`, {
         method: 'PATCH',
         headers: await authHeaders(getToken, true),
-        body: JSON.stringify({ status, reviewNote: message.trim() || undefined })
+        body: JSON.stringify({ status, reviewNote: message.trim() || undefined, ...(otherHeld ? { acknowledgeOtherScholarship: true } : {}) })
       });
       const body = await response.json().catch(() => ({}));
+      if (response.status === 409 && body.code === 'holds_other_scholarship') {
+        setOtherHeld(body.held ?? []);
+        return;
+      }
       if (!response.ok) throw new Error(body.error || 'Failed to update the application.');
       setConfirming(null);
       setChanging(false);
@@ -521,14 +595,21 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
       {confirming && (
         <ConfirmDialog
           title={`${DECISIONS[confirming].action} ${name}'s application?`}
-          confirmLabel={DECISIONS[confirming].action}
+          confirmLabel={otherHeld ? 'Approve anyway' : DECISIONS[confirming].action}
           confirmIcon={DECISIONS[confirming].icon}
           tone={DECISIONS[confirming].confirmTone}
           busy={busy}
           error={error}
           onConfirm={() => submit(confirming)}
-          onCancel={() => { if (!busy) setConfirming(null); }}
+          onCancel={() => { if (!busy) { setConfirming(null); setOtherHeld(null); } }}
         >
+          {otherHeld && (
+            <div className="mb-3">
+              <Alert tone="warning" title={`${name} already holds the ${otherHeld.join(' and the ')}`}>
+                Only one internally funded scholarship can be credited. If you approve this one, the student chooses which to keep (usually the bigger grant) and is told so in their portal.
+              </Alert>
+            </div>
+          )}
           <ul className="list-disc space-y-1 pl-5 text-sm text-ink-muted">
             {consequences(confirming).map(line => <li key={line}>{line}</li>)}
           </ul>

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
 import {
-  Award, Bell, Calendar, Clock, Facebook, FileEdit, ImagePlus, Megaphone, Pencil, Pin, PinOff,
+  Award, Bell, Calendar, CalendarClock, Clock, Facebook, FileEdit, ImagePlus, Megaphone, Pencil, Pin, PinOff,
   Plus, RotateCw, Send, Trash2, X
 } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatShortDate } from './adminData';
@@ -10,11 +10,13 @@ import {
   Alert, Badge, Button, Card, Checkbox, ConfirmDialog, DropdownMenu, EmptyState, ErrorState, Field, IconButton, Modal,
   PageHeader, SearchInput, Select, TableSkeleton, Tabs, TextInput, Textarea, Toolbar, Tooltip
 } from './AdminUI';
+import { ScheduleFields, ScheduleState, formatScheduled, initialSchedule, scheduleToIso } from './announcementSchedule';
 
 // Matches frontend/src/types.ts `Announcement['category']` exactly.
 const CATEGORIES = ['General', 'Update', 'Deadline', 'Event'] as const;
 type Category = typeof CATEGORIES[number];
-type AnnouncementStatus = 'draft' | 'published';
+// 'scheduled' publishes itself at scheduledFor (the backend's timer).
+type AnnouncementStatus = 'draft' | 'scheduled' | 'published';
 
 // Facebook Page cross-post state, owned by the backend (services/facebook.js):
 //   not_posted — not on the Page (draft, or "Also post to Facebook" off)
@@ -35,6 +37,7 @@ interface AdminAnnouncement {
   status: AnnouncementStatus;
   isPinned: boolean;
   publishedAt: string | null;
+  scheduledFor?: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -65,7 +68,8 @@ const FB_DEFAULTS: Pick<AdminAnnouncement, 'images' | 'fbEnabled' | 'fbStatus' |
 
 const normalize = (raw: Partial<AdminAnnouncement>): AdminAnnouncement => ({ ...FB_DEFAULTS, ...raw } as AdminAnnouncement);
 
-const SCHOLARSHIP_NAMES: Record<string, string> = Object.fromEntries(mockScholarships.map(s => [s.id, s.name]));
+// Read at render, so scholarships the AdSO created are included.
+const scholarshipName = (id: string) => mockScholarships.find(s => s.id === id)?.name;
 
 const imageSrc = (url: string) => `${API_BASE_URL}${url}`;
 
@@ -99,6 +103,7 @@ interface EditorState {
   isPinned: boolean;
   fbEnabled: boolean;
   existingImages: AnnouncementImage[];  // images already saved on the announcement
+  schedule: ScheduleState;       // publish now or at a set time
 }
 
 // One image in the editor, in display order: either already saved
@@ -110,7 +115,7 @@ interface ImageItem {
   src: string;
 }
 
-const BLANK_FORM: EditorState = {
+const BLANK_FORM: Omit<EditorState, 'schedule'> = {
   title: '', description: '', content: '', category: 'General', scholarshipId: '', isPinned: false, fbEnabled: true, existingImages: []
 };
 
@@ -195,7 +200,10 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
   const fileInput = useRef<HTMLInputElement>(null);
   const isEdit = !!initial.id;
   const isLive = initial.status === 'published';
+  const wasScheduled = initial.status === 'scheduled';
+  const scheduling = !isLive && form.schedule.timing === 'Schedule';
   const errors = attempted ? validate(form) : {};
+  const scheduleError = attempted && scheduling ? scheduleToIso(form.schedule).error : undefined;
   const errorFields = Object.keys(errors) as TextField[];
 
   // Object URLs for newly picked images are released when they're removed
@@ -247,6 +255,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
       refs[first].current?.focus();
       return;
     }
+    if (publish && scheduling && scheduleToIso(form.schedule).error) return;
     setSavingAs(publish ? 'publish' : 'draft');
     onSave(form, images, publish);
   };
@@ -254,10 +263,16 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
   const counter = (key: TextField) => `${form[key].length}/${LIMITS[key]}`;
   const primaryLabel = isEdit && isLive
     ? 'Save changes'
-    : form.fbEnabled ? 'Publish and post to Facebook' : 'Publish';
+    : scheduling
+      ? (wasScheduled ? 'Save schedule' : 'Schedule')
+      : wasScheduled
+        ? 'Publish now'
+        : form.fbEnabled ? 'Publish and post to Facebook' : 'Publish';
   const fbHelp = isLive && form.fbEnabled
     ? 'Saving updates the Facebook post. Turning this off deletes it from the Page.'
-    : 'Posts to the Page when you publish. Saving a draft never posts.';
+    : scheduling
+      ? 'Posts to the Page when it publishes at the scheduled time.'
+      : 'Posts to the Page when you publish. Saving a draft never posts.';
 
   return (
     <Modal
@@ -271,9 +286,9 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
         <>
           <Button onClick={onClose} disabled={isSaving}>Cancel</Button>
           <Button icon={FileEdit} loading={isSaving && savingAs === 'draft'} disabled={isSaving} onClick={() => submit(false)}>
-            {isLive ? 'Unpublish to draft' : 'Save as draft'}
+            {isLive ? 'Unpublish to draft' : wasScheduled ? 'Unschedule to draft' : 'Save as draft'}
           </Button>
-          <Button variant="primary" icon={Send} loading={isSaving && savingAs === 'publish'} disabled={isSaving} onClick={() => submit(true)}>
+          <Button variant="primary" icon={scheduling ? CalendarClock : Send} loading={isSaving && savingAs === 'publish'} disabled={isSaving} onClick={() => submit(true)}>
             {primaryLabel}
           </Button>
         </>
@@ -373,6 +388,10 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
             </div>
           </div>
 
+          {!isLive && (
+            <ScheduleFields value={form.schedule} onChange={v => set('schedule', v)} disabled={isSaving} error={scheduleError} />
+          )}
+
           <Field label="Related scholarship" optional helper="The announcement also shows on that scholarship's page, e.g. varsity tryout dates on the Athletic Scholarship.">
             <Select value={form.scholarshipId} onChange={v => set('scholarshipId', v)} disabled={isSaving}>
               <option value="">None</option>
@@ -405,11 +424,12 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
 
 // --- Page ----------------------------------------------------------------------
 
-type ListTab = 'all' | 'published' | 'draft' | 'pinned';
+type ListTab = 'all' | 'published' | 'scheduled' | 'draft' | 'pinned';
 
 const EMPTY_TABS: Record<ListTab, { title: string; description: string }> = {
   all: { title: 'No announcements yet', description: 'Post updates students see on their dashboard and on the Facebook Page.' },
   published: { title: 'Nothing published', description: 'Published announcements show on the student dashboard.' },
+  scheduled: { title: 'Nothing scheduled', description: 'Schedule an announcement to publish it later on its own.' },
   draft: { title: 'No drafts', description: 'Save an announcement as a draft to finish it later.' },
   pinned: { title: 'Nothing pinned', description: 'Pin an announcement to keep it at the top of the student feed.' }
 };
@@ -504,6 +524,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
   const counts = useMemo(() => ({
     all: announcements.length,
     published: announcements.filter(a => a.status === 'published').length,
+    scheduled: announcements.filter(a => a.status === 'scheduled').length,
     draft: announcements.filter(a => a.status === 'draft').length,
     pinned: announcements.filter(a => a.isPinned).length
   }), [announcements]);
@@ -515,6 +536,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       .filter(a => {
         if (tab === 'published' && a.status !== 'published') return false;
         if (tab === 'draft' && a.status !== 'draft') return false;
+        if (tab === 'scheduled' && a.status !== 'scheduled') return false;
         if (tab === 'pinned' && !a.isPinned) return false;
         if (facebookFilter !== 'All' && a.fbStatus !== facebookFilter) return false;
         if (q && !a.title.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
@@ -523,7 +545,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       .sort((a, b) => Number(b.isPinned) - Number(a.isPinned));
   }, [announcements, search, tab, facebookFilter]);
 
-  const openCreate = () => { setSaveError(''); setEditorState({ ...BLANK_FORM }); };
+  const openCreate = () => { setSaveError(''); setEditorState({ ...BLANK_FORM, schedule: initialSchedule() }); };
   const openEdit = (a: AdminAnnouncement) => {
     setSaveError('');
     setEditorState({
@@ -536,7 +558,8 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       scholarshipId: a.scholarshipId ?? '',
       isPinned: a.isPinned,
       fbEnabled: a.fbEnabled,
-      existingImages: a.images
+      existingImages: a.images,
+      schedule: initialSchedule(a.status === 'scheduled' ? a.scheduledFor : null)
     });
   };
 
@@ -556,7 +579,9 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       data.append('category', form.category);
       data.append('scholarshipId', form.scholarshipId);
       data.append('isPinned', String(form.isPinned));
-      data.append('status', publish ? 'published' : 'draft');
+      const scheduled = publish && form.status !== 'published' && form.schedule.timing === 'Schedule';
+      data.append('status', scheduled ? 'scheduled' : publish ? 'published' : 'draft');
+      if (scheduled) data.append('scheduledFor', scheduleToIso(form.schedule).iso ?? '');
       data.append('fbEnabled', String(form.fbEnabled));
       // Saved images to keep, then new files; the backend appends new images
       // after the kept ones, which matches the editor's order (new images
@@ -682,6 +707,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
               tabs={[
                 { key: 'all', label: 'All', count: tabCount(counts.all) },
                 { key: 'published', label: 'Published', count: tabCount(counts.published) },
+                { key: 'scheduled', label: 'Scheduled', count: tabCount(counts.scheduled) },
                 { key: 'draft', label: 'Drafts', count: tabCount(counts.draft) },
                 { key: 'pinned', label: 'Pinned', count: tabCount(counts.pinned) }
               ]}
@@ -782,10 +808,11 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onToggle
   const [thumbFailed, setThumbFailed] = useState(false);
   const thumb = thumbFailed || a.images.length === 0 ? null : imageSrc(a.images[0].url);
   const published = a.status === 'published';
+  const scheduled = a.status === 'scheduled';
   const meta = [
     a.category,
-    published ? `Published ${formatShortDate(a.publishedAt)}` : `Edited ${formatShortDate(a.updatedAt)}`,
-    a.scholarshipId ? SCHOLARSHIP_NAMES[a.scholarshipId] ?? a.scholarshipId : null
+    published ? `Published ${formatShortDate(a.publishedAt)}` : scheduled ? `Publishes ${formatScheduled(a.scheduledFor)}` : `Edited ${formatShortDate(a.updatedAt)}`,
+    a.scholarshipId ? scholarshipName(a.scholarshipId) ?? a.scholarshipId : null
   ].filter(Boolean).join(' · ');
 
   return (
@@ -821,7 +848,7 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onToggle
         </div>
 
         <div className="mt-2 flex items-center gap-2 sm:mt-0 sm:shrink-0">
-          {published ? <Badge tone="success" dot>Published</Badge> : <Badge dot>Draft</Badge>}
+          {published ? <Badge tone="success" dot>Published</Badge> : scheduled ? <Badge tone="info" icon={CalendarClock}>Scheduled</Badge> : <Badge dot>Draft</Badge>}
           <FacebookIndicator a={a} retrying={retrying} retryDisabled={retryDisabled} onRetry={onRetry} />
           <div className="ml-auto flex items-center gap-0.5 sm:ml-2">
             <IconButton
@@ -884,7 +911,7 @@ function FacebookIndicator({ a, retrying, retryDisabled, onRetry }: {
     );
   }
 
-  const note = a.fbEnabled && a.status === 'draft' ? 'Posts to Facebook when published' : 'Not on Facebook';
+  const note = a.fbEnabled && a.status !== 'published' ? 'Posts to Facebook when published' : 'Not on Facebook';
   return (
     <Tooltip content={note} className={`${box} text-ink-subtle/60`}>
       <Facebook className="size-4" aria-hidden />

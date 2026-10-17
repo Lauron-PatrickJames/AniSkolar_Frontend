@@ -9,7 +9,8 @@ import {
   RenewalDecision, RenewalPeriod, RenewalStatus, RenewalTerm, academicYearLabel, currentAcademicYear, formatGpa, meetsGpa,
   periodLabel, ratingLabel
 } from '../../utils/renewals';
-import { API_BASE_URL, authHeaders, documentUrl, formatDate, formatDateTime, officeName, titleCaseName } from './adminData';
+import { openDocument } from '../../utils/documents';
+import { API_BASE_URL, authHeaders, formatDate, formatDateTime, officeName, titleCaseName } from './adminData';
 import {
   Alert, Avatar, Badge, Button, Card, Checkbox, DetailField, DropdownMenu, EmptyState, ErrorState, Field, KpiCard, KpiGrid,
   MobileList, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table, TableSkeleton, Td, TextInput, Textarea, Th, Toast, Tone, Tr
@@ -46,7 +47,8 @@ const STATE_TONE: Record<RowState, Tone> = {
 
 const rowState = (row: ScholarRow): RowState => row.renewal?.status ?? 'Not submitted';
 
-const RENEWABLE_SCHOLARSHIPS = mockScholarships.filter(s => acceptsOnlineApplications(s));
+// Read at render, so scholarships the AdSO created are included.
+const renewableScholarships = () => mockScholarships.filter(s => acceptsOnlineApplications(s));
 
 export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Promise<string | null>; isAdso: boolean }) {
   const [periods, setPeriods] = useState<RenewalPeriod[]>([]);
@@ -389,7 +391,7 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
 }) {
   const isNew = !period;
   const ay = currentAcademicYear();
-  const [scholarshipId, setScholarshipId] = useState(period?.scholarshipId ?? RENEWABLE_SCHOLARSHIPS[0]?.id ?? '');
+  const [scholarshipId, setScholarshipId] = useState(period?.scholarshipId ?? renewableScholarships()[0]?.id ?? '');
   const [academicYear, setAcademicYear] = useState(String(period?.academicYear ?? ay));
   const [term, setTerm] = useState<RenewalTerm>(period?.term ?? '2nd Semester');
   const [deadline, setDeadline] = useState(period?.deadline ?? '');
@@ -401,7 +403,7 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Suggestions for a new period: the SFA Grant's renewal uses the head
+  // Suggestions for a new period: the SFAG's renewal uses the head
   // evaluation, and the scholarship's own retention GPA (e.g. 2.50).
   useEffect(() => {
     if (!isNew) return;
@@ -456,7 +458,7 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
             <Field label="Scholarship" className="sm:col-span-3">
               <Select value={scholarshipId} onChange={setScholarshipId} disabled={saving}>
-                {RENEWABLE_SCHOLARSHIPS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {renewableScholarships().map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </Select>
             </Field>
             <Field label="Academic year">
@@ -555,7 +557,15 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
                       <span className="truncate">{requirement}</span>
                     </span>
                     {doc
-                      ? <a href={documentUrl(doc.fileId)} target="_blank" rel="noreferrer" className="shrink-0 text-sm font-medium text-accent hover:underline">View</a>
+                      ? (
+                        <button
+                          type="button"
+                          onClick={() => openDocument(doc.fileId, getToken).catch(err => window.alert(err instanceof Error ? err.message : "Couldn't open the file."))}
+                          className="shrink-0 text-sm font-medium text-accent hover:underline"
+                        >
+                          View
+                        </button>
+                      )
                       : <Badge tone="warning">Missing</Badge>}
                   </li>
                 );

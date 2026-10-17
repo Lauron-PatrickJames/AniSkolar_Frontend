@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, SaveResult } from './types';
-import { acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships } from './data/scholarships';
+import { acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships, registerCustomScholarships } from './data/scholarships';
 import { mockAnnouncements } from './data/announcements';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
+import { Holdings, applicationWindowBlock, holdingNotice, isSfagScholar } from './utils/eligibility';
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout';
@@ -37,7 +38,8 @@ const SESSION_STORAGE_KEY = 'aniskolar_session';
 // the backend isn't running on localhost anymore.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
-// Pages only scholars (an approved application) can open.
+// Pages only scholars (an approved application) can open; Duty Hours is
+// for SFAG scholars only.
 const SCHOLAR_ONLY_PAGES = ['renewals', 'duty-hours'];
 
 interface PersistedSession {
@@ -172,6 +174,9 @@ export default function App() {
   // False until the signed-in student's applications have been fetched, so
   // scholar-only pages don't redirect a scholar away while they load.
   const [applicationsLoaded, setApplicationsLoaded] = useState(false);
+  // Scholarships the student holds now (GET /api/students/me/holdings): an
+  // SFAG grantee can't apply for others.
+  const [holdings, setHoldings] = useState<Holdings | null>(null);
   // Published announcements from the API (GET /api/announcements/feed). The
   // built-in sample announcements stay as a fallback if the feed can't be
   // reached, so the portal still renders offline / without a backend.
@@ -209,7 +214,10 @@ export default function App() {
         if (!res.ok) return;
         const body = await res.json();
         if (!cancelled && Array.isArray(body.scholarships)) {
-          setScholarships(applyScholarshipOverrides(mockScholarships, body.scholarships as ScholarshipOverride[]));
+          const all = applyScholarshipOverrides(mockScholarships, body.scholarships as ScholarshipOverride[]);
+          // Scholarships the AdSO created become known to every lookup by id.
+          registerCustomScholarships(all);
+          setScholarships(all);
         }
       } catch {
         // Keep the defaults.
@@ -559,6 +567,8 @@ export default function App() {
       setCurrentPage('login');
       return;
     }
+    // Outside its window the SFAG can't be applied for (the server refuses it too).
+    if (applicationWindowBlock(id)) return;
     setSelectedScholarshipId(id);
     setResubmitApplication(null);
     // Info-only scholarships have no application form; show their details.
@@ -649,13 +659,40 @@ export default function App() {
   // Renewal and duty hours are for scholars only: a student with at least
   // one approved application (the backend refuses everyone else too).
   const isScholar = applications.some(app => app.status === 'Approved');
+  const isSfag = isSfagScholar(applications);
   const onScholarOnlyPage = SCHOLAR_ONLY_PAGES.includes(currentPage);
+  const allowedHere = currentPage === 'duty-hours' ? isSfag : isScholar;
   useEffect(() => {
-    if (onScholarOnlyPage && applicationsLoaded && !isScholar) {
+    if (onScholarOnlyPage && applicationsLoaded && !allowedHere) {
       replaceNextEntry.current = true;
       setCurrentPage('dashboard');
     }
-  }, [onScholarOnlyPage, applicationsLoaded, isScholar]);
+  }, [onScholarOnlyPage, applicationsLoaded, allowedHere]);
+
+  // Re-checked whenever an application's status changes (e.g. the SFAG
+  // Grant gets approved). Only an approved scholarship can be held.
+  const approvedKey = applications.filter(app => app.status === 'Approved').map(app => app.id).sort().join(',');
+  useEffect(() => {
+    if (!isSignedIn || role !== 'student' || !student.studentNumber || !approvedKey) {
+      setHoldings(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`${API_BASE_URL}/api/students/me/holdings`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setHoldings({ held: data.held ?? [], exclusive: data.exclusive ?? null });
+      } catch {
+        // Leave it: the server still refuses a conflicting application.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isSignedIn, role, student.studentNumber, approvedKey, getToken]);
 
   // Fetching the full application record before opening the resubmit form
   // (see handleResubmitApplication) — brief, but avoids a flash of the
@@ -792,6 +829,7 @@ export default function App() {
                     scholarships={scholarships}
                     applications={applications}
                     student={student}   // add this line
+                    holdings={holdings}
                     onViewDetails={handleViewScholarship}
                     onApply={handleApplyScholarship}
                   />
@@ -809,7 +847,7 @@ export default function App() {
               case 'renewals':
                 return isScholar ? <Renewals /> : null;
               case 'duty-hours':
-                return isScholar ? <DutyHours student={student} /> : null;
+                return isSfag ? <DutyHours student={student} /> : null;
               case 'scholarship-details':
                 return (
                   <ScholarshipDetails
@@ -819,6 +857,8 @@ export default function App() {
                     onBack={() => goBackTo('explore')}
                     onApply={handleApplyScholarship}
                     onResubmit={handleResubmitApplication}
+                    blockedReason={applicationWindowBlock(activeScholarship.id)}
+                    notice={holdingNotice(activeScholarship.id, holdings)}
                   />
                 );
               case 'apply-scholarship':

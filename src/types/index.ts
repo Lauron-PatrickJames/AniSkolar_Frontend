@@ -1,3 +1,5 @@
+import type { EligibilityRules } from '../data/requirementCatalog';
+
 // DLSU-D grades run 0.00–4.00, higher is better; 0.00 is a failing grade.
 export interface GpaRequirement {
   // 'apply': needed to qualify. 'keep': needed to keep the scholarship
@@ -6,7 +8,7 @@ export interface GpaRequirement {
   minGpa?: number;        // at least this GPA
   minGrade?: number;      // no single grade lower than this
   noFailingGrade?: boolean;
-  // Only upperclassmen are held to it (e.g. SFA freshmen qualify by their
+  // Only upperclassmen are held to it (e.g. SFAG freshmen qualify by their
   // high school average instead).
   continuingOnly?: boolean;
   // What a GPA can't confirm, e.g. ranking in the top 30%.
@@ -23,7 +25,22 @@ export interface Scholarship {
   category: 'Academic' | 'Financial' | 'Athletic' | 'Leadership' | 'Others';
   description: string;
   benefits: string[];
-  eligibility: string[]; // keep as-is for display
+  // Generated from `rules` + `customEligibility` (deriveScholarship in
+  // data/scholarships.ts); what students read.
+  eligibility: string[];
+  // Ticked rules from the shared catalog (data/requirementCatalog.ts) and
+  // extra lines that aren't checked.
+  rules?: EligibilityRules;
+  customEligibility?: string[];
+  // Ticked catalog documents and documents not on the list. For the
+  // standard and SFAG forms these are the upload slots; for POLCA and
+  // Alumni, documentKeys mirrors their fixed documentSlots.
+  documentKeys?: string[];
+  customDocuments?: string[];
+  // Created by the AdSO (stored in the database, standard form) rather
+  // than built in.
+  custom?: boolean;
+  referenceCode?: string;
   eligibilityCriteria?: {
     yearLevels?: string[];       // e.g. ['1st Year'] — omit if open to all
     applicantType?: 'incoming' | 'continuing' | 'any';
@@ -45,6 +62,7 @@ export interface Scholarship {
   // the dashboard can check (utils/eligibility.ts). The wording students
   // read stays in `eligibility` / `retentionConditions`.
   gpaRequirement?: GpaRequirement;
+  // Generated from the documents; the upload slots for standard / SFAG forms.
   requirements: string[];
   process: string[];
   deadline: string;
@@ -52,7 +70,7 @@ export interface Scholarship {
   // Determines which application form the applicant fills out.
   // 'sfag'     -> the full 5-tab detailed form (personal, contact/school,
   //               parents & guardian, siblings, assets/expenses & agreement)
-  //               modeled on the real SFA Grant application, then document
+  //               modeled on the real SFAG application, then document
   //               upload.
   // 'standard' -> the original short form (personal/academic fields) then
   //               document upload. Defaults to 'standard' if omitted, so
@@ -99,10 +117,21 @@ export interface ScholarshipOverride {
   deadline?: string;
   description?: string;
   benefits?: string[];
-  eligibility?: string[];
   process?: string[];
   submissionNote?: string;
   schedule?: string;
+  rules?: EligibilityRules;
+  customEligibility?: string[];
+  documentKeys?: string[];
+  customDocuments?: string[];
+  // Scholarships the AdSO created: their fixed details.
+  custom?: boolean;
+  name?: string;
+  office?: ScholarshipOffice;
+  category?: Scholarship['category'];
+  applicationMode?: 'online' | 'info';
+  availNote?: string;
+  referenceCode?: string;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -145,8 +174,8 @@ export interface Announcement {
   scholarshipId?: string | null;
 }
 
-// --- Detailed SFA Grant application schema ------------------------------
-// Mirrors the real 5-tab SFA Grant application form: Personal Info,
+// --- Detailed SFAG application schema ------------------------------
+// Mirrors the real 5-tab SFAG application form: Personal Info,
 // Contact & School, Parents & Guardian, Siblings, and Assets/Expenses &
 // Agreement. Used only when Scholarship.applicationFormType === 'sfag'.
 
@@ -528,7 +557,7 @@ export interface Application {
   status: 'Under Evaluation' | 'Approved' | 'Rejected' | 'Needs Revision';
   reviewNote?: string;
   submittedAt: string;
-  // Present only for applications submitted through the detailed SFA
+  // Present only for applications submitted through the detailed SFAG
   // Grant form (applicationFormType === 'sfag'). Holds the full 5-tab
   // dataset in addition to the summary fields above.
   sfagDetails?: SfagApplicationDetails;

@@ -31,6 +31,16 @@ export interface DutyLog {
   updatedAt?: string;
 }
 
+// The scholar's SFAG grant percentage (set by the AdSO on their approved
+// application) and, when the AdSO has set hours for it, the required
+// hours that apply instead of the scholar's own.
+export interface DutyRule {
+  percentage: number | null;
+  requiredHours: number | null;
+}
+
+export const GRANT_PERCENTAGES = [100, 75, 50, 25] as const;
+
 export interface DutySummary {
   regularHours: number;
   specialHours: number;

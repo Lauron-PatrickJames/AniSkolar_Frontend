@@ -12,6 +12,10 @@ interface ScholarshipDetailsProps {
   announcements?: Announcement[];
   onBack: () => void;
   onApply: (id: string) => void;
+  // Why the student can't apply (e.g. they hold the SFAG), and a
+  // heads-up shown under the header.
+  blockedReason?: string | null;
+  notice?: string | null;
   onResubmit?: (applicationId: string) => void;
   id?: string;
 }
@@ -69,6 +73,8 @@ export default function ScholarshipDetails({
   onBack,
   onApply,
   onResubmit,
+  blockedReason,
+  notice,
   id
 }: ScholarshipDetailsProps) {
   // Look up the actual application (not just whether one exists) so the
@@ -80,6 +86,7 @@ export default function ScholarshipDetails({
     .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())[0];
 
   const isApplied = !!existingApplication;
+  const blocked = !isApplied && !!blockedReason;
   const status = (existingApplication?.status as AppStatus) ?? 'Under Evaluation';
   // Status copy names the LSO; swap in whichever office reviews this grant.
   const officeShort = OFFICE_SHORT_LABELS[officeOf(scholarship)];
@@ -137,19 +144,26 @@ export default function ScholarshipDetails({
           ) : (
             <button
               onClick={() => onApply(scholarship.id)}
-              disabled={isApplied || scholarship.status === 'Closed'}
+              disabled={isApplied || blocked || scholarship.status === 'Closed'}
               className={`w-full md:w-auto font-display font-bold uppercase text-xs tracking-wider px-8 py-3.5 rounded-xl transition-all shadow-sm focus:outline-hidden text-center inline-flex items-center justify-center gap-2 ${
-                isApplied
+                isApplied || blocked
                   ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                   : 'bg-brand-green text-white hover:bg-brand-green-dark hover:shadow-md'
               }`}
             >
               {isApplied && <StatusIcon className="w-4 h-4" />}
-              {isApplied ? meta.label : 'Apply For This Scholarship'}
+              {isApplied ? meta.label : blocked ? 'Not Available To You' : 'Apply For This Scholarship'}
             </button>
           )}
         </div>
       </div>
+
+      {(blocked || (!isApplied && notice)) && (
+        <div className={`p-4 rounded-xl border flex items-start gap-2.5 ${blocked ? 'bg-slate-50 border-slate-200' : 'bg-amber-50 border-amber-100'}`}>
+          <AlertTriangle className={`w-4.5 h-4.5 shrink-0 mt-0.5 ${blocked ? 'text-slate-500' : 'text-amber-600'}`} />
+          <p className={`text-xs leading-relaxed ${blocked ? 'text-slate-700' : 'text-amber-900'}`}>{blocked ? blockedReason : notice}</p>
+        </div>
+      )}
 
       {/* Info-only scholarships: how they're awarded instead of an Apply flow. */}
       {isInfoOnly && (

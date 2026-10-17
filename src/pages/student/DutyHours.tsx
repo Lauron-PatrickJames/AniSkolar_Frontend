@@ -1,17 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { AlertCircle, CalendarDays, Clock, Loader2, Plus, Printer, RefreshCw, Trash2, Check } from 'lucide-react';
+import { AlertCircle, Building2, CalendarDays, Clock, Loader2, Plus, Printer, RefreshCw, Trash2, Check } from 'lucide-react';
 import { StudentProfile } from '../../types';
 import {
-  DUTY_TERMS, DutyEntry, DutyLog, DutySummary, DutyTerm, SpecialEvent, entryHours, format12h, formatDutyDate, formatHours,
+  DUTY_TERMS, DutyEntry, DutyLog, DutyRule, DutySummary, DutyTerm, SpecialEvent, entryHours, format12h, formatDutyDate, formatHours,
   isTimeRange, sortEntries, summarize, termLabel, todayInManila, weekday, weeklyTotals
 } from '../../utils/dutyHours';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
-// Duty hours for internal scholars, replacing the office's "SFAG Duty
-// Calculator" sheet: the scholar enters their office, deadline, required
-// hours, each duty (date, time in, time out) and special events; the day,
+// Duty hours for SFAG scholars, replacing the office's "SFAG Duty
+// Calculator" sheet: the AdSO assigns the office; the scholar enters the
+// deadline, required hours, each duty (date, time in, time out) and
+// special events; the day,
 // hours, totals and weekly breakdown are worked out here. Saved to
 // /api/duty-hours/mine so the AdSO can monitor it.
 
@@ -32,6 +33,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
   const [current, setCurrent] = useState<TermKey | null>(null);
   const [knownTerms, setKnownTerms] = useState<TermKey[]>([]);
   const [log, setLog] = useState<DutyLog | null>(null);
+  const [rule, setRule] = useState<DutyRule>({ percentage: null, requiredHours: null });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -49,6 +51,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       setCurrent(body.current);
       setKnownTerms(body.terms ?? []);
       setLog(body.log);
+      if (body.rule) setRule(body.rule);
       setTerm({ academicYear: body.log.academicYear, term: body.log.term });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load your duty hours.');
@@ -75,6 +78,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Failed to save your duty hours.');
       setLog(body.log);
+      if (body.rule) setRule(body.rule);
       setSaveState('saved');
       if (term && !knownTerms.some(k => termKey(k) === termKey(term))) setKnownTerms(prev => [term, ...prev]);
     } catch (err) {
@@ -151,7 +155,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <DetailsCard log={log} onSave={save} saveState={saveState} />
+        <DetailsCard log={log} rule={rule} onSave={save} saveState={saveState} />
         <SummaryCard summary={summary} />
       </div>
 
@@ -169,23 +173,23 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
 
 // --- Details & summary -------------------------------------------------------------
 
-function DetailsCard({ log, onSave, saveState }: {
-  log: DutyLog; onSave: (log: DutyLog) => void; saveState: 'idle' | 'saving' | 'saved';
+function DetailsCard({ log, rule, onSave, saveState }: {
+  log: DutyLog; rule: DutyRule; onSave: (log: DutyLog) => void; saveState: 'idle' | 'saving' | 'saved';
 }) {
-  const [office, setOffice] = useState(log.officeAssigned ?? '');
+  // Set by the AdSO for the scholar's grant percentage: shown, not edited.
+  const hoursFromAdso = rule.requiredHours !== null;
   const [deadline, setDeadline] = useState(log.deadline ?? '');
   const [required, setRequired] = useState(log.requiredHours !== undefined ? String(log.requiredHours) : '');
   useEffect(() => {
-    setOffice(log.officeAssigned ?? '');
     setDeadline(log.deadline ?? '');
     setRequired(log.requiredHours !== undefined ? String(log.requiredHours) : '');
-  }, [log.academicYear, log.term, log.officeAssigned, log.deadline, log.requiredHours]);
+  }, [log.academicYear, log.term, log.deadline, log.requiredHours]);
 
   const commit = () => {
     const req = required.trim() === '' ? undefined : Number(required);
     if (req !== undefined && (!Number.isFinite(req) || req < 0)) return;
-    if (office.trim() === (log.officeAssigned ?? '') && deadline === (log.deadline ?? '') && req === log.requiredHours) return;
-    onSave({ ...log, officeAssigned: office.trim(), deadline: deadline || undefined, requiredHours: req });
+    if (deadline === (log.deadline ?? '') && (hoursFromAdso || req === log.requiredHours)) return;
+    onSave({ ...log, deadline: deadline || undefined, requiredHours: hoursFromAdso ? log.requiredHours : req });
   };
 
   return (
@@ -195,20 +199,39 @@ function DetailsCard({ log, onSave, saveState }: {
         {saveState === 'saving' && <span className="text-[11px] text-slate-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Saving</span>}
         {saveState === 'saved' && <span className="text-[11px] text-brand-green font-semibold flex items-center gap-1"><Check className="w-3 h-3" /> Saved</span>}
       </div>
-      <label className="block">
+      <div>
         <span className={labelClass}>Office assigned</span>
-        <input value={office} onChange={e => setOffice(e.target.value)} onBlur={commit} maxLength={200} placeholder="e.g. University Library" className={`mt-1.5 ${inputClass}`} />
-      </label>
+        <div className="mt-1.5 flex items-start gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5">
+          <Building2 className="mt-0.5 w-4 h-4 shrink-0 text-slate-400" aria-hidden />
+          {log.officeAssigned ? (
+            <p className="text-sm font-semibold text-slate-900">{log.officeAssigned}</p>
+          ) : (
+            <p className="text-sm text-slate-500">Not assigned yet. The scholarship office will assign where you render your duty.</p>
+          )}
+        </div>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
         <label className="block">
           <span className={labelClass}>Deadline</span>
           <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} onBlur={commit} className={`mt-1.5 ${inputClass}`} />
         </label>
-        <label className="block">
-          <span className={labelClass}>Required hours</span>
-          <input type="number" inputMode="decimal" min={0} step="0.5" value={required} onChange={e => setRequired(e.target.value)} onBlur={commit} placeholder="e.g. 136" className={`mt-1.5 ${inputClass}`} />
-        </label>
+        {hoursFromAdso ? (
+          <div>
+            <span className={labelClass}>Required hours</span>
+            <p className="mt-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-900">{formatHours(rule.requiredHours)}</p>
+          </div>
+        ) : (
+          <label className="block">
+            <span className={labelClass}>Required hours</span>
+            <input type="number" inputMode="decimal" min={0} step="0.5" value={required} onChange={e => setRequired(e.target.value)} onBlur={commit} placeholder="e.g. 136" className={`mt-1.5 ${inputClass}`} />
+          </label>
+        )}
       </div>
+      {rule.percentage !== null && (
+        <p className="text-[11px] text-slate-500">
+          {rule.percentage}% grant{hoursFromAdso ? `: ${formatHours(rule.requiredHours)} hours a term, set by the scholarship office.` : '. Enter the hours the scholarship office gave you.'}
+        </p>
+      )}
     </div>
   );
 }

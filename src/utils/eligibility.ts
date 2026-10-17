@@ -139,3 +139,52 @@ export function checkApplyEligibility(scholarship: Scholarship, answers: GrantEl
 
   return reasons;
 }
+
+// --- Holding more than one scholarship ---------------------------------------
+// What a student holds comes from GET /api/students/me/holdings (backend
+// utils/exclusivity.js); these word it for the student.
+export const SFAG_ID = 's1';
+export const EXCLUSIVE_SCHOLARSHIP_ID = SFAG_ID;
+
+// The SFAG takes new applications in June and July only (Manila time),
+// before the 1st semester enrollment; the rest of the year is for
+// renewals. Mirrors inSfagApplicationWindow() in the backend's
+// utils/academicYear.js.
+export function inSfagApplicationWindow(date = new Date()): boolean {
+  const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', month: 'numeric' }).format(date));
+  return month === 6 || month === 7;
+}
+
+// Why the SFAG can't be applied for right now, or null.
+export function applicationWindowBlock(scholarshipId: string, date = new Date()): string | null {
+  if (scholarshipId !== SFAG_ID || inSfagApplicationWindow(date)) return null;
+  return 'SFAG applications are only accepted in June and July, before the 1st semester enrollment. The rest of the year is for renewals only.';
+}
+
+// Duty hours are for SFAG scholars only (the backend's requireSfagScholar
+// also counts a renewal, which needs an approved application anyway).
+export function isSfagScholar(applications: { scholarshipId: string; status: string }[]): boolean {
+  return applications.some(app => app.scholarshipId === SFAG_ID && app.status === 'Approved');
+}
+
+export interface HeldScholarship { scholarshipId: string; scholarshipName: string }
+export interface Holdings { held: HeldScholarship[]; exclusive: HeldScholarship | null }
+
+// One internally funded scholarship at a time (AdSO, Oct 2026). Every
+// scholarship in AniSkolar is internally funded. Students may still apply
+// for others; if two are approved they choose which to keep (usually the
+// bigger grant), and only that one is credited. The backend asks the AdSO
+// to acknowledge such an approval (utils/exclusivity.js).
+
+// A heads-up on a scholarship's card / details for a student who already
+// holds another one, or null.
+export function holdingNotice(scholarshipId: string, holdings: Holdings | null): string | null {
+  const others = (holdings?.held ?? []).filter(h => h.scholarshipId !== scholarshipId);
+  if (!others.length) return null;
+  return `You hold the ${others.map(o => o.scholarshipName).join(' and the ')}. You can apply, but only one internally funded scholarship can be credited at a time: if both are approved, you'll choose which to keep.`;
+}
+
+// Two (or more) approved at once: the student has to choose one.
+export function needsToChoose(holdings: Holdings | null): HeldScholarship[] | null {
+  return holdings && holdings.held.length > 1 ? holdings.held : null;
+}

@@ -1,4 +1,5 @@
-import { DocumentSlot, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../types';
+import { DocumentSlot, GpaRequirement, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../types';
+import { EligibilityRules, documentTexts, ruleLines } from './requirementCatalog';
 
 // Display names for the offices that review scholarships. Scholarships
 // without an `office` belong to the LSO.
@@ -102,10 +103,16 @@ const ALUMNI_DOCUMENT_SLOTS: DocumentSlot[] = [
   { key: 'proofOfRelation', label: 'Proof of relation with the alumnus/alumna', hint: 'e.g. PSA birth certificates showing the relationship.' }
 ];
 
-export const mockScholarships: Scholarship[] = [
+// A scholarship as written below: eligibility rules and documents are
+// picked from the shared catalog (data/requirementCatalog.ts), and the
+// `eligibility` / `requirements` text students read is generated from them
+// (deriveScholarship). POLCA and Alumni keep their own upload slots.
+type ScholarshipSource = Omit<Scholarship, 'eligibility' | 'requirements'> & { requirements?: string[] };
+
+const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
   {
     id: 's1',
-    name: 'Student Financial Aid (SFA) Grant',
+    name: 'Student Financial Aid Grant (SFAG)',
     eligibilityCriteria: {
       applicantType: 'any'
     },
@@ -123,36 +130,32 @@ export const mockScholarships: Scholarship[] = [
       'No failing grades'
     ],
     category: 'Financial',
+    // Contact as printed on the AdSO's A.Y. 2026-2027 SFAG guidelines.
     provider: {
       ...SCHOLARSHIP_OFFICE_PROVIDER,
-      office: 'Office of the Vice President for Global Engagement and External Relations, through the Scholarship Unit'
+      contact: ['scholarship@dlsud.edu.ph', '(046) 481-1900 local 3126']
     },
-    description: 'Interested students may apply for financial aid through the Office of the Vice President for Global Engagement and External Relations via the Scholarship Unit. The Scholarship Committee determines the amount of financial aid in the form of tuition discounts.\n\nThis guideline serves as the basis for approving the student financial aid grant application for new students entering the first semester of A.Y. 2026-2027.',
+    // From the AdSO's A.Y. 2026-2027 SFAG guidelines.
+    description: 'The Student Financial Aid Grant (SFAG) scholarship supports College students. While priority courses are listed, applicants from other programs are welcome.\n\nAccepted grantees render duty hours in their assigned office, with their hours based on their scholarship percentage. The percentage approved is based on the criteria set and approved by the University.',
     benefits: [
-      'Tuition discount, with the amount of financial aid determined by the Scholarship Committee based on evaluation of the applicant\'s financial need'
+      'Tuition discount of 100%, 75%, 50%, or 25% for qualified grantees of A.Y. 2026-2027',
+      'Tuition excludes miscellaneous, laboratory, and other fees',
+      '25% grantees may also hold another internally funded scholarship that provides financial assistance not exceeding ₱10,000'
     ],
-    eligibility: [
-      'Must be a Filipino citizen, preferably Catholic, with good moral character, and preferably a graduate of a public school',
-      'Incoming freshmen: general average of 85% and above',
-      'Upperclassmen: minimum cumulative GPA of 2.50',
-      'No failing grades in any subject',
-      'Must be enrolled in a minimum of 18 units of subject load, or as prescribed by the course curricula'
+    rules: { applicantType: 'any', minGpa: 2.5, noFailingGrade: true, minHsAverage: 85, minUnits: 18, residencySemesters: 1, filipino: true, noBalance: true },
+    customEligibility: [
+      'Must be a College student',
+      'Preferably Catholic, with good moral character, and preferably a graduate of a public school',
+      'Priority courses — College of Education: Bachelor of Secondary Education, Bachelor of Special Needs Education, Bachelor of Early Childhood Education; College of Criminal Justice Education: BS in Criminology; College of Business Administration and Accountancy: BSBA Major in Economics; College of Science: BS in Applied Mathematics; College of Engineering, Architecture and Technology: BS in Environmental and Sanitary Engineering (EnSE). Applicants from other programs are welcome.',
     ],
-    requirements: [
-      'Application Letter from parent/guardian addressed to the Scholarship Coordinator of DLSU-D',
-      'One (1) Recommendation Letter from guidance counselor, class adviser, subject teacher, or school principal',
-      'Personal Essay with one (1) 2x2 photo taken within the last three months',
-      'Updated Certificate of Indigency',
-      'Certificate of Income Tax Return (ITR), Affidavit of Non-Filing of ITR, or Employment Contract (for children of OFWs)',
-      'Recent utility bills (electric and water), saved in one (1) JPEG file',
-      'Picture of Residence (indoor and outdoor view), saved in one (1) JPEG file',
-      'Hand-drawn vicinity sketch map with contact information, starting from the most distinguishable barangay landmark to your home'
-    ],
+    documentKeys: ['applicationLetter', 'recommendationLetter', 'personalEssay', 'indigency', 'incomeProof', 'utilityBills', 'residencePictures', 'vicinityMap'],
     process: [
-      'Step 1: Confirm your slot, then accomplish the online scholarship application on the date specified by the office, attaching all required documents in JPEG format.',
-      'Step 2: Await notification of your application status via the DLSU-D Student Portal, email, or Schoolbook.'
+      'Step 1: Confirm your slot. The online scholarship application comes after slot confirmation.',
+      'Step 2: Accomplish the online scholarship application on the date set by the office, attaching all required documents in JPEG format.',
+      'Step 3: Await notification of your application status via the DLSU-D Student Portal, email, or Schoolbook.',
+      'No new applicants are accommodated during the second semester. The office reserves the right to reject or decline applications.'
     ],
-    deadline: 'Applications open June 1–20, 2026',
+    deadline: 'Applications open June 16 – July 3, 2026',
     status: 'Open',
     applicationFormType: 'sfag'
   },
@@ -171,18 +174,18 @@ export const mockScholarships: Scholarship[] = [
       'Rank 2: 50% tuition discount',
       'Tuition discounts exclude miscellaneous, laboratory, and other fees. The entrance scholarship is valid for one (1) semester only.'
     ],
-    eligibility: [
-      'Must be an incoming Grade 7, Grade 11, or Freshman student',
+    rules: { applicantType: 'incoming' },
+    customEligibility: [
       'Must have ranked first or second in a batch of at least 100 graduates from any DepEd-recognized school'
     ],
-    requirements: [
-      'Certificate of Ranking indicating the number of graduates',
+    documentKeys: ['rankingCertificate'],
+    customDocuments: [
       'Grade 6 / Grade 10 Report Card (for incoming Grade 7 / Grade 11), or Grade 12 Report Card / Form 138 (for incoming Freshman)'
     ],
     process: [
       'Step 1: Check your eligibility — confirm your rank and your batch\'s graduate count.',
-      'Step 2: Accomplish the Online Scholarship Form on the DLSU-D website between June 1 and 20, 2026.',
-      'Step 3: Submit the required documents alongside your accomplished online application form.',
+      'Step 2: Confirm your slot. The online application comes after slot confirmation.',
+      'Step 3: Accomplish the online scholarship form with all required fields and documents before your scheduled enrollment. Submit early to avoid processing delays.',
       'Step 4: Wait for your application status notification via the DLSU-D Student Portal. If approved, the scholarship is applied to your tuition fee upon enrollment. If disapproved, you may still enroll but will not receive the entrance scholarship discount.'
     ],
     deadline: 'Applications open June 1–20, 2026',
@@ -213,8 +216,9 @@ export const mockScholarships: Scholarship[] = [
       minHsSubjectGrade: 80,
       requiresNoBoardRelation: true
     },
-    eligibility: [
-      'High school general average of at least 85, with no grade in the 70s',
+    rules: { applicantType: 'incoming', minHsAverage: 85 },
+    customEligibility: [
+      'No high school grade in the 70s',
       'Proof of financial need, to be evaluated by the scholarship committee',
       'Must not be related by consanguinity to any current member of the POLCA Board'
     ],
@@ -265,8 +269,8 @@ export const mockScholarships: Scholarship[] = [
         relationships: ALUMNI_RELATIONSHIPS
       }
     },
-    eligibility: [
-      'Incoming freshman for SY 2026–2027',
+    rules: { applicantType: 'incoming' },
+    customEligibility: [
       'Related to an alumnus/alumna of DLSU-EAC, DLSU-Aguinaldo, or DLSU-Dasmariñas, up to the 2nd degree of consanguinity (parent, sibling, grandparent, or grandchild)'
     ],
     documentSlots: ALUMNI_DOCUMENT_SLOTS,
@@ -297,7 +301,7 @@ export const mockScholarships: Scholarship[] = [
       'Per college — Top 2–3: 50% tuition discount',
       'Per college — Top 4–5: 25% tuition discount',
       'Per college — Top 6: 10% tuition discount',
-      'Tuition discounts exclude miscellaneous, laboratory, and other fees.'
+      'Tuition discounts exclude miscellaneous, laboratory, and other fees, and apply for one semester.'
     ],
     eligibilityCriteria: { applicantType: 'continuing' },
     gpaRequirement: {
@@ -306,13 +310,11 @@ export const mockScholarships: Scholarship[] = [
       continuingOnly: true,
       note: 'Awarded to the top 30% of upperclassmen by GPA, so meeting the grade floor alone doesn’t guarantee it.'
     },
-    eligibility: [
-      'GPA within the top 30% of upperclassmen',
-      'No grade lower than 3.25',
-      'Enrolled in a minimum of 18 units',
-      'At least one (1) semester of residency at DLSU-D'
+    rules: { applicantType: 'continuing', minUnits: 18, residencySemesters: 1 },
+    customEligibility: [
+      'GPA within the top 30% for the semester, computed to four decimal places from Registrar records',
+      'No grade lower than 3.25 in any subject'
     ],
-    requirements: [],
     process: [
       'Step 1: Keep your grades up — rankings are computed from your GPA at the end of each semester.',
       'Step 2: Qualified students are identified and notified by the AdSO. No application is needed.'
@@ -322,11 +324,11 @@ export const mockScholarships: Scholarship[] = [
   },
   {
     id: 's6',
-    name: 'Employee Benefit Privilege Scholarship Program (EBPSP)',
+    name: 'Enhanced Brother President Scholarship Program (EBPSP)',
     category: 'Others',
     provider: SCHOLARSHIP_OFFICE_PROVIDER,
     targetApplicants: 'Legal dependents of DLSU-D and DLSMHSI employees',
-    description: 'The Employee Benefit Privilege Scholarship Program grants tuition discounts to the legal dependents of De La Salle University-Dasmariñas (DLSU-D) and De La Salle Medical and Health Sciences Institute (DLSMHSI) employees.',
+    description: 'The Enhanced Brother President Scholarship Program grants tuition discounts to the legal dependents (children) of De La Salle University-Dasmariñas (DLSU-D) and De La Salle Medical and Health Sciences Institute (DLSMHSI) employees, up to four children per employee.',
     benefits: [
       '1st availment: 100% tuition discount',
       '2nd availment: 75% tuition discount',
@@ -335,20 +337,21 @@ export const mockScholarships: Scholarship[] = [
       'Includes waivers for some miscellaneous fees (e.g. medical, dental, and air-conditioning fees)'
     ],
     eligibilityCriteria: { applicantType: 'any' },
-    eligibility: [
-      'Must be a legal dependent of a DLSU-D or DLSMHSI employee',
+    rules: { applicantType: 'any' },
+    customEligibility: [
+      'Must be a legal dependent (child) of a DLSU-D or DLSMHSI employee, up to four children per employee',
       'Must maintain satisfactory academic progress'
     ],
     retentionConditions: [
       'Satisfactory academic progress every semester',
       'The privilege is non-transferable and cannot be deferred'
     ],
-    // Assumed — the official page doesn't list the documents. The AdSO
-    // should confirm these.
-    requirements: [
+    // Assumed — neither the official page nor the AdSO's list (Oct 2026)
+    // gives the documents. The AdSO should confirm these.
+    documentKeys: ['reportCard'],
+    customDocuments: [
       'Certificate of employment of the parent/guardian from DLSU-D or DLSMHSI',
-      'PSA birth certificate showing your relationship to the employee',
-      'Latest report card or certificate of grades'
+      'PSA birth certificate showing your relationship to the employee'
     ],
     process: [
       'Step 1: Confirm that your parent/guardian is a DLSU-D or DLSMHSI employee.',
@@ -367,23 +370,23 @@ export const mockScholarships: Scholarship[] = [
     applicationMode: 'info',
     availNote: 'Awarded to recruited varsity players. Players are evaluated by their coach and approved by the Sports Development Office (SDO) Director — there is no online application.',
     targetApplicants: 'Recruited varsity players',
-    description: 'The Athletic Scholarship supports varsity players who represent DLSU-D in Basketball, Volleyball, Athletics, Badminton, Table Tennis, Swimming, and Chess.',
+    description: 'The Athletic Scholarship is for recruited varsity players. It recognizes students committed to their sport while keeping a strong academic record, in basketball, volleyball, athletics (track and field), badminton, table tennis, swimming, and chess.',
     benefits: [
-      'Tuition fee discount',
+      'Tuition fee discount (by percentage)',
       'Full matriculation fee discount',
       'Free food and accommodation for recruited athletes'
     ],
     eligibilityCriteria: { applicantType: 'any' },
-    eligibility: [
-      'Must be a recruited varsity player in Basketball, Volleyball, Athletics, Badminton, Table Tennis, Swimming, or Chess',
-      'Evaluated by the coach and approved by the SDO Director'
+    rules: { applicantType: 'any' },
+    customEligibility: [
+      'Incoming varsity players evaluated and recommended by the coach, or current varsity members with at least satisfactory performance in the coach\'s evaluation',
+      'Approved by the Sports Development Office (SDO) Director'
     ],
-    requirements: [],
     scheduleLabel: 'Varsity tryouts',
     schedule: 'To be announced. Tryout dates are posted in Announcements.',
     process: [
       'Step 1: Try out for or get recruited into a DLSU-D varsity team. Tryout dates are posted in Announcements.',
-      'Step 2: Your coach evaluates your performance and endorses you.',
+      'Step 2: Your coach evaluates you — a recommendation for incoming players, an endorsement for current members.',
       'Step 3: The SDO Director approves the scholarship.'
     ],
     deadline: 'Contact the AdSO for the current schedule',
@@ -397,47 +400,26 @@ export const mockScholarships: Scholarship[] = [
     applicationMode: 'info',
     availNote: 'Granted to members of the Vicissitude Editorial Board and Staff based on their performance rating — there is no online application.',
     targetApplicants: 'Vicissitude Editorial Board and Staff',
-    description: 'The Vicissitude Scholarship Program grants tuition discounts to members of the Vicissitude Editorial Board and Staff.',
+    description: 'The Vicissitude Scholarship Program supports the students who produce the university yearbook: members of the Vicissitude Editorial Board (EB) and Editorial Staff (ES). Discounts cover tuition only and depend on available funds.',
     benefits: [
       'Editorial Board, rating 4.75–5.00: 100% tuition discount',
       'Editorial Board, rating 4.50–4.74: 75% tuition discount',
       'Editorial Board, rating 4.25–4.49: 50% tuition discount',
-      'Editorial Board, rating 4.24 and below: 25% tuition discount',
-      'Editorial Staff: 25% tuition discount',
-      'Training, a pictorial, a graduation picture, and a copy of the yearbook'
+      'Editorial Board, rating 4.24 and below: 25% tuition discount (EB members are guaranteed at least 25%)',
+      'Editorial Staff: one 25% scholarship reserved for each department',
+      'Free skills training (writing, editing, photography, graphics, layout), a free pictorial, and for graduating members a free graduation picture and yearbook copy'
     ],
     eligibilityCriteria: { applicantType: 'any' },
-    eligibility: [
-      'Must be a member of the Vicissitude Editorial Board or Editorial Staff'
+    rules: { applicantType: 'any', minGpa: 1.5, noFailingGrade: true },
+    customEligibility: [
+      'Must be a member of the Vicissitude Editorial Board or Editorial Staff',
+      'No major violations under the Student Handbook (2023-2027)'
     ],
-    requirements: [],
     process: [
       'Step 1: Join the Vicissitude Editorial Board or Staff.',
-      'Step 2: Your discount is based on your performance rating for the term.'
-    ],
-    deadline: 'Contact the AdSO for the current schedule',
-    status: 'Open'
-  },
-  {
-    id: 's9',
-    name: 'Performing Arts Group (PAG) Scholarship',
-    category: 'Others',
-    provider: SCHOLARSHIP_OFFICE_PROVIDER,
-    applicationMode: 'info',
-    availNote: 'Granted to active members of the university\'s performing arts groups — there is no online application.',
-    targetApplicants: 'Members of DLSU-D performing arts groups',
-    description: 'The Performing Arts Group Scholarship supports talented students in singing, dancing, acting, and playing musical instruments who perform for the university.',
-    benefits: [
-      'Tuition discount for active members of a performing arts group'
-    ],
-    eligibilityCriteria: { applicantType: 'any' },
-    eligibility: [
-      'Must be an active member of a DLSU-D performing arts group (singing, dancing, acting, or instruments)'
-    ],
-    requirements: [],
-    process: [
-      'Step 1: Audition for and join a DLSU-D performing arts group.',
-      'Step 2: Active members are endorsed for the scholarship by their group.'
+      'Step 2: Complete your duty hours: 200 for Editorial Board members, 125 for Editorial Staff members.',
+      'Step 3: Your performance is evaluated (60% by the Vicissitude Coordinator and the Graphics Design and Layout Artist, 40% by the Editorial Board). Editorial Staff members also need a good staff evaluation rating.',
+      'Step 4: Your discount is set by your rating.'
     ],
     deadline: 'Contact the AdSO for the current schedule',
     status: 'Open'
@@ -450,7 +432,7 @@ export const mockScholarships: Scholarship[] = [
     applicationMode: 'info',
     availNote: 'Granted to officers of the 267th NROTC unit on the recommendation of the Commandant and the ROTC Coordinator — there is no online application.',
     targetApplicants: 'Officers of the 267th NROTC unit',
-    description: 'The 267th NROTC Scholarship gives financial assistance to officers of the university\'s Naval Reserve Officers Training Corps unit, subject to the availability of the ROTC fund.',
+    description: 'The 267th NROTC Scholarship gives financial assistance to officers of the university\'s Naval Reserve Officers Training Corps unit (NROTCU), under Student Handbook section 17.1.4, which allows tuition discounts of up to 100% for ROTC officers. Failing to meet the guidelines forfeits the benefits.',
     benefits: [
       'Corps Commander: ₱30,000',
       'Vice Corps Commander: ₱20,000',
@@ -467,42 +449,198 @@ export const mockScholarships: Scholarship[] = [
       audience: 'NROTC officers',
       note: 'Also requires an earned rank, active duty and a recommendation.'
     },
-    eligibility: [
-      'GPA of at least 2.0 with no failing grade',
+    rules: { applicantType: 'continuing', minGpa: 2, noFailingGrade: true },
+    customEligibility: [
+      'Officer of the 267th NROTCU holding an entitled rank',
+      'The GPA may be a general grade average of 2.0 or its equivalent; no failing grade in academic or non-academic subjects for the semester',
       'Good moral character',
-      'Earned rank and on active duty',
-      'Renders at least 20 hours of duty a week',
-      'Recommended by the Commandant and the ROTC Coordinator'
+      'Actively performs assigned duties, including 20 duty hours a week in the 267th NROTCU',
+      'Recommended by the Commandant and/or the ROTC Coordinator'
     ],
-    requirements: [],
     process: [
       'Step 1: Earn your rank and stay on active duty in the 267th NROTC unit.',
       'Step 2: The Commandant and the ROTC Coordinator recommend qualified officers.'
     ],
     deadline: 'Contact the AdSO for the current schedule',
     status: 'Open'
+  },
+  {
+    // Offered by the University Student Government, separate from the
+    // AdSO's SFAG. Applied for through the USG's own online form, so it's
+    // listed for information (AdSO list, Oct 2026).
+    id: 's11',
+    name: 'USG Student Financial Aid Grant',
+    category: 'Financial',
+    provider: {
+      name: 'University Student Government (USG), De La Salle University-Dasmariñas',
+      office: 'University Student Government',
+      address: 'De La Salle University-Dasmariñas, Dasmariñas City, Cavite'
+    },
+    applicationMode: 'info',
+    availNote: 'Offered by the University Student Government each semester through its own online form (bit.ly/USGSFAG) — not through AniSkolar. The USG reviews the applications.',
+    targetApplicants: 'Continuing DLSU-D students',
+    description: 'The University Student Government\'s Student Financial Aid Grant is offered each semester, separate from the SFAG of the Admissions and Scholarship Office. The latest call was for the 2nd semester of AY 2025–2026 (applications April 6–13, 2026).',
+    benefits: [
+      'Financial aid from the University Student Government'
+    ],
+    eligibilityCriteria: { applicantType: 'continuing' },
+    rules: { applicantType: 'continuing', minGpa: 2, noFailingGrade: true },
+    customEligibility: [
+      'Bona fide DLSU-D student with at least one semester of residency',
+      'The GPA and no-failing-grades rules apply to the previous semester',
+      'No other existing internal scholarship grant from DLSU-D or its benefactors',
+      'Not found guilty of any major offense'
+    ],
+    customDocuments: [
+      'Application letter addressed to the University Student Government',
+      'Financial Aid Grant Application Form',
+      'Certificate of Registration (COR) for the current semester',
+      'Copy of grades from the previous semester',
+      'Parents\' Income Tax Return (ITR) or Certificate of Non-Filing of ITR, and/or Certificate of Indigency',
+      'Photograph of the applicant\'s house with the applicant and parent/guardian',
+      'One copy each of the monthly electricity and water bills for the three months before the application period',
+      'Clear copy of your DLSU-D ID or, if not yet issued, a valid government-issued photo ID',
+      'Clear copy of the parent/guardian\'s valid government-issued ID',
+      'SWAFO clearance certifying no major offense (may follow if the request for clearance is attached and dated within the application period)'
+    ],
+    process: [
+      'Step 1: Submit all documents through the USG\'s online form during the application period.',
+      'Step 2: The USG verifies your documents within 72 hours. If one is inaccurate, you have two days from notification to resubmit.',
+      'Step 3: Verified applicants are told their on-site submission schedule, where the application slot is confirmed.',
+      'Step 4: Wait for the final list of shortlisted applicants.'
+    ],
+    deadline: 'Each semester; see the USG\'s announcements',
+    status: 'Open'
   }
 ];
 
-// Fields the AdSO can change from the admin Scholarships page. Everything
-// else (name, office, form, eligibility rules, documents) is fixed in code.
-export const EDITABLE_SCHOLARSHIP_FIELDS = ['status', 'deadline', 'description', 'benefits', 'eligibility', 'process', 'submissionNote', 'schedule'] as const;
+// The GPA rule the calculator, Explore and the dashboard check, with the
+// ticked "Minimum GPA" / "No failing grades" rules in place of the code
+// defaults. Other parts (stage, notes, minimum grade) stay as written.
+function deriveGpaRequirement(base: GpaRequirement | undefined, rules: EligibilityRules): GpaRequirement | undefined {
+  const minGpa = rules.minGpa;
+  const noFailingGrade = rules.noFailingGrade || undefined;
+  if (minGpa === undefined) {
+    // Unticked: an apply-time GPA floor goes; retention ('keep') rules stay.
+    if (!base) return undefined;
+    if (base.stage === 'keep') return base;
+    const rest: GpaRequirement = { ...base, minGpa: undefined, noFailingGrade };
+    return rest.minGrade !== undefined || rest.noFailingGrade || rest.note ? rest : undefined;
+  }
+  if (!base) return { stage: 'apply', minGpa, noFailingGrade, continuingOnly: rules.applicantType !== 'incoming' };
+  return { ...base, stage: 'apply', minGpa, noFailingGrade, keepToo: base.keepToo || base.stage === 'keep' || undefined };
+}
 
-// Merges AdSO overrides over the defaults above. Unknown ids are ignored.
+// Fills in what's generated from the rules and documents: the text
+// students read, the applicant-type filter and the GPA rule.
+export function deriveScholarship(source: ScholarshipSource): Scholarship {
+  const rules = source.rules ?? {};
+  const slotBased = !!source.documentSlots?.length;
+  const applicantType = rules.applicantType ?? 'any';
+  return {
+    ...source,
+    rules,
+    customEligibility: source.customEligibility ?? [],
+    // Slot-based forms: their slots are the documents (for the matrix).
+    documentKeys: slotBased ? source.documentSlots!.map(slot => slot.key) : source.documentKeys ?? [],
+    customDocuments: slotBased ? [] : source.customDocuments ?? [],
+    eligibility: [...ruleLines(rules), ...(source.customEligibility ?? [])],
+    requirements: slotBased ? source.requirements ?? requirementLabels(source.documentSlots!) : documentTexts(source.documentKeys, source.customDocuments),
+    eligibilityCriteria: {
+      ...source.eligibilityCriteria,
+      applicantType,
+      yearLevels: applicantType === 'incoming' ? ['1st Year'] : undefined,
+    },
+    gpaRequirement: deriveGpaRequirement(source.gpaRequirement, rules),
+  };
+}
+
+// The built-in scholarships (their special forms are in code), followed by
+// any the AdSO created (registerCustomScholarships). Mutated in place so
+// every screen that looks a scholarship up by id finds the new ones.
+export const mockScholarships: Scholarship[] = BUILT_IN_SCHOLARSHIPS.map(deriveScholarship);
+
+// Fields the AdSO can change from the admin Scholarships page. Name,
+// office and application form are fixed for the built-in scholarships.
+export const EDITABLE_SCHOLARSHIP_FIELDS = [
+  'status', 'deadline', 'description', 'benefits', 'process', 'submissionNote', 'schedule',
+  'rules', 'customEligibility', 'documentKeys', 'customDocuments'
+] as const;
+
+// Scholarships created by the AdSO: the standard application form (or
+// info only), with everything else from the override.
+function customSource(o: ScholarshipOverride): ScholarshipSource {
+  return {
+    id: o.id,
+    custom: true,
+    name: o.name || 'Untitled scholarship',
+    office: o.office ?? 'LSO',
+    category: o.category ?? 'Others',
+    applicationMode: o.applicationMode ?? 'online',
+    availNote: o.availNote,
+    referenceCode: o.referenceCode,
+    provider: SCHOLARSHIP_OFFICE_PROVIDER,
+    description: '',
+    benefits: [],
+    process: [],
+    deadline: '',
+    status: 'Closed',
+    applicationFormType: 'standard',
+  };
+}
+
+function mergeOverride(source: ScholarshipSource, o: ScholarshipOverride | undefined): ScholarshipSource {
+  if (!o) return source;
+  const merged: ScholarshipSource = { ...source };
+  if (o.status) merged.status = o.status;
+  if (o.deadline) merged.deadline = o.deadline;
+  if (o.description) merged.description = o.description;
+  if (o.benefits?.length) merged.benefits = o.benefits;
+  if (o.process?.length) merged.process = o.process;
+  if (o.submissionNote) merged.submissionNote = o.submissionNote;
+  if (o.schedule && source.scheduleLabel) merged.schedule = o.schedule;
+  if (o.rules) merged.rules = o.rules;
+  if (o.customEligibility) merged.customEligibility = o.customEligibility;
+  if (!source.documentSlots?.length) {
+    if (o.documentKeys) merged.documentKeys = o.documentKeys;
+    if (o.customDocuments) merged.customDocuments = o.customDocuments;
+  }
+  return merged;
+}
+
+// The code version of a built-in scholarship, before any AdSO edits (what
+// "reset to default" goes back to).
+export function builtInSource(id: string): Scholarship | undefined {
+  const source = BUILT_IN_SCHOLARSHIPS.find(s => s.id === id);
+  return source ? deriveScholarship(source) : undefined;
+}
+
+// Defaults for a scholarship: the code version for built-ins, a blank
+// standard-form scholarship for ones the AdSO created.
+export function scholarshipDefaults(o: ScholarshipOverride): Scholarship {
+  return builtInSource(o.id) ?? deriveScholarship(customSource(o));
+}
+
+// Merges AdSO overrides over the defaults, and adds the scholarships the
+// AdSO created. Overrides for unknown built-in ids are ignored.
 export function applyScholarshipOverrides(base: Scholarship[], overrides: ScholarshipOverride[]): Scholarship[] {
   const byId = new Map(overrides.map(o => [o.id, o]));
-  return base.map(scholarship => {
-    const o = byId.get(scholarship.id);
-    if (!o) return scholarship;
-    const merged: Scholarship = { ...scholarship };
-    if (o.status) merged.status = o.status;
-    if (o.deadline) merged.deadline = o.deadline;
-    if (o.description) merged.description = o.description;
-    if (o.benefits?.length) merged.benefits = o.benefits;
-    if (o.eligibility?.length) merged.eligibility = o.eligibility;
-    if (o.process?.length) merged.process = o.process;
-    if (o.submissionNote) merged.submissionNote = o.submissionNote;
-    if (o.schedule && scholarship.scheduleLabel) merged.schedule = o.schedule;
-    return merged;
-  });
+  const builtIn = base
+    .filter(s => !s.custom)
+    .map(s => {
+      const source = BUILT_IN_SCHOLARSHIPS.find(b => b.id === s.id);
+      return source ? deriveScholarship(mergeOverride(source, byId.get(s.id))) : s;
+    });
+  const custom = overrides.filter(o => o.custom).map(o => deriveScholarship(mergeOverride(customSource(o), o)));
+  return [...builtIn, ...custom];
+}
+
+// Makes the AdSO's scholarships known to every lookup by id
+// (mockScholarships.find(...)), e.g. in application lists and history.
+export function registerCustomScholarships(all: Scholarship[]): void {
+  const custom = all.filter(s => s.custom);
+  for (let i = mockScholarships.length - 1; i >= 0; i--) {
+    if (mockScholarships[i].custom) mockScholarships.splice(i, 1);
+  }
+  mockScholarships.push(...custom);
 }

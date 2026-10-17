@@ -73,7 +73,7 @@ export default function Footer() {
             <ul className="space-y-3 text-sm text-slate-400">
               <li className="flex items-start space-x-3">
                 <MapPin className="w-4 h-4 text-brand-green shrink-0 mt-1" />
-                <span>Ayuntamiento de Gonzalez Bldg. <br />De La Salle University-Dasmarinas <br />City of Dasmarinas, 4114, Philippines</span>
+                <span>Ayuntamiento de Gonzalez Bldg. <br />De La Salle University-Dasmariñas <br />Brgy. Fatima 1, Dasmariñas City, Cavite 4115</span>
               </li>
               <li className="flex items-start space-x-3">
                 <Phone className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />
@@ -81,7 +81,7 @@ export default function Footer() {
               </li>
               <li className="flex items-start space-x-3">
                 <Mail className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />
-                <span className="break-all">scholarship@dlsud.edu.ph</span>
+                <span className="break-all">scholarship@dlsud.edu.ph<br />AdSO_admissions@dlsud.edu.ph</span>
               </li>
             </ul>
           </div>

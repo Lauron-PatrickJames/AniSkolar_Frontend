@@ -39,13 +39,13 @@ function requirementLabels(slots: DocumentSlot[]): string[] {
 }
 
 // Contact details from the official scholarship page
-// (dlsud.edu.ph/admissions/scholarship).
+// (dlsud.edu.ph/scholarship).
 const SCHOLARSHIP_OFFICE_PROVIDER = {
   name: 'De La Salle University-Dasmariñas',
   office: 'Admissions and Scholarship Office (AdSO)',
-  address: 'Ayuntamiento De Gonzalez Bldg., De La Salle University-Dasmariñas, Brgy. Fatima 1, Dasmariñas City, Cavite 4114',
+  address: 'Ayuntamiento De Gonzalez Bldg., De La Salle University-Dasmariñas, Brgy. Fatima 1, Dasmariñas City, Cavite 4115',
   contact: [
-    'scholarship@dlsud.edu.ph · AdSOsecretary@dlsud.edu.ph',
+    'scholarship@dlsud.edu.ph · AdSO_admissions@dlsud.edu.ph',
     'Cavite +63 (46) 481.1900 · Manila +63 (2) 8779.5180 · local 3029'
   ]
 };

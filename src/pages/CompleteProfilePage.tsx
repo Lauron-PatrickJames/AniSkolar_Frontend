@@ -43,11 +43,18 @@ const STEPS: { title: string; description: string; fields: FieldKey[] }[] = [
 
 const stepOf = (field: FieldKey) => STEPS.findIndex(s => s.fields.includes(field));
 
-// DLSU-D student numbers are 9 digits, e.g. 202330864.
+// DLSU-D student numbers are 9 digits: the year the student first enrolled
+// at DLSU-D (possibly in high school, kept into college), then
+// 5 digits, e.g. 202330864 (entered 2023). Same rule as the backend
+// (routes/students.js).
 function studentNumberError(value: string): string | undefined {
   const v = value.trim();
   if (!v) return 'Enter your student number.';
   if (!/^\d{9}$/.test(v)) return 'Student numbers have 9 digits, like 202312345.';
+  const year = Number(v.slice(0, 4));
+  if (year < 1990 || year > new Date().getFullYear() + 1) {
+    return 'Student numbers start with the year you entered, like 2023 in 202312345.';
+  }
   return undefined;
 }
 

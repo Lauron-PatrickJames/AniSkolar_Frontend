@@ -5,7 +5,9 @@
 //
 // Source: the DLSU-D "All Programs" page (dlsud.edu.ph/all-programs),
 // October 2026. The site lists Secondary Education without majors; the
-// majors are kept here on purpose. Codes are AniSkolar's own.
+// majors are kept here on purpose. BS Environmental and Sanitary Engineering
+// isn't on that page but is an SFAG priority course (A.Y. 2026-2027
+// guidelines), so it's included. Codes are AniSkolar's own.
 
 export interface Program {
   code: string;
@@ -42,6 +44,7 @@ export const PROGRAMS: Program[] = [
   { code: 'BSECE', name: 'Bachelor of Science in Electronics Engineering', college: 'CEAT' },
   { code: 'BSIE', name: 'Bachelor of Science in Industrial Engineering', college: 'CEAT' },
   { code: 'BSME', name: 'Bachelor of Science in Mechanical Engineering', college: 'CEAT' },
+  { code: 'BSEnSE', name: 'Bachelor of Science in Environmental and Sanitary Engineering', college: 'CEAT' },
   { code: 'BMMA', name: 'Bachelor of Multimedia Arts', college: 'CEAT' },
   { code: 'BSCS', name: 'Bachelor of Science in Computer Science', college: 'CICS' },
   { code: 'BSIT', name: 'Bachelor of Science in Information Technology', college: 'CICS' },

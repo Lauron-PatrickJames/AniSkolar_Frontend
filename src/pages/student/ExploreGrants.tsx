@@ -1,14 +1,17 @@
 import React, { useState, useMemo } from 'react';
-import { getAvailableScholarships, profileGpaWarning } from '../../utils/eligibility';
+import { Holdings, applicationWindowBlock, getAvailableScholarships, holdingNotice, needsToChoose, profileGpaWarning } from '../../utils/eligibility';
 import { Scholarship, Application, StudentProfile } from '../../types';
 import ScholarshipCard from '../../components/ScholarshipCard';
-import { Search, SlidersHorizontal, Info, BookmarkCheck } from 'lucide-react';
+import CompareTable from '../../components/CompareTable';
+import { Search, Info, BookmarkCheck, LayoutGrid, Table2 } from 'lucide-react';
 
 
 interface ExploreGrantsProps {
   scholarships: Scholarship[];
   applications: Application[];
   student: StudentProfile;   // add this
+  // What the student holds now (for the SFAG's no-other-scholarship rule).
+  holdings?: Holdings | null;
   onViewDetails: (id: string) => void;
   onApply: (id: string) => void;
   id?: string;
@@ -21,12 +24,15 @@ export default function ExploreGrants({
   scholarships,
   applications,
   student,   // add this
+  holdings = null,
   onViewDetails,
   onApply,
   id
 }: ExploreGrantsProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('All');
+  // Cards, or a table comparing the scholarships shown side by side.
+  const [view, setView] = useState<'cards' | 'compare'>('cards');
 
   // Categories list
   const categories: CategoryFilter[] = ['All', 'Academic', 'Financial', 'Athletic', 'Leadership', 'Others', ...(applications.length ? ['Applied' as const] : [])];
@@ -76,9 +82,19 @@ export default function ExploreGrants({
             />
           </div>
           
-          <div className="flex items-center space-x-2 text-slate-400 text-xs self-start md:self-auto font-medium">
-            <SlidersHorizontal className="w-4 h-4" />
-            <span>Category Filters</span>
+          <div role="group" aria-label="View" className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 self-start md:self-auto">
+            {([['cards', 'Cards', LayoutGrid], ['compare', 'Compare', Table2]] as const).map(([key, label, Icon]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={view === key}
+                onClick={() => setView(key)}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-colors focus:outline-hidden ${view === key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                <Icon className="w-3.5 h-3.5" aria-hidden />
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -99,6 +115,17 @@ export default function ExploreGrants({
           ))}
         </div>
       </div>
+
+      {/* Two scholarships approved: only one can be credited. */}
+      {needsToChoose(holdings) && (
+        <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 flex items-start gap-3">
+          <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-900">
+            <span className="font-bold">You hold {needsToChoose(holdings)!.map(h => h.scholarshipName).join(' and ')}.</span>{' '}
+            Only one internally funded scholarship can be credited, so choose which to keep (usually the bigger grant) and tell the Admissions and Scholarship Office.
+          </div>
+        </div>
+      )}
 
       {/* Info Notice about Applications */}
       {applications.length > 0 && (
@@ -133,6 +160,8 @@ export default function ExploreGrants({
             Clear Search & Filters
           </button>
         </div>
+      ) : view === 'compare' ? (
+        <CompareTable scholarships={filteredScholarships} student={student} onViewDetails={onViewDetails} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredScholarships.map(scholarship => (
@@ -143,7 +172,8 @@ export default function ExploreGrants({
               onApply={onApply}
               isApplied={applicationByScholarship.has(scholarship.id)}
               applicationStatus={applicationByScholarship.get(scholarship.id)?.status}
-              warning={applicationByScholarship.has(scholarship.id) ? null : profileGpaWarning(scholarship, student)}
+              warning={applicationByScholarship.has(scholarship.id) ? null : holdingNotice(scholarship.id, holdings) ?? profileGpaWarning(scholarship, student)}
+              blockedReason={applicationWindowBlock(scholarship.id)}
             />
           ))}
         </div>

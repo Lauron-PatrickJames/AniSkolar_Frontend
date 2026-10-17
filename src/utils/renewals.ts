@@ -89,7 +89,7 @@ export interface Renewal {
   period?: RenewalPeriod | null;
 }
 
-// Department head's Student Assistant evaluation (SFA Grant), rated 1–5.
+// Department head's Student Assistant evaluation (SFAG), rated 1–5.
 // Mirrors EVALUATION_ITEMS in the backend's utils/renewals.js. The form has
 // 19 items; the copy we have shows these 15 — add the rest in both places.
 export const EVALUATION_ITEMS: { key: string; label: string }[] = [

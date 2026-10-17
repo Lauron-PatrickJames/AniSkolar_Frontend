@@ -20,6 +20,8 @@ interface ScholarshipCardProps {
   applicationStatus?: Application['status'];
   // e.g. the student's profile GPA is below the scholarship's minimum.
   warning?: string | null;
+  // Why the student can't apply (e.g. they hold the SFAG).
+  blockedReason?: string | null;
   id?: string;
   key?: React.Key;
 }
@@ -31,8 +33,10 @@ export default function ScholarshipCard({
   isApplied = false,
   applicationStatus,
   warning,
+  blockedReason,
   id
 }: ScholarshipCardProps) {
+  const blocked = !isApplied && !!blockedReason;
   const showsRequirements = scholarship.requirements.length > 0;
   const preview = showsRequirements ? scholarship.requirements : scholarship.eligibility;
 
@@ -118,7 +122,14 @@ export default function ScholarshipCard({
           </p>
         )}
 
-        {warning && (
+        {blocked && (
+          <p className="mb-4 px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 text-xs text-slate-700 flex items-start gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px text-slate-500" aria-hidden />
+            <span>{blockedReason}</span>
+          </p>
+        )}
+
+        {!blocked && warning && (
           <p className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-100 text-xs text-amber-900 flex items-start gap-1.5">
             <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px text-amber-600" aria-hidden />
             <span>{warning}</span>
@@ -171,15 +182,15 @@ export default function ScholarshipCard({
           {onApply && acceptsOnlineApplications(scholarship) && (
             <button
               onClick={() => onApply(scholarship.id)}
-              disabled={isApplied || scholarship.status === 'Closed'}
+              disabled={isApplied || blocked || scholarship.status === 'Closed'}
               className={`flex-1 sm:flex-none text-xs font-semibold px-4 py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-colors focus:outline-hidden ${
-                isApplied
+                isApplied || blocked
                   ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                   : 'bg-brand-green text-white hover:bg-brand-green-dark shadow-sm'
               }`}
             >
-              <span>{isApplied ? 'Applied' : 'Apply'}</span>
-              {!isApplied && <ChevronRight className="w-3.5 h-3.5" />}
+              <span>{isApplied ? 'Applied' : blocked ? 'Not available' : 'Apply'}</span>
+              {!isApplied && !blocked && <ChevronRight className="w-3.5 h-3.5" />}
             </button>
           )}
         </div>

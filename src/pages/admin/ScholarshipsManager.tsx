@@ -1,25 +1,37 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { CircleCheck, CircleOff, Info, ListChecks, Pencil, Plus, Save } from 'lucide-react';
+import { CircleCheck, CircleOff, Clock, Info, LayoutList, ListChecks, Pencil, Plus, Save, Table2, Trash2 } from 'lucide-react';
 import { ApplicationFormType, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../../types';
 import {
-  OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships, officeOf
+  OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, officeOf, registerCustomScholarships, scholarshipDefaults
 } from '../../data/scholarships';
+import { EligibilityRules, lockedRules, ruleLines } from '../../data/requirementCatalog';
+import { DocumentsEditor, ListEditor, RulesEditor } from './RequirementEditors';
+import ScholarshipMatrix, { MatrixPatch } from './ScholarshipMatrix';
 import { API_BASE_URL, AppStatus, STATUS_OPTIONS, authHeaders, formatDateTime } from './adminData';
 import {
-  Alert, Badge, Button, Card, ConfirmDialog, DropdownMenu, DropdownMenuItem, EmptyState, ErrorState, Field, PageHeader,
+  Alert, Badge, Button, Card, ConfirmDialog, DropdownMenu, DropdownMenuItem, EmptyState, ErrorState, Field, Modal, PageHeader,
   RowLink, SearchInput, SegmentedControl, Select, Skeleton, Table, TableSkeleton, Tabs, Td, TextInput, Textarea, Th,
   Toolbar, Tone, Tooltip, Tr
 } from './AdminUI';
+import ScholarshipStatusDialog, { StatusDialogResult } from './ScholarshipStatusDialog';
+import { formatScheduled } from './announcementSchedule';
 
 // AdSO-only page for managing every scholarship: open/close it and edit the
-// details students see. The structural parts of a scholarship (name, office,
+// details students see. Changing the status (from the list or the edit
+// page) offers an announcement, drafted for the change, to publish now or
+// schedule (ScholarshipStatusDialog). The structural parts of a scholarship (name, office,
 // application form, eligibility rules, required documents) are defined in
 // code and aren't editable here. Application counts include POLCA and
 // Alumni applications their office hasn't approved yet — view only.
 //
-// Two views: a compact list (filter, search, sort, row actions) and a
-// detail view that holds the edit form. The parent owns which scholarship
+// Eligibility and documents are ticked from a shared list
+// (data/requirementCatalog.ts) instead of typed, and the Matrix view shows
+// and edits them for every scholarship at once. The AdSO can also create
+// scholarships of their own (standard form or info only).
+//
+// Views: a compact list (filter, search, sort, row actions) or the matrix,
+// and a detail view that holds the edit form. The parent owns which scholarship
 // is open so the sidebar and scroll position follow it.
 
 type ScholarshipStatus = Scholarship['status'];
@@ -38,32 +50,34 @@ interface AdminScholarshipRow {
   id: string;
   name: string;
   office: string;
+  custom?: boolean;
   overrides: ScholarshipOverride;
   applications: ApplicationCounts;
 }
 
 interface Row {
   scholarship: Scholarship;          // defaults merged with the AdSO's edits
-  defaults: Scholarship;             // the defaults in code
+  defaults: Scholarship;             // the defaults in code (blank for created ones)
   overrides: ScholarshipOverride;
   applications: ApplicationCounts;
 }
 
+const merge = (defaults: Scholarship, overrides: ScholarshipOverride) => applyScholarshipOverrides([defaults], [overrides])[0];
+
+function toRow(overrides: ScholarshipOverride, applications: ApplicationCounts = { total: 0, byStatus: {} }): Row {
+  const defaults = scholarshipDefaults(overrides);
+  return { defaults, overrides, scholarship: merge(defaults, overrides), applications };
+}
+
+// Built-in scholarships first (the server lists them in code order), then
+// the ones the AdSO created.
 function toRows(data: AdminScholarshipRow[]): Row[] {
-  return mockScholarships.map(defaults => {
-    const entry = data.find(d => d.id === defaults.id);
-    const overrides = entry?.overrides ?? { id: defaults.id };
-    return {
-      defaults,
-      overrides,
-      scholarship: applyScholarshipOverrides([defaults], [overrides])[0],
-      applications: entry?.applications ?? { total: 0, byStatus: {} }
-    };
-  });
+  return data.map(entry => toRow(entry.overrides ?? { id: entry.id }, entry.applications));
 }
 
 function withOverrides(row: Row, overrides: ScholarshipOverride): Row {
-  return { ...row, overrides, scholarship: applyScholarshipOverrides([row.defaults], [overrides])[0] };
+  const defaults = row.defaults.custom ? scholarshipDefaults(overrides) : row.defaults;
+  return { ...row, defaults, overrides, scholarship: merge(defaults, overrides) };
 }
 
 const isEdited = (overrides: ScholarshipOverride) =>
@@ -77,7 +91,7 @@ function routingNote(office: ScholarshipOffice): string {
 // form"); here they describe the form any scholarship of that type uses.
 const FORM_LABELS: Record<ApplicationFormType, string> = {
   standard: 'Standard online form',
-  sfag: 'SFA Grant form',
+  sfag: 'SFAG form',
   polca: 'POLCA grant form',
   alumni: 'Alumni grant form'
 };
@@ -125,27 +139,51 @@ interface EditorState {
   status: ScholarshipStatus;
   deadline: string;
   description: string;
-  benefits: string;
-  eligibility: string;
-  process: string;
+  benefits: string[];
+  process: string[];
   submissionNote: string;
   schedule: string;
+  rules: EligibilityRules;
+  customEligibility: string[];
+  documentKeys: string[];
+  customDocuments: string[];
+  // Created scholarships only.
+  name: string;
+  office: ScholarshipOffice;
+  category: Scholarship['category'];
+  applicationMode: 'online' | 'info';
+  referenceCode: string;
+  availNote: string;
 }
 
-const toLines = (items: string[] | undefined) => (items ?? []).join('\n');
-const fromLines = (text: string) => text.split('\n').map(line => line.trim()).filter(Boolean);
+const CATEGORIES: Scholarship['category'][] = ['Academic', 'Financial', 'Athletic', 'Leadership', 'Others'];
+const clean = (items: string[]) => items.map(item => item.trim()).filter(Boolean);
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every(x => b.includes(x));
+// "Anyone" is the same as no applicant-type rule.
+const rulesKey = (rules: EligibilityRules) => JSON.stringify(
+  Object.entries(rules).filter(([k, v]) => v !== undefined && v !== false && !(k === 'applicantType' && v === 'any')).sort(([a], [b]) => a.localeCompare(b))
+);
 
 function editorFrom(s: Scholarship): EditorState {
   return {
     status: s.status,
     deadline: s.deadline,
     description: s.description,
-    benefits: toLines(s.benefits),
-    eligibility: toLines(s.eligibility),
-    process: toLines(s.process),
+    benefits: [...s.benefits],
+    process: [...s.process],
     submissionNote: s.submissionNote ?? '',
-    schedule: s.schedule ?? ''
+    schedule: s.schedule ?? '',
+    rules: { ...(s.rules ?? {}) },
+    customEligibility: [...(s.customEligibility ?? [])],
+    documentKeys: [...(s.documentKeys ?? [])],
+    customDocuments: [...(s.customDocuments ?? [])],
+    name: s.name,
+    office: officeOf(s),
+    category: s.category,
+    applicationMode: s.applicationMode ?? 'online',
+    referenceCode: s.referenceCode ?? '',
+    availNote: s.availNote ?? ''
   };
 }
 
@@ -154,31 +192,52 @@ function sameEditor(a: EditorState, b: EditorState): boolean {
   return a.status === b.status
     && a.deadline.trim() === b.deadline.trim()
     && a.description.trim() === b.description.trim()
-    && sameList(fromLines(a.benefits), fromLines(b.benefits))
-    && sameList(fromLines(a.eligibility), fromLines(b.eligibility))
-    && sameList(fromLines(a.process), fromLines(b.process))
+    && sameList(clean(a.benefits), clean(b.benefits))
+    && sameList(clean(a.process), clean(b.process))
     && a.submissionNote.trim() === b.submissionNote.trim()
-    && a.schedule.trim() === b.schedule.trim();
+    && a.schedule.trim() === b.schedule.trim()
+    && rulesKey(a.rules) === rulesKey(b.rules)
+    && sameList(clean(a.customEligibility), clean(b.customEligibility))
+    && sameSet(a.documentKeys, b.documentKeys)
+    && sameList(clean(a.customDocuments), clean(b.customDocuments))
+    && a.name.trim() === b.name.trim()
+    && a.office === b.office
+    && a.category === b.category
+    && a.applicationMode === b.applicationMode
+    && a.referenceCode.trim().toUpperCase() === b.referenceCode.trim().toUpperCase()
+    && a.availNote.trim() === b.availNote.trim();
 }
 
 // Builds the PATCH body. A value equal to the default in code is sent as
 // null, which clears the override instead of storing a copy of the default.
 function toPayload(form: EditorState, defaults: Scholarship) {
   const text = (value: string, base: string | undefined) => (value.trim() === (base ?? '').trim() ? null : value.trim());
-  const list = (value: string, base: string[]) => {
-    const items = fromLines(value);
-    return sameList(items, base) ? null : items;
-  };
+  const list = (value: string[], base: string[] = []) => (sameList(clean(value), base) ? null : clean(value));
+  const slotBased = !!defaults.documentSlots?.length;
   return {
     status: form.status === defaults.status ? null : form.status,
     deadline: text(form.deadline, defaults.deadline),
     description: text(form.description, defaults.description),
     benefits: list(form.benefits, defaults.benefits),
-    eligibility: list(form.eligibility, defaults.eligibility),
     process: list(form.process, defaults.process),
     submissionNote: text(form.submissionNote, defaults.submissionNote),
     // Only scholarships with a schedule (e.g. Athletic tryouts) send it.
-    ...(defaults.scheduleLabel ? { schedule: text(form.schedule, defaults.schedule) } : {})
+    ...(defaults.scheduleLabel ? { schedule: text(form.schedule, defaults.schedule) } : {}),
+    rules: rulesKey(form.rules) === rulesKey(defaults.rules ?? {}) ? null : form.rules,
+    customEligibility: list(form.customEligibility, defaults.customEligibility),
+    // POLCA and Alumni upload against their own form's fixed slots.
+    ...(slotBased ? {} : {
+      documentKeys: sameSet(form.documentKeys, defaults.documentKeys ?? []) ? null : form.documentKeys,
+      customDocuments: list(form.customDocuments, defaults.customDocuments)
+    }),
+    ...(defaults.custom ? {
+      name: form.name.trim(),
+      office: form.office,
+      category: form.category,
+      applicationMode: form.applicationMode,
+      referenceCode: form.referenceCode.trim().toUpperCase(),
+      availNote: form.availNote.trim() || null
+    } : {})
   };
 }
 
@@ -225,9 +284,11 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('name');
 
-  const [closing, setClosing] = useState<Row | null>(null);
-  const [statusBusy, setStatusBusy] = useState(false);
-  const [statusError, setStatusError] = useState('');
+  // A status change in progress: from the list ('change' — the dialog saves
+  // it) or already saved on the edit page ('announce').
+  const [statusChange, setStatusChange] = useState<{ row: Row; next: ScholarshipStatus; mode: 'change' | 'announce' } | null>(null);
+  const [view, setView] = useState<'List' | 'Matrix'>('List');
+  const [creating, setCreating] = useState(false);
 
   // A load that started before a save would overwrite the saved row with
   // stale data; each save bumps this so older responses are dropped.
@@ -274,23 +335,41 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
     setRows(prev => prev.map(r => (r.defaults.id === id ? withOverrides(r, overrides) : r)));
   };
 
-  const setStatus = async (row: Row, next: ScholarshipStatus) => {
-    setStatusBusy(true);
-    setStatusError('');
+  // Created scholarships are looked up by id across the admin (names in
+  // application lists, history, announcements).
+  useEffect(() => { registerCustomScholarships(rows.map(r => r.scholarship)); }, [rows]);
+
+  // A matrix cell: shown right away, saved, and put back if saving fails.
+  const patchFromMatrix = async (scholarship: Scholarship, patch: MatrixPatch) => {
+    const row = rows.find(r => r.defaults.id === scholarship.id);
+    if (!row) return;
+    applyOverrides(row.defaults.id, { ...row.overrides, ...patch });
     try {
-      const overrides = await patchScholarship(getToken, row.defaults.id, {
-        status: next === row.defaults.status ? null : next
-      });
-      applyOverrides(row.defaults.id, overrides);
-      setClosing(null);
-      setNotice({ tone: 'success', text: `${next === 'Closed' ? 'Closed' : 'Opened'} ${row.scholarship.name}.` });
+      applyOverrides(row.defaults.id, await patchScholarship(getToken, row.defaults.id, patch as Record<string, unknown>));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update the scholarship.';
-      if (next === 'Closed') setStatusError(message);
-      else setNotice({ tone: 'danger', text: message });
-    } finally {
-      setStatusBusy(false);
+      applyOverrides(row.defaults.id, row.overrides);
+      setNotice({ tone: 'danger', text: `Couldn't save ${scholarship.name}: ${err instanceof Error ? err.message : 'try again.'}` });
     }
+  };
+
+  const created = (overrides: ScholarshipOverride) => {
+    loadSeq.current++;
+    setIsLoading(false);
+    setRows(prev => [...prev, toRow(overrides)]);
+    setCreating(false);
+    setNotice({ tone: 'success', text: `Created ${overrides.name}. Fill in its details, then open it when it's ready.` });
+    onSelect(overrides.id);
+  };
+
+  const statusChanged = ({ row, next, mode }: NonNullable<typeof statusChange>, result: StatusDialogResult) => {
+    if (result.overrides) applyOverrides(row.defaults.id, result.overrides);
+    setStatusChange(null);
+    const name = row.scholarship.name;
+    const did = mode === 'announce' ? `Saved ${name}.` : `${next === 'Closed' ? 'Closed' : next === 'Open' ? 'Opened' : 'Marked as closing soon:'} ${name}.`;
+    const a = result.announcement;
+    const posted = !a ? '' : a.scheduledFor ? ` The announcement publishes ${formatScheduled(a.scheduledFor)}.` : ' The announcement is published.';
+    const fb = a?.facebookError ? ` Facebook wasn't updated: ${a.facebookError} Retry it in Announcements.` : '';
+    setNotice({ tone: fb ? 'danger' : 'success', text: `${did}${posted}${fb}` });
   };
 
   const counts = useMemo(() => ({
@@ -341,11 +420,21 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
           getToken={getToken}
           onBack={() => onSelect(null)}
           onSaved={overrides => {
+            const before = selected.scholarship.status;
+            const updated = withOverrides(selected, overrides);
             applyOverrides(selected.defaults.id, overrides);
             setNotice({ tone: 'success', text: `Saved changes to ${selected.scholarship.name}.` });
+            // A status change gets the announcement step.
+            if (updated.scholarship.status !== before) setStatusChange({ row: updated, next: updated.scholarship.status, mode: 'announce' });
             onSelect(null);
           }}
           onViewApplications={onViewApplications}
+          onDeleted={() => {
+            loadSeq.current++;
+            setRows(prev => prev.filter(r => r.defaults.id !== selected.defaults.id));
+            setNotice({ tone: 'success', text: `Deleted ${selected.scholarship.name}.` });
+            onSelect(null);
+          }}
         />
       );
     }
@@ -361,9 +450,12 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
     const items: DropdownMenuItem[] = [
       { key: 'edit', label: 'Edit', icon: Pencil, onSelect: () => onSelect(s.id) },
       s.status === 'Closed'
-        ? { key: 'open', label: 'Open scholarship', icon: CircleCheck, onSelect: () => setStatus(row, 'Open') }
-        : { key: 'close', label: 'Close scholarship', icon: CircleOff, onSelect: () => { setStatusError(''); setClosing(row); } }
+        ? { key: 'open', label: 'Open scholarship', icon: CircleCheck, onSelect: () => setStatusChange({ row, next: 'Open', mode: 'change' }) }
+        : { key: 'close', label: 'Close scholarship', icon: CircleOff, onSelect: () => setStatusChange({ row, next: 'Closed', mode: 'change' }) }
     ];
+    if (s.status === 'Open') {
+      items.splice(2, 0, { key: 'closing-soon', label: 'Mark closing soon', icon: Clock, onSelect: () => setStatusChange({ row, next: 'Closing Soon', mode: 'change' }) });
+    }
     if (acceptsOnlineApplications(s)) {
       items.push({ key: 'applications', label: 'View applications', icon: ListChecks, onSelect: () => onViewApplications(s.id) });
     }
@@ -374,12 +466,8 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
     <div className="space-y-6">
       <PageHeader
         title="Scholarships"
-        description="Open or close scholarships and edit what students see."
-        actions={
-          <Tooltip content="Scholarships are added to the system by its developers for now. Adding them here needs backend support.">
-            <Button variant="primary" icon={Plus} disabled className="pointer-events-none">New scholarship</Button>
-          </Tooltip>
-        }
+        description="Open or close scholarships and edit their eligibility and documents."
+        actions={<Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>New scholarship</Button>}
       />
 
       {notice && (
@@ -407,10 +495,25 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
             />
             <Toolbar>
               <SearchInput value={search} onChange={setSearch} label="Search scholarships" placeholder="Search by name…" className="flex-1" />
-              <Select value={sort} onChange={v => setSort(v as SortKey)} label="Sort scholarships" className="md:w-48">
-                <option value="name">Sort by name</option>
-                <option value="schedule">Sort by schedule</option>
-              </Select>
+              {view === 'List' && (
+                <Select value={sort} onChange={v => setSort(v as SortKey)} label="Sort scholarships" className="md:w-48">
+                  <option value="name">Sort by name</option>
+                  <option value="schedule">Sort by schedule</option>
+                </Select>
+              )}
+              <SegmentedControl<'List' | 'Matrix'>
+                options={['List', 'Matrix']}
+                value={view}
+                onChange={v => v && setView(v)}
+                label="View"
+                className="md:w-56"
+                renderLabel={o => (
+                  <span className="inline-flex items-center gap-1.5">
+                    {o === 'List' ? <LayoutList className="size-4" aria-hidden /> : <Table2 className="size-4" aria-hidden />}
+                    {o === 'List' ? 'List' : 'Requirements'}
+                  </span>
+                )}
+              />
             </Toolbar>
           </>
         }
@@ -427,8 +530,14 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
               action={<Button onClick={() => { setFilter('all'); setSearch(''); }}>Clear filters</Button>}
             />
           ) : (
-            <EmptyState title="No scholarships" description="Scholarships are defined in the system's scholarship list." />
+            <EmptyState title="No scholarships" description="Create one to get started." action={<Button icon={Plus} onClick={() => setCreating(true)}>New scholarship</Button>} />
           )
+        ) : view === 'Matrix' ? (
+          <ScholarshipMatrix
+            scholarships={[...visible].sort((a, b) => Number(!!a.scholarship.custom) - Number(!!b.scholarship.custom)).map(r => r.scholarship)}
+            onPatch={patchFromMatrix}
+            onOpen={onSelect}
+          />
         ) : (
           <Table label="Scholarships" minWidth="54rem">
             <thead>
@@ -450,6 +559,7 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
                     <Td>
                       <div className={`min-w-0 ${dim}`}>
                         <RowLink onClick={() => onSelect(s.id)}>{s.name}</RowLink>
+                        {s.custom && <Badge className="ml-2">Added by AdSO</Badge>}
                         {office !== ownOffice && (
                           <p className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-ink-subtle">
                             <span className="truncate">{OFFICE_LABELS[office]}</span>
@@ -477,17 +587,22 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
         )}
       </Card>
 
-      {closing && (
-        <ConfirmDialog
-          title={`Close ${closing.scholarship.name}?`}
-          description="Students won't see it in Explore and can't apply while it's closed. Applications already submitted aren't affected."
-          confirmLabel="Close scholarship"
-          confirmIcon={CircleOff}
-          tone="danger"
-          busy={statusBusy}
-          error={statusError}
-          onConfirm={() => setStatus(closing, 'Closed')}
-          onCancel={() => { if (!statusBusy) setClosing(null); }}
+      {creating && (
+        <CreateScholarshipDialog getToken={getToken} onClose={() => setCreating(false)} onCreated={created} />
+      )}
+
+      {statusChange && (
+        <ScholarshipStatusDialog
+          key={`${statusChange.row.defaults.id}-${statusChange.next}-${statusChange.mode}`}
+          scholarship={statusChange.mode === 'change' ? { ...statusChange.row.scholarship, status: statusChange.next } : statusChange.row.scholarship}
+          next={statusChange.next}
+          mode={statusChange.mode}
+          getToken={getToken}
+          changeStatus={() => patchScholarship(getToken, statusChange.row.defaults.id, {
+            status: statusChange.next === statusChange.row.defaults.status ? null : statusChange.next
+          })}
+          onDone={result => statusChanged(statusChange, result)}
+          onCancel={() => setStatusChange(null)}
         />
       )}
     </div>
@@ -535,32 +650,42 @@ function DetailSkeleton() {
 
 // --- Detail view -----------------------------------------------------------------
 
-function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewApplications }: {
+function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewApplications, onDeleted }: {
   row: Row;
   ownOffice: ScholarshipOffice;
   getToken: () => Promise<string | null>;
   onBack: () => void;
   onSaved: (overrides: ScholarshipOverride) => void;
   onViewApplications: (scholarshipId: string) => void;
+  onDeleted: () => void;
 }) {
   const s = row.scholarship;
-  const office = officeOf(s);
-  const online = acceptsOnlineApplications(s);
+  const isCustom = !!row.defaults.custom;
 
   const [form, setForm] = useState<EditorState>(() => editorFrom(s));
   const [attempted, setAttempted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setForm(f => ({ ...f, [key]: value }));
+
+  const office = isCustom ? form.office : officeOf(s);
+  const online = isCustom ? form.applicationMode === 'online' : acceptsOnlineApplications(s);
+  const slotBased = !!row.defaults.documentSlots?.length;
+  const locked = lockedRules(row.defaults.applicationFormType);
 
   const dirty = !sameEditor(form, editorFrom(s));
   const atDefaults = sameEditor(form, editorFrom(row.defaults));
 
   const errors: Partial<Record<keyof EditorState, string>> = {};
+  if (isCustom && !form.name.trim()) errors.name = 'Enter the scholarship name.';
+  if (isCustom && !/^[A-Za-z]{2,8}$/.test(form.referenceCode.trim())) errors.referenceCode = '2–8 letters, e.g. CSG.';
   if (!form.deadline.trim()) errors.deadline = 'Enter a deadline or application period.';
   if (!form.description.trim()) errors.description = 'Enter a description.';
-  if (fromLines(form.eligibility).length === 0) errors.eligibility = 'List at least one eligibility requirement.';
+  if (ruleLines(form.rules).length + clean(form.customEligibility).length === 0) errors.customEligibility = 'Tick at least one rule or add a condition, so students know who can apply.';
   const errorCount = Object.keys(errors).length;
   const shown = attempted ? errors : {};
 
@@ -579,6 +704,20 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
     }
   };
 
+  const remove = async () => {
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/scholarships/${row.defaults.id}`, { method: 'DELETE', headers: await authHeaders(getToken) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Couldn't delete the scholarship.");
+      onDeleted();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Couldn't delete the scholarship.");
+      setDeleting(false);
+    }
+  };
+
   const requestLeave = () => {
     if (isSaving) return;
     if (dirty) setConfirmLeave(true);
@@ -587,9 +726,11 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
 
   const closingNow = form.status === 'Closed' && s.status !== 'Closed';
   const edited = isEdited(row.overrides);
-  const editedLine = edited && row.overrides.updatedAt
-    ? `Edited ${formatDateTime(row.overrides.updatedAt)}${row.overrides.updatedBy ? ` by ${row.overrides.updatedBy}` : ''}`
-    : 'Using the default content';
+  const editedLine = isCustom
+    ? `Added${row.overrides.updatedAt ? ` · edited ${formatDateTime(row.overrides.updatedAt)}` : ''}${row.overrides.updatedBy ? ` by ${row.overrides.updatedBy}` : ''}`
+    : edited && row.overrides.updatedAt
+      ? `Edited ${formatDateTime(row.overrides.updatedAt)}${row.overrides.updatedBy ? ` by ${row.overrides.updatedBy}` : ''}`
+      : 'Using the default content';
 
   const showFooterError = attempted && errorCount > 0;
   const footerMessage = showFooterError
@@ -600,12 +741,13 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
     <div className="space-y-6">
       <PageHeader
         back={{ label: 'Scholarships', onClick: requestLeave }}
-        title={s.name}
+        title={isCustom ? form.name.trim() || 'Untitled scholarship' : s.name}
         description={office === ownOffice ? OFFICE_LABELS[office] : routingNote(office)}
         meta={
           <>
             <ScholarshipStatusBadge status={s.status} />
             {!online && <Badge>Info only</Badge>}
+            {isCustom && <Badge>Added by AdSO</Badge>}
             <span className="text-xs text-ink-subtle">{editedLine}</span>
           </>
         }
@@ -621,6 +763,43 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
           onSubmit={submit}
           noValidate
         >
+          {isCustom && (
+            <Card title="Details" description="Set when the scholarship was added. Students see the name and category.">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Field label="Name" error={shown.name} className="sm:col-span-2">
+                  <TextInput value={form.name} onChange={e => set('name', e.target.value)} maxLength={150} disabled={isSaving} />
+                </Field>
+                <Field label="Reviewed by">
+                  <Select value={form.office} onChange={v => set('office', v as ScholarshipOffice)} disabled={isSaving}>
+                    {(Object.keys(OFFICE_LABELS) as ScholarshipOffice[]).map(o => <option key={o} value={o}>{OFFICE_LABELS[o]}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Category">
+                  <Select value={form.category} onChange={v => set('category', v as Scholarship['category'])} disabled={isSaving}>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </Select>
+                </Field>
+                <Field label="How students get it" className="sm:col-span-2" helper={form.applicationMode === 'online' ? 'Students apply in AniSkolar with the standard form and upload the documents below.' : 'Listed for information only, with no Apply button.'}>
+                  <SegmentedControl<'online' | 'info'>
+                    options={['online', 'info']}
+                    value={form.applicationMode}
+                    onChange={v => v && set('applicationMode', v)}
+                    label="How students get it"
+                    renderLabel={o => (o === 'online' ? 'Online application' : 'Info only')}
+                  />
+                </Field>
+                {form.applicationMode === 'info' && (
+                  <Field label="How it's awarded" optional className="sm:col-span-2">
+                    <TextInput value={form.availNote} onChange={e => set('availNote', e.target.value)} maxLength={500} disabled={isSaving} placeholder="e.g. Nominated by the department chair each semester." />
+                  </Field>
+                )}
+                <Field label="Reference code" error={shown.referenceCode} helper={`Application numbers start with it, e.g. ${(form.referenceCode.trim().toUpperCase() || 'CODE')}-2026-0001.`}>
+                  <TextInput value={form.referenceCode} onChange={e => set('referenceCode', e.target.value.toUpperCase())} maxLength={8} disabled={isSaving || row.applications.total > 0} />
+                </Field>
+              </div>
+            </Card>
+          )}
+
           <Card title="Basic info" description="What students read on the scholarship's card and details page.">
             <div className="space-y-5">
               <Field label="Status" helper="Closed scholarships are hidden from students' Explore list and can't be applied to.">
@@ -637,37 +816,50 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
               <Field label="Description" error={shown.description}>
                 <Textarea value={form.description} onChange={e => set('description', e.target.value)} rows={4} maxLength={4000} disabled={isSaving} className="resize-y" />
               </Field>
-              <Field label="Benefits" helper="One per line.">
-                <Textarea value={form.benefits} onChange={e => set('benefits', e.target.value)} rows={5} disabled={isSaving} className="resize-y" />
+              <Field label="Benefits">
+                <ListEditor items={form.benefits} onChange={v => set('benefits', v)} label="Benefit" addLabel="Add benefit" placeholder="e.g. 100% tuition discount" disabled={isSaving} />
               </Field>
             </div>
           </Card>
 
-          <Card title="Eligibility" description="This is what students read. The system's eligibility checks don't change.">
-            <Field label="Who can apply" helper="One requirement per line." error={shown.eligibility}>
-              <Textarea value={form.eligibility} onChange={e => set('eligibility', e.target.value)} rows={5} disabled={isSaving} className="resize-y" />
-            </Field>
+          <Card
+            title="Eligibility"
+            description="Tick what applies. Students read the lines shown; rules marked “Checked against profile” warn a student whose profile doesn't fit."
+          >
+            <div className="space-y-5">
+              <RulesEditor rules={form.rules} onChange={v => set('rules', v)} locked={locked} disabled={isSaving} />
+              <Field label="Other conditions" optional helper="Shown to students as written; not checked." error={shown.customEligibility}>
+                <ListEditor items={form.customEligibility} onChange={v => set('customEligibility', v)} label="Condition" addLabel="Add condition" placeholder="e.g. Must be a member of the Vicissitude Editorial Board" disabled={isSaving} />
+              </Field>
+            </div>
           </Card>
 
-          <Card title="Requirements" description="Documents are set by the system. The steps and the submission note are yours to edit.">
+          <Card
+            title="Documents"
+            description={slotBased
+              ? `Set by the ${s.name} application form.`
+              : online ? 'Tick the documents students upload. Each one becomes an upload slot on the application form.' : 'Info-only scholarships have no online application, so nothing is uploaded.'}
+          >
             <div className="space-y-5">
-              <div>
-                <p className="mb-1.5 text-sm font-medium text-ink">Documents</p>
-                {s.requirements.length > 0 ? (
-                  <ul className="space-y-1.5 text-sm text-ink-muted">
-                    {s.requirements.map(req => (
-                      <li key={req} className="flex gap-2">
-                        <span aria-hidden className="mt-2 size-1 shrink-0 rounded-full bg-ink-subtle" />
-                        <span>{req}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-ink-subtle">No documents — this scholarship doesn't take online applications.</p>
-                )}
-              </div>
-              <Field label="Application process" helper="One step per line.">
-                <Textarea value={form.process} onChange={e => set('process', e.target.value)} rows={5} disabled={isSaving} className="resize-y" />
+              {slotBased ? (
+                <ul className="space-y-1.5 text-sm text-ink-muted">
+                  {s.requirements.map(req => (
+                    <li key={req} className="flex gap-2">
+                      <span aria-hidden className="mt-2 size-1 shrink-0 rounded-full bg-ink-subtle" />
+                      <span>{req}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : online ? (
+                <>
+                  <DocumentsEditor keys={form.documentKeys} onChange={v => set('documentKeys', v)} disabled={isSaving} />
+                  <Field label="Documents not on the list" optional>
+                    <ListEditor items={form.customDocuments} onChange={v => set('customDocuments', v)} label="Document" addLabel="Add document" placeholder="e.g. Certificate of membership from the organization" disabled={isSaving} />
+                  </Field>
+                </>
+              ) : null}
+              <Field label="Application process">
+                <ListEditor items={form.process} onChange={v => set('process', v)} label="Step" addLabel="Add step" placeholder="e.g. Upload the required documents as JPG files." disabled={isSaving} numbered />
               </Field>
               <Field label="Submission note" optional helper="Shown on the details page and after a student submits.">
                 <TextInput value={form.submissionNote} onChange={e => set('submissionNote', e.target.value)} maxLength={500} disabled={isSaving} placeholder="e.g. Submit complete requirements to the Alumni Office." />
@@ -718,21 +910,36 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
             )}
           </Card>
 
-          <Card title="Set by the system">
-            <dl className="space-y-3 text-sm">
-              <div>
-                <dt className="text-xs text-ink-subtle">Office</dt>
-                <dd className="text-ink">{OFFICE_LABELS[office]}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-ink-subtle">Application</dt>
-                <dd className="text-ink">{online ? FORM_LABELS[s.applicationFormType ?? 'standard'] : 'None — info only'}</dd>
-              </div>
-            </dl>
-            <p className="mt-4 text-xs text-ink-subtle">
-              The name, office, application form, eligibility checks and required documents can't be changed here.
-            </p>
-          </Card>
+          {isCustom ? (
+            <Card title="Delete scholarship">
+              <p className="text-sm text-ink-muted">
+                {row.applications.total > 0
+                  ? 'It has applications, so it can\'t be deleted. Close it instead.'
+                  : 'Removes it for good. Only possible while it has no applications.'}
+              </p>
+              {row.applications.total === 0 && (
+                <Button className="mt-3" size="sm" variant="danger-secondary" icon={Trash2} onClick={() => { setDeleteError(''); setConfirmDelete(true); }}>
+                  Delete scholarship
+                </Button>
+              )}
+            </Card>
+          ) : (
+            <Card title="Set by the system">
+              <dl className="space-y-3 text-sm">
+                <div>
+                  <dt className="text-xs text-ink-subtle">Office</dt>
+                  <dd className="text-ink">{OFFICE_LABELS[office]}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-ink-subtle">Application</dt>
+                  <dd className="text-ink">{online ? FORM_LABELS[s.applicationFormType ?? 'standard'] : 'None — info only'}</dd>
+                </div>
+              </dl>
+              <p className="mt-4 text-xs text-ink-subtle">
+                The name, office and application form are built in.{slotBased ? ' Its documents, and the rules its form checks, are fixed too.' : ''}
+              </p>
+            </Card>
+          )}
         </aside>
       </div>
 
@@ -744,10 +951,12 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
           {footerMessage}
         </p>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" onClick={() => setForm(editorFrom(row.defaults))} disabled={isSaving || atDefaults}>
-            <span className="sm:hidden">Reset</span>
-            <span className="hidden sm:inline">Reset to defaults</span>
-          </Button>
+          {!isCustom && (
+            <Button variant="ghost" onClick={() => setForm(editorFrom(row.defaults))} disabled={isSaving || atDefaults}>
+              <span className="sm:hidden">Reset</span>
+              <span className="hidden sm:inline">Reset to defaults</span>
+            </Button>
+          )}
           <Button onClick={requestLeave} disabled={isSaving}>Cancel</Button>
           <Button variant="primary" type="submit" form="scholarship-form" icon={Save} loading={isSaving} disabled={isSaving || !dirty}>
             Save changes
@@ -765,6 +974,113 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
           onCancel={() => setConfirmLeave(false)}
         />
       )}
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete ${s.name}?`}
+          description="It's removed from AniSkolar for good. This can't be undone."
+          confirmLabel="Delete scholarship"
+          confirmIcon={Trash2}
+          tone="danger"
+          busy={deleting}
+          error={deleteError}
+          onConfirm={remove}
+          onCancel={() => { if (!deleting) setConfirmDelete(false); }}
+        />
+      )}
     </div>
+  );
+}
+
+// --- New scholarship -------------------------------------------------------------
+
+// First letters of the name's words, e.g. "Computer Studies Grant" -> CSG.
+function suggestCode(name: string): string {
+  const letters = name.replace(/[^A-Za-z\s]/g, ' ').split(/\s+/).filter(w => w.length > 2 || /^[A-Z]+$/.test(w)).map(w => w[0]).join('').toUpperCase();
+  return letters.length >= 2 ? letters.slice(0, 8) : name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
+}
+
+function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
+  getToken: () => Promise<string | null>;
+  onClose: () => void;
+  onCreated: (overrides: ScholarshipOverride) => void;
+}) {
+  const [name, setName] = useState('');
+  const [office, setOffice] = useState<ScholarshipOffice>('LSO');
+  const [category, setCategory] = useState<Scholarship['category']>('Others');
+  const [mode, setMode] = useState<'online' | 'info'>('online');
+  const [code, setCode] = useState('');
+  const [codeTouched, setCodeTouched] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const shownCode = codeTouched ? code : suggestCode(name);
+
+  const submit = async () => {
+    if (busy) return;
+    if (!name.trim()) { setError('Enter the scholarship name.'); return; }
+    if (!/^[A-Za-z]{2,8}$/.test(shownCode)) { setError('The reference code must be 2–8 letters.'); return; }
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/scholarships`, {
+        method: 'POST',
+        headers: await authHeaders(getToken, true),
+        body: JSON.stringify({ name: name.trim(), office, category, applicationMode: mode, referenceCode: shownCode }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Couldn't create the scholarship.");
+      onCreated(body.scholarship);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't create the scholarship.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="New scholarship"
+      description="It starts closed. Next you'll tick its eligibility and documents, then open it."
+      onClose={onClose}
+      dismissible={!busy}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" icon={Plus} onClick={submit} loading={busy}>Create and edit</Button>
+        </>
+      }
+    >
+      <form className="grid grid-cols-1 gap-5 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); submit(); }} noValidate>
+        {error && <div className="sm:col-span-2"><Alert tone="danger">{error}</Alert></div>}
+        <Field label="Name" className="sm:col-span-2">
+          <TextInput value={name} onChange={e => setName(e.target.value)} maxLength={150} placeholder="e.g. Computer Studies Grant" autoFocus disabled={busy} />
+        </Field>
+        <Field label="Reviewed by">
+          <Select value={office} onChange={v => setOffice(v as ScholarshipOffice)} disabled={busy}>
+            {(Object.keys(OFFICE_LABELS) as ScholarshipOffice[]).map(o => <option key={o} value={o}>{OFFICE_LABELS[o]}</option>)}
+          </Select>
+        </Field>
+        <Field label="Category">
+          <Select value={category} onChange={v => setCategory(v as Scholarship['category'])} disabled={busy}>
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        </Field>
+        <Field label="How students get it" className="sm:col-span-2">
+          <SegmentedControl<'online' | 'info'>
+            options={['online', 'info']}
+            value={mode}
+            onChange={v => v && setMode(v)}
+            label="How students get it"
+            renderLabel={o => (o === 'online' ? 'Online application' : 'Info only')}
+          />
+        </Field>
+        <Field label="Reference code" helper={`Application numbers start with it: ${shownCode || 'CODE'}-2026-0001.`}>
+          <TextInput
+            value={shownCode}
+            onChange={e => { setCodeTouched(true); setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, '')); }}
+            maxLength={8}
+            disabled={busy}
+          />
+        </Field>
+      </form>
+    </Modal>
   );
 }

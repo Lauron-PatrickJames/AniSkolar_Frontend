@@ -10,8 +10,10 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onLogout: () => void;
-  // Scholars (an approved application) also get Renewal and Duty Hours.
+  // Scholars (an approved application) also get Renewal; SFAG scholars
+  // also get Duty Hours.
   isScholar?: boolean;
+  isSfagScholar?: boolean;
   id?: string;
 }
 
@@ -23,15 +25,14 @@ export default function Sidebar({
   onClose,
   onLogout,
   isScholar = false,
+  isSfagScholar = false,
   id
 }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
     { id: 'explore', name: 'Explore Grants', icon: Compass },
-    ...(isScholar ? [
-      { id: 'renewals', name: 'Renewal', icon: RefreshCw },
-      { id: 'duty-hours', name: 'Duty Hours', icon: Clock },
-    ] : []),
+    ...(isScholar ? [{ id: 'renewals', name: 'Renewal', icon: RefreshCw }] : []),
+    ...(isSfagScholar ? [{ id: 'duty-hours', name: 'Duty Hours', icon: Clock }] : []),
     { id: 'gpa-calculator', name: 'GPA Calculator', icon: Calculator },
     { id: 'announcements', name: 'Announcements', icon: Megaphone },
     { id: 'profile', name: 'Profile', icon: UserCircle }

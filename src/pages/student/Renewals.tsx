@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/react';
+import { openDocument } from '../../utils/documents';
 import {
   AlertCircle, ArrowRight, Calendar, CheckCircle, Clock, FileText, Loader2, MessageSquare, RefreshCw, Upload, X, XCircle
 } from 'lucide-react';
@@ -206,6 +207,7 @@ function PeriodFacts({ period }: { period: RenewalPeriod }) {
 }
 
 function RenewalCard({ renewal, onRevise }: { renewal: Renewal; onRevise?: () => void }) {
+  const { getToken } = useAuth();
   const showMessage = renewal.reviewNote && renewal.status !== 'Under Evaluation';
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-4">
@@ -254,15 +256,14 @@ function RenewalCard({ renewal, onRevise }: { renewal: Renewal; onRevise?: () =>
         <ul className="flex flex-wrap gap-2">
           {renewal.documents.map(doc => (
             <li key={doc.fileId}>
-              <a
-                href={`${API_BASE_URL}/api/applications/documents/${doc.fileId}`}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => openDocument(doc.fileId, getToken).catch(err => window.alert(err instanceof Error ? err.message : "Couldn't open the file."))}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-brand-green/40 hover:text-brand-green"
               >
                 <FileText className="w-3.5 h-3.5" aria-hidden />
                 {doc.docType}
-              </a>
+              </button>
             </li>
           ))}
         </ul>

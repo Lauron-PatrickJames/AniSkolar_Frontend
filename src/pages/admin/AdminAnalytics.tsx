@@ -82,7 +82,7 @@ const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
 // DLSU-D academic calendar, by month (0 = January): 1st semester Aug–Dec,
 // 2nd semester Jan–May, midyear Jun–Jul. "This school year" follows the
 // scholarship cycle (CYCLE_START_MONTH, June) rather than the August class
-// start, so it includes the June 1–20 application window for that year.
+// start, so it includes the June application window for that year.
 const SCHOOL_YEAR_START_MONTH = CYCLE_START_MONTH;
 const TERMS: { startMonth: number; endMonth: number }[] = [
   { startMonth: 7, endMonth: 11 },

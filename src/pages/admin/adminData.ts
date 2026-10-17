@@ -135,6 +135,11 @@ export interface AdminApplication {
   eligibilityAnswers?: Record<string, unknown>;
   evaluationSheet?: Record<string, unknown>;
   adminFields?: PolcaAdminFields;
+  // SFAG only: the tuition discount granted (100 / 75 / 50 / 25), set by
+  // the AdSO once approved; it decides the scholar's duty hours.
+  sfagPercentage?: number | null;
+  sfagPercentageSetBy?: string;
+  sfagPercentageSetAt?: string;
   // Set once a POLCA / Alumni office sends the application to the AdSO.
   forwardedAt?: string | null;
   forwardedBy?: string;
@@ -162,7 +167,7 @@ function usesSectionForm(app: AdminApplication): boolean {
   return app.applicationFormType !== 'standard';
 }
 
-// The applicant's full name as submitted: first, middle (or the SFA
+// The applicant's full name as submitted: first, middle (or the SFAG
 // form's middle initial) and last, joined from the separate fields — the
 // raw value, for search and exports; display it with titleCaseName().
 export function applicantName(app: AdminApplication): string {
@@ -219,7 +224,7 @@ export function historyLabel(status: HistoryStatus): string {
 
 export const FORM_TYPE_LABELS: Record<FormType, string> = {
   standard: 'Entrance form',
-  sfag: 'SFA Grant form',
+  sfag: 'SFAG form',
   polca: 'POLCA form',
   alumni: 'Alumni form'
 };
@@ -263,15 +268,12 @@ export function plural(count: number, noun: string, pluralNoun = `${noun}s`): st
   return `${count} ${count === 1 ? noun : pluralNoun}`;
 }
 
-export function documentUrl(fileId: string): string {
-  return `${API_BASE_URL}/api/applications/documents/${fileId}`;
-}
 
 // Philippine academic-year convention: June through May. A submission in
 // March 2026 falls in AY 2025–2026; one in September 2026 in AY 2026–2027.
 // Derived from createdAt, since Application has no separate cycle field.
 // Scholarship cycles. DLSU-D's academic year starts in August, but its
-// applications (Entrance, SFA Grant) open June 1–20 for the coming year,
+// applications (Entrance June 1–20, SFAG June 16 – July 3 in 2026) open in June for the coming year,
 // so a cycle runs June through May: an application in June 2026 belongs
 // to AY 2026–2027. Mirrored in the backend's utils/academicYear.js.
 export const CYCLE_START_MONTH = 5; // June (0 = January)

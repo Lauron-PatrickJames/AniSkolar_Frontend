@@ -1,22 +1,71 @@
 # AniSkolar — hand-off notes
 
+_Last updated 2026-10-18._
+
 Work branch: `claude/youthful-hawking-4wghiu` in both repos (frontend + backend).
 Not merged into `main` yet. The repos moved to the Lauron-PatrickJames
 GitHub account (Lauron-PatrickJames/AniSkolar_Frontend and
 AniSkolar_Backend); update your `origin` with `git remote set-url` if you
 cloned the old addresses.
 
+## Where things stand
+- Features are essentially complete: student portal (profile, Explore /
+  Compare, applications for SFAG, Entrance, EBPSP, POLCA and Alumni,
+  renewals, duty hours, messages), AdSO console (applications, renewals,
+  scholars, duty hours with offices and events, statistics, FSE report,
+  messages, announcements with Facebook and Outlook email, scholarships
+  and the requirements matrix), POLCA / Alumni office consoles.
+- Not done yet: deployment (see "Still needed"), an AdSO screen for
+  verifying profiles and correction requests, and a saved automated test
+  suite (changes were tested with throwaway scripts against a separate
+  test database, `aniskolar_renewal_test`; those scripts aren't in the
+  repos).
+- Waiting on others: Heraldo Filipino details (AdSO), POLCA's rules,
+  COSA accounts, DLSU-D IT for sending email as the Scholarship mailbox.
+
+Contents: After pulling · Configuration · Demo data · Rules worth knowing ·
+Renewals · Duty hours · Messages · Email (Outlook) · Profile · Scholarship
+status announcements · Scholarship requirements · Office facts · File
+storage · Programs list · FSE report · Still needed · Open ideas.
+
 ## After pulling
-0. Backend: run `npm install`. `node_modules` is no longer in git
-   (2026-10-17); it was committed early on by mistake.
-1. Restart the backend (new models: `Counter`, name parts on `Student`,
-   `internalNotes` on `Application`).
-2. Backfill student name parts from Clerk (backend folder):
-   - `node scripts/backfill-student-names.js` — dry run, prints what it
-     would change and lists applications whose stored first/last split
-     differs (for manual review; applications are never rewritten).
-   - `node scripts/backfill-student-names.js --apply` — writes the
-     Student records.
+1. Backend: `npm install` (new since 2026-10-18: `@azure/communication-email`
+   and `sharp`). `node_modules` is no longer in git (2026-10-17).
+2. Frontend: `npm install` (SheetJS installs from `vendor/xlsx-0.20.3.tgz`).
+3. Copy any new settings from the backend's `.env.example` into your own
+   `.env` (see "Configuration"). Without the email settings everything
+   works; emails are just skipped.
+4. Restart the backend. It creates new collections on its own
+   (`messages`, `dutyevents`); no migration is needed.
+5. Optional, older: backfill student name parts from Clerk (backend):
+   `node scripts/backfill-student-names.js` (dry run), then `--apply`.
+
+## Configuration (backend `.env`)
+`.env` is git-ignored — never commit it or paste its keys anywhere.
+`.env.example` lists every setting with empty placeholders.
+
+| Setting | What it does |
+|---|---|
+| `MONGODB_URI` | Atlas connection string (database `aniskolar`). |
+| `MONGODB_DB` | Optional: another database, e.g. `aniskolar_demo` (see "Demo data"). |
+| `PORT` | Backend port (default 5000). |
+| `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Clerk (sign-in). |
+| `FRONTEND_ORIGINS` | Allowed frontend origins (CORS), comma-separated. |
+| `AZURE_STORAGE_CONNECTION_STRING` | Azure Blob Storage for uploaded files; empty = MongoDB GridFS. |
+| `AZURE_STORAGE_CONTAINER` | `aniskolar-files` (real) or `aniskolar-demo` (demo). |
+| `ACS_EMAIL_CONNECTION_STRING` | Azure Communication Services (`aniskolar-comms` → Keys); empty = no emails. |
+| `ACS_EMAIL_SENDER` | The sender, `DoNotReply@…azurecomm.net` (later `noreply@aniskolar.com`). |
+| `ADSO_NOTIFY_EMAIL` | Who is emailed when a student sends a message. |
+| `EMAIL_REPLY_TO` | Optional: where replies to AniSkolar emails go (the AdSO's mailbox at handover). |
+| `EMAIL_SIGNATURE` | Optional: signature lines separated by `\|`, e.g. `Name, MS\|Scholarship Associate`. |
+| `APP_URL` | The frontend address used in email links. |
+| `ANNOUNCEMENT_EMAIL_BATCHES_PER_MINUTE` | Announcement BCC batches of 50 per minute (1 while on the free sender). |
+| `FB_PAGE_ID`, `FB_PAGE_ACCESS_TOKEN`, `FB_GRAPH_VERSION` | Facebook Page cross-posting (`services/facebook.js`). |
+
+Azure (Azure for Students, resource group `aniskolar`):
+`aniskolarfiles` (storage, Southeast Asia), `aniskolar-email` (Email
+Communication Service with a free Azure-managed domain) connected to
+`aniskolar-comms` (Communication Service), both Asia Pacific.
 
 ## Demo data
 `node scripts/seed-demo.js` (backend) wipes and fills the **aniskolar_demo**
@@ -33,7 +82,10 @@ scheduled, draft). Sample files go to the Azure container
 which `utils/mailer.js` never sends to. The real students' records are copied in, so your own
 accounts work (each gets an approved SFAG with duty hours). To use it,
 add `MONGODB_DB=aniskolar_demo` and `AZURE_STORAGE_CONTAINER=aniskolar-demo`
-to the backend `.env` and restart; remove both to go back.
+to the backend `.env` and restart; remove both to go back. The demo also has
+messages (one waiting with a PDF) and six duty offices with slots set,
+with a few scholars still without an office, for Random assign. If you test announcement emails on the demo, use
+"Specific students" — your groupmates' real accounts are in it too.
 
 ## Rules worth knowing
 - **Scholarship cycle:** classes start in August, but applications open
@@ -155,9 +207,10 @@ to the backend `.env` and restart; remove both to go back.
 
 ## Duty hours (student: Duty Hours; AdSO: Review → Duty hours)
 - Replaces the office's "SFAG Duty Calculator" sheet. Only SFAG scholars
-  have duty hours; they keep one log per term (1st / 2nd semester):
-  deadline and required hours, each duty (date, time in, time out) and
-  special events with equivalent hours.
+  have duty hours; they keep one log per term (1st / 2nd semester): the
+  deadline, each duty (date, time in, time out) and claims for credited
+  events. Required hours come from the AdSO's table (below) when the
+  grant percentage and year level are known.
 - The AdSO assigns the office each scholar renders duty in, per term:
   the Office column ("Assign office" / click to change), "Change" in a
   scholar's log, or select several and "Assign office"
@@ -220,6 +273,79 @@ to the backend `.env` and restart; remove both to go back.
   with a preview before anything is saved ("Shuffle again" to redo).
   Office requests: asking for fewer scholars is fine; more depends on
   availability (few scholars, many offices) — the AdSO adjusts the slots.
+
+## Messages (student ↔ AdSO)
+- One conversation per student with the AdSO (`models/Message.js`,
+  `routes/messages.js`). Students: sidebar → Messages (unread badge).
+  AdSO: Communication → Messages (unread badge), plus "Message student"
+  on an application and on a scholar; "New message" by student number.
+  POLCA / Alumni admins don't have it (AdSO only, as decided).
+- Text up to 4000 characters, up to 3 JPG/PNG/PDF attachments of 10 MB
+  (checked by type and by their first bytes), stored like documents;
+  `GET /api/messages/files/:fileId` lets only that student or the AdSO
+  open them. A message can say which of the student's applications it's
+  about. Read receipts ("Seen"); pages refresh every 20 s.
+
+## Email (Outlook)
+Sent through Azure Communication Services Email (`utils/mailer.js` — the
+only file to change when switching providers). Students' and the AdSO's
+@dlsud.edu.ph mailboxes are Outlook, so emails land there (Focused inbox
+in testing). Addresses ending in `.invalid` (demo students) are never
+emailed.
+- Message alerts: the student's school email when the AdSO writes,
+  `ADSO_NOTIFY_EMAIL` when a student writes; one email per burst while
+  earlier messages are unread. Off (just logged) until the backend `.env`
+  has `ACS_EMAIL_CONNECTION_STRING` and `ACS_EMAIL_SENDER`; also set
+  `ADSO_NOTIFY_EMAIL` and `APP_URL` (see `.env.example`). Optional
+  `EMAIL_REPLY_TO` makes replies go to that address. At handover the AdSO
+  sets `ADSO_NOTIFY_EMAIL` and `EMAIL_REPLY_TO` to their own mailbox (the
+  team doesn't have access to it); sending truly as an @dlsud.edu.ph
+  address needs DLSU-D IT (HVE or Microsoft Graph).
+- Announcements can also be emailed ("Also email students (Outlook)" in
+  the editor and the scholarship open/close dialog;
+  `utils/announcementEmails.js`). "Email to" (`EmailAudience.tsx`,
+  backend `utils/emailTarget.js`, stored as `emailTarget`): all students,
+  applicants (of any chosen scholarships, optionally by application
+  status), current scholars (of chosen scholarships), or specific students
+  (search or paste student numbers); every mode can be narrowed by college
+  and year level. The editor shows "Will email N students" live
+  (`POST /api/announcements/email/preview`). Older announcements with
+  `emailAudience` still work. Sent once when published
+  (scheduled ones at their time), BCC batches of 50,
+  `ANNOUNCEMENT_EMAIL_BATCHES_PER_MINUTE` (default 2) per minute by the
+  server's minute timer, resuming where it stopped; the list shows
+  progress (sent/total), sent, or failed with Retry. Edits after sending
+  aren't re-emailed. Without the email settings it shows failed: "Email
+  isn't set up".
+- Email look (`utils/emailTemplate.js`), modelled on the office's own
+  Outlook announcements: images inline on top — the first one large
+  (≤ 1200 px wide), the next 4 as a 2×2 grid of thumbnails, and "+N more
+  photos" linking to AniSkolar, so many photos don't make it long; resized
+  with `sharp` (e.g. a 7 MB photo becomes ~230 KB, 8 photos ~400 KB in all;
+  the stored originals aren't changed), title, summary in bold, body with "-"/"•" lines as bullets
+  and clickable links, a "View on AniSkolar" / "Reply in AniSkolar"
+  button, optional signature (`EMAIL_SIGNATURE`, lines separated by "|")
+  and the office footer (address, email, phone). Plain-text copy too.
+- Limits: the free Azure-managed sender allows 5 emails a minute and 10
+  an hour (each alert, and each announcement batch of up to 50, is one
+  email). Fine for testing, not for emailing every student. Higher limits
+  need a custom domain (aniskolar.com) plus a quota request to Azure.
+- **Azure Communication Services Email retires on September 30, 2028**
+  (maintenance mode; Microsoft advises against new workloads). It works
+  until then.
+- The office currently emails everyone from the Scholarship mailbox to
+  Outlook distribution lists ("DLSU-D Students", "DLSU-D STAFF",
+  "DLSU-D Faculty"). The ideal handover: DLSU-D IT lets AniSkolar send as
+  that mailbox (Microsoft Graph) to "DLSU-D Students" — one email, no
+  batches or Azure limits.
+  The request for IT, made by or with the AdSO: "Can AniSkolar send as the
+  Scholarship mailbox (Microsoft Graph) or through Microsoft 365 High
+  Volume Email (HVE), to the DLSU-D Students list?" Until then:
+  aniskolar.com as the sender, with `EMAIL_REPLY_TO` set to the AdSO.
+- Set up on 2026-10-18 (Azure resources under "Configuration"). Seen in a
+  real Outlook inbox: announcement emails (BCC, the new design). Checked
+  in a preview only: the image layout. Covered by test scripts but not yet
+  seen in a real inbox: message alerts.
 
 ## Profile redesign + data consistency (done 2026-10-05)
 - Server stamps first/middle/last name from the Student record on every
@@ -387,100 +513,6 @@ Follow-ups:
   Legacy Night) are externally funded, so they stay out. The site's SFAG
   PDF is the older A.Y. 2025–26 version and gives no duty hours.
 
-## Still needed
-- From the AdSO: Heraldo Filipino details — still being coordinated.
-  (EBPSP documents and SFAG duty hours confirmed 2026-10-18.)
-- POLCA: confirm 2 scholars per college (by college, not program) and
-  that there are no renewals.
-- COSA: whether COSA gets its own AniSkolar account to propose events
-  (on hold — the group will talk to COSA). For now the AdSO enters COSA
-  events.
-- Group decisions: re-add PAG or not; whether the closing announcement
-  starts unticked. (A "keep this one" button for a second internal
-  scholarship was considered and dropped.)
-- Email: set up on 2026-10-18 (Azure resource group `aniskolar`:
-  `aniskolar-email` with a free Azure-managed domain, connected to
-  `aniskolar-comms`; data location Asia Pacific). The free domain allows
-  only 5 emails/minute and 10/hour — fine for testing, not for emailing
-  every student. **Azure Communication Services Email retires on
-  September 30, 2028** (maintenance mode; Microsoft advises against new
-  workloads). Long-term options: Microsoft 365 High Volume Email (HVE),
-  which sends to recipients inside the same tenant — every student and
-  the AdSO are @dlsud.edu.ph, so ask DLSU-D IT; or a third-party sender
-  with aniskolar.com. Only `utils/mailer.js` changes when switching.
-- Deployment: buy aniskolar.com; Heroku student credits (support ticket
-  open); then Procfile/engines, Vercel config, production env vars,
-  Clerk production instance + DNS, Microsoft OAuth app, Facebook Page.
-
-## Messages (student ↔ AdSO)
-- One conversation per student with the AdSO (`models/Message.js`,
-  `routes/messages.js`). Students: sidebar → Messages (unread badge).
-  AdSO: Communication → Messages (unread badge), plus "Message student"
-  on an application and on a scholar; "New message" by student number.
-  POLCA / Alumni admins don't have it (AdSO only, as decided).
-- Text up to 4000 characters, up to 3 JPG/PNG/PDF attachments of 10 MB
-  (checked by type and by their first bytes), stored like documents;
-  `GET /api/messages/files/:fileId` lets only that student or the AdSO
-  open them. A message can say which of the student's applications it's
-  about. Read receipts ("Seen"); pages refresh every 20 s.
-- Email alerts to Outlook (`utils/mailer.js`, Azure Communication
-  Services Email): the student's school email when the AdSO writes,
-  `ADSO_NOTIFY_EMAIL` when a student writes; one email per burst while
-  earlier messages are unread. Off (just logged) until the backend `.env`
-  has `ACS_EMAIL_CONNECTION_STRING` and `ACS_EMAIL_SENDER`; also set
-  `ADSO_NOTIFY_EMAIL` and `APP_URL` (see `.env.example`). Optional
-  `EMAIL_REPLY_TO` makes replies go to that address. At handover the AdSO
-  sets `ADSO_NOTIFY_EMAIL` and `EMAIL_REPLY_TO` to their own mailbox (the
-  team doesn't have access to it); sending truly as an @dlsud.edu.ph
-  address needs DLSU-D IT (HVE or Microsoft Graph).
-- Announcements can also be emailed ("Also email students (Outlook)" in
-  the editor and the scholarship open/close dialog;
-  `utils/announcementEmails.js`). "Email to" (`EmailAudience.tsx`,
-  backend `utils/emailTarget.js`, stored as `emailTarget`): all students,
-  applicants (of any chosen scholarships, optionally by application
-  status), current scholars (of chosen scholarships), or specific students
-  (search or paste student numbers); every mode can be narrowed by college
-  and year level. The editor shows "Will email N students" live
-  (`POST /api/announcements/email/preview`). Older announcements with
-  `emailAudience` still work. Sent once when published
-  (scheduled ones at their time), BCC batches of 50,
-  `ANNOUNCEMENT_EMAIL_BATCHES_PER_MINUTE` (default 2) per minute by the
-  server's minute timer, resuming where it stopped; the list shows
-  progress (sent/total), sent, or failed with Retry. Edits after sending
-  aren't re-emailed. Without the email settings it shows failed: "Email
-  isn't set up".
-- Email look (`utils/emailTemplate.js`), modelled on the office's own
-  Outlook announcements: images inline on top — the first one large
-  (≤ 1200 px wide), the next 4 as a 2×2 grid of thumbnails, and "+N more
-  photos" linking to AniSkolar, so many photos don't make it long; resized
-  with `sharp` (e.g. a 7 MB photo becomes ~230 KB, 8 photos ~400 KB in all;
-  the stored originals aren't changed), title, summary in bold, body with "-"/"•" lines as bullets
-  and clickable links, a "View on AniSkolar" / "Reply in AniSkolar"
-  button, optional signature (`EMAIL_SIGNATURE`, lines separated by "|")
-  and the office footer (address, email, phone). Plain-text copy too.
-- The office currently emails everyone from the Scholarship mailbox to
-  Outlook distribution lists ("DLSU-D Students", "DLSU-D STAFF",
-  "DLSU-D Faculty"). The ideal handover: DLSU-D IT lets AniSkolar send as
-  that mailbox (Microsoft Graph) to "DLSU-D Students" — one email, no
-  batches or Azure limits.
-
-## Open ideas (not done)
-- Duty hours: let the AdSO set required hours and deadline per term
-  instead of each scholar typing them; head sign-off on logged hours
-  (needs department head accounts).
-- Renewal evaluation: the form has 19 items but our copy shows 15
-  (`EVALUATION_ITEMS` in the backend's `utils/renewals.js` and the
-  frontend's `src/utils/renewals.ts`); add the other 4 once the AdSO shares
-  the form. The label for a rating of 1 is assumed ("Poor").
-- Show the head's evaluation and remarks to scholars once Dr. May agrees.
-- School administrators (department heads) entering evaluations
-  themselves needs a new account role.
-- Let admins edit the message to the applicant without changing the
-  decision, recorded as its own "Message updated" history entry.
-- A server-side stats endpoint (`/api/applications/stats?from&to`) once
-  the application count grows; the Statistics page computes in the
-  browser today.
-
 ## FSE report (AdSO → Insights → FSE report)
 - Upload the registrar's scholarship report per term (.xls/.xlsx), choose
   the academic year and term, enter the student population, and review
@@ -514,3 +546,46 @@ Follow-ups:
   tarball in `vendor/xlsx-0.20.3.tgz` (the npm registry only has 0.18.5,
   which has known advisories). Keep the tarball committed; `npm install`
   needs it.
+
+## Still needed
+- From the AdSO: Heraldo Filipino details — still being coordinated.
+  (EBPSP documents and SFAG duty hours confirmed 2026-10-18.)
+- POLCA: confirm 2 scholars per college (by college, not program) and
+  that there are no renewals.
+- COSA: whether COSA gets its own AniSkolar account to propose events
+  (on hold — the group will talk to COSA). For now the AdSO enters COSA
+  events.
+- Group decisions: re-add PAG or not; whether the closing announcement
+  starts unticked. (A "keep this one" button for a second internal
+  scholarship was considered and dropped.)
+- Email for real use: aniskolar.com as a custom sender domain in
+  `aniskolar-email` and a quota increase, or (better) DLSU-D IT's
+  permission to send as the Scholarship mailbox — see "Email (Outlook)".
+- Deployment: buy aniskolar.com; Heroku student credits (support ticket
+  open); then Procfile/engines, Vercel config, production env vars (every
+  row in "Configuration", with `APP_URL` = the real address), Clerk
+  production instance + DNS, Microsoft OAuth app, Facebook Page.
+- Before going live: switch off the demo (`MONGODB_DB`,
+  `AZURE_STORAGE_CONTAINER=aniskolar-files`), and set
+  `ANNOUNCEMENT_EMAIL_BATCHES_PER_MINUTE` to what the sender allows.
+
+## Open ideas (not done)
+- Duty hours: let the AdSO set the deadline per term (required hours are
+  already set per grant and year level); head sign-off on logged hours
+  (needs department head accounts); COSA accounts to propose events.
+- AdSO screen to verify profiles and handle correction requests (the
+  endpoints exist).
+- Announcement email: the office's banner image in the footer, if the
+  office provides the file.
+- Renewal evaluation: the form has 19 items but our copy shows 15
+  (`EVALUATION_ITEMS` in the backend's `utils/renewals.js` and the
+  frontend's `src/utils/renewals.ts`); add the other 4 once the AdSO shares
+  the form. The label for a rating of 1 is assumed ("Poor").
+- Show the head's evaluation and remarks to scholars once Dr. May agrees.
+- School administrators (department heads) entering evaluations
+  themselves needs a new account role.
+- Let admins edit the message to the applicant without changing the
+  decision, recorded as its own "Message updated" history entry.
+- A server-side stats endpoint (`/api/applications/stats?from&to`) once
+  the application count grows; the Statistics page computes in the
+  browser today.

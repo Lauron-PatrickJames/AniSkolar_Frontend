@@ -60,7 +60,9 @@ export function filterApplications(applications: AdminApplication[], filters: Li
     if (q) {
       return applicantName(app).toLowerCase().includes(q) ||
         app.studentNumber.toLowerCase().includes(q) ||
-        app.referenceCode.toLowerCase().includes(q);
+        app.referenceCode.toLowerCase().includes(q) ||
+        (app.currentProfile?.college ?? '').toLowerCase().includes(q) ||
+        (app.currentProfile?.programCode ?? '').toLowerCase().includes(q);
     }
     return true;
   });

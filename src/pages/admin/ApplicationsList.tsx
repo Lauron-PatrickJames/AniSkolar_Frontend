@@ -13,6 +13,7 @@ import {
   filterApplications, waitingDays
 } from './applicationQueue';
 import { relativeTime } from './history';
+import { collegeName, findProgram } from '../../data/programs';
 
 export { DEFAULT_FILTERS };
 export type { ListFilters };
@@ -122,7 +123,7 @@ export default function ApplicationsList({
                 value={filters.search}
                 onChange={search => setFilter({ search })}
                 label="Search applications"
-                placeholder="Search name, student no. or reference…"
+                placeholder="Search name, student no., reference or college…"
                 className="min-w-56 flex-1"
               />
               <Select value={filters.scholarship} onChange={scholarship => setFilter({ scholarship })} className="md:w-60" label="Filter by scholarship">
@@ -160,10 +161,11 @@ export default function ApplicationsList({
           )
         ) : (
           <>
-            <Table label="Applications" minWidth={showWaiting ? '58rem' : '52rem'}>
+            <Table label="Applications" minWidth={showWaiting ? '66rem' : '60rem'}>
               <thead>
                 <tr>
                   <Th sticky={false}>Applicant</Th>
+                  <Th sticky={false} className="w-40">College</Th>
                   <Th sticky={false}>Scholarship</Th>
                   <Th sticky={false} className="w-32">Submitted</Th>
                   {showWaiting && <Th sticky={false} className="w-28">Waiting</Th>}
@@ -175,6 +177,9 @@ export default function ApplicationsList({
                 {pager.pageItems.map(app => {
                   const name = titleCaseName(applicantName(app));
                   const days = waitingDays(app, now);
+                  // The student's college and program now (from their profile).
+                  const profile = app.currentProfile;
+                  const college = profile?.college || findProgram(profile?.programCode)?.college || '';
                   return (
                     <Tr key={app._id} onClick={() => onOpen(app)}>
                       <Td>
@@ -193,6 +198,16 @@ export default function ApplicationsList({
                             </p>
                           </div>
                         </div>
+                      </Td>
+                      <Td>
+                        {college ? (
+                          <Tooltip content={collegeName(college)} asChild>
+                            <span tabIndex={0} className="rounded-badge font-medium text-ink">{college}</span>
+                          </Tooltip>
+                        ) : <span className="text-ink-subtle">—</span>}
+                        {(profile?.programCode || profile?.yearLevel) && (
+                          <p className="text-xs text-ink-subtle">{[profile?.programCode, profile?.yearLevel].filter(Boolean).join(' · ')}</p>
+                        )}
                       </Td>
                       <Td>
                         <Truncate className="text-ink">{app.scholarshipName}</Truncate>

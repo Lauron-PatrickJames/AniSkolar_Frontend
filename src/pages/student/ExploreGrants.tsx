@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Holdings, applicationWindowBlock, getAvailableScholarships, holdingNotice, needsToChoose, profileGpaWarning } from '../../utils/eligibility';
+import { Holdings, applyBlock, getAvailableScholarships, holdingNotice, needsToChoose, profileGpaWarning } from '../../utils/eligibility';
 import { Scholarship, Application, StudentProfile } from '../../types';
 import ScholarshipCard from '../../components/ScholarshipCard';
 import CompareTable from '../../components/CompareTable';
@@ -173,7 +173,7 @@ export default function ExploreGrants({
               isApplied={applicationByScholarship.has(scholarship.id)}
               applicationStatus={applicationByScholarship.get(scholarship.id)?.status}
               warning={applicationByScholarship.has(scholarship.id) ? null : holdingNotice(scholarship.id, holdings) ?? profileGpaWarning(scholarship, student)}
-              blockedReason={applicationWindowBlock(scholarship.id)}
+              blockedReason={applyBlock(scholarship.id, holdings)}
             />
           ))}
         </div>

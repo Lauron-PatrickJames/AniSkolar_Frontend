@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Compass, Megaphone, UserCircle, LogOut, X, ChevronLeft, ChevronRight, Award, Calculator, RefreshCw, Clock } from 'lucide-react';
+import { LayoutDashboard, Compass, Megaphone, UserCircle, LogOut, X, ChevronLeft, ChevronRight, Award, Calculator, RefreshCw, Clock, MessageSquare } from 'lucide-react';
 import { StudentProfile } from '../types';
 import logo from '/src/assets/logo.png';
 
@@ -14,6 +14,8 @@ interface SidebarProps {
   // also get Duty Hours.
   isScholar?: boolean;
   isSfagScholar?: boolean;
+  // Unread messages from the AdSO, shown on Messages.
+  unreadMessages?: number;
   id?: string;
 }
 
@@ -26,6 +28,7 @@ export default function Sidebar({
   onLogout,
   isScholar = false,
   isSfagScholar = false,
+  unreadMessages = 0,
   id
 }: SidebarProps) {
   const menuItems = [
@@ -34,6 +37,7 @@ export default function Sidebar({
     ...(isScholar ? [{ id: 'renewals', name: 'Renewal', icon: RefreshCw }] : []),
     ...(isSfagScholar ? [{ id: 'duty-hours', name: 'Duty Hours', icon: Clock }] : []),
     { id: 'gpa-calculator', name: 'GPA Calculator', icon: Calculator },
+    { id: 'messages', name: 'Messages', icon: MessageSquare },
     { id: 'announcements', name: 'Announcements', icon: Megaphone },
     { id: 'profile', name: 'Profile', icon: UserCircle }
   ];
@@ -101,6 +105,11 @@ export default function Sidebar({
               >
                 <Icon className={`w-5 h-5 mr-3 shrink-0 transition-colors ${isActive ? 'text-brand-green' : 'text-slate-400 group-hover:text-slate-600'}`} />
                 <span className="truncate">{item.name}</span>
+                {item.id === 'messages' && unreadMessages > 0 && (
+                  <span className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white tabular-nums" aria-label={`${unreadMessages} unread`}>
+                    {unreadMessages > 9 ? '9+' : unreadMessages}
+                  </span>
+                )}
               </button>
             );
           })}

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { AlertTriangle, Building2, CheckCircle2, Clock, Download, Hourglass, Pencil, SlidersHorizontal, Users } from 'lucide-react';
+import { AlertTriangle, Building2, CalendarCheck, CheckCircle2, Clock, Download, Hourglass, Pencil, Shuffle, SlidersHorizontal, Users } from 'lucide-react';
 import {
-  DutyLog, DutySummary, DutyTerm, GRANT_PERCENTAGES, entryHours, format12h, formatDutyDate, formatHours, sortEntries, termLabel,
+  ClaimStatus, CreditedEvent, DutyLog, DutySummary, DutyTerm, EVENT_ORGANIZERS, EventOrganizer, GRANT_PERCENTAGES, YEAR_GROUPS, YearGroup, entryHours, format12h, formatDutyDate, formatHours, sortEntries, termLabel,
   todayInManila, weekday, weeklyTotals
 } from '../../utils/dutyHours';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
@@ -32,7 +32,9 @@ interface ScholarRow {
   entryCount: number;
   summary: DutySummary | null;
   grantPercentage: number | null;          // set on the approved SFAG application
-  requiredHoursFromAdso: number | null;    // hours for that percentage, when set
+  requiredHoursFromAdso: number | null;    // hours for that percentage and year group, when set
+  yearGroup: YearGroup | null;             // from the profile's year level
+  pendingClaims: number;                   // event claims waiting for approval
   updatedAt: string | null;
 }
 
@@ -64,6 +66,8 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
   const [assigning, setAssigning] = useState<ScholarRow[] | null>(null);
   const [toast, setToast] = useState('');
   const [hoursOpen, setHoursOpen] = useState(false);
+  const [randomOpen, setRandomOpen] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
   const today = todayInManila();
 
   const load = useCallback(async (t: TermKey | null) => {
@@ -106,6 +110,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
     return c;
   }, [rows, today]);
   const unassignedCount = useMemo(() => rows.filter(r => !r.officeAssigned).length, [rows]);
+  const pendingClaimCount = useMemo(() => rows.reduce((n, r) => n + (r.pendingClaims ?? 0), 0), [rows]);
   // Scholars already in each office this term, to spread them out.
   const officeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -176,6 +181,8 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
         description="Duty hours rendered by SFAG scholars, from the logs they keep in AniSkolar."
         actions={
           <>
+            <Button icon={CalendarCheck} onClick={() => setEventsOpen(true)} disabled={!term}>Events{pendingClaimCount ? ` (${pendingClaimCount} to review)` : ''}</Button>
+            <Button icon={Shuffle} onClick={() => setRandomOpen(true)} disabled={!term || unassignedCount === 0}>Random assign</Button>
             <Button icon={SlidersHorizontal} onClick={() => setHoursOpen(true)}>Hours per grant</Button>
             <Button icon={Download} onClick={exportCsv} disabled={rows.length === 0}>Export CSV</Button>
           </>
@@ -270,7 +277,9 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
                               <span className="block truncate text-xs text-ink-subtle">
                                 {row.studentNumber}
                                 {row.grantPercentage !== null ? ` · ${row.grantPercentage}% grant` : ' · grant % not set'}
+                                {row.grantPercentage !== null && row.yearGroup === null ? ' · year level not set' : ''}
                                 {row.sfaHolder ? '' : ' · not an SFAG holder this term'}
+                                {row.pendingClaims ? ` · ${row.pendingClaims} event claim${row.pendingClaims === 1 ? '' : 's'} to review` : ''}
                               </span>
                             </div>
                           </div>
@@ -329,6 +338,22 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
         />
       )}
 
+      {eventsOpen && term && (
+        <EventsDialog term={term} getToken={getToken} onClose={() => setEventsOpen(false)} onChanged={() => load(term)} />
+      )}
+
+      {randomOpen && term && (
+        <RandomAssignDialog
+          rows={rows}
+          term={term}
+          offices={offices}
+          officeCounts={officeCounts}
+          getToken={getToken}
+          onClose={() => setRandomOpen(false)}
+          onDone={n => { setRandomOpen(false); setSelected(new Set()); setToast(`Assigned ${n === 1 ? '1 scholar' : `${n} scholars`} to offices at random.`); load(term); }}
+        />
+      )}
+
       {hoursOpen && (
         <HoursSettingsDialog
           getToken={getToken}
@@ -342,14 +367,15 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
   );
 }
 
-// Required duty hours per term by SFAG grant percentage. An empty one
-// leaves those scholars entering their own hours.
+// Required duty hours per term by year group and SFAG grant percentage.
+// An empty one leaves those scholars entering their own hours.
 function HoursSettingsDialog({ getToken, onClose, onSaved }: {
   getToken: () => Promise<string | null>;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [values, setValues] = useState<Record<number, string> | null>(null);
+  // values[group][percentage] = the input's text
+  const [values, setValues] = useState<Record<YearGroup, Record<number, string>> | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -360,7 +386,12 @@ function HoursSettingsDialog({ getToken, onClose, onSaved }: {
         const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/settings`, { headers: await authHeaders(getToken) });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body.error || 'Failed to load the settings.');
-        if (!cancelled) setValues(Object.fromEntries(GRANT_PERCENTAGES.map(p => [p, body.hoursByPercentage?.[p] != null ? String(body.hoursByPercentage[p]) : ''])));
+        if (!cancelled) {
+          setValues(Object.fromEntries(YEAR_GROUPS.map(({ key: g }) => [
+            g,
+            Object.fromEntries(GRANT_PERCENTAGES.map(p => [p, body.hoursByGroup?.[g]?.[p] != null ? String(body.hoursByGroup[g][p]) : ''])),
+          ])) as Record<YearGroup, Record<number, string>>);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load the settings.');
       }
@@ -376,7 +407,12 @@ function HoursSettingsDialog({ getToken, onClose, onSaved }: {
       const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/settings`, {
         method: 'PUT',
         headers: await authHeaders(getToken, true),
-        body: JSON.stringify({ hoursByPercentage: Object.fromEntries(GRANT_PERCENTAGES.map(p => [p, values[p].trim() === '' ? null : Number(values[p])])) }),
+        body: JSON.stringify({
+          hoursByGroup: Object.fromEntries(YEAR_GROUPS.map(({ key: g }) => [
+            g,
+            Object.fromEntries(GRANT_PERCENTAGES.map(p => [p, values[g][p].trim() === '' ? null : Number(values[g][p])])),
+          ])),
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Failed to save the settings.');
@@ -390,7 +426,7 @@ function HoursSettingsDialog({ getToken, onClose, onSaved }: {
   return (
     <Modal
       title="Hours per grant"
-      description="Duty hours an SFAG grantee renders each term, by grant percentage. Leave one empty and those scholars enter their own hours."
+      description="Duty hours an SFAG grantee renders each term, by year level and grant percentage. Leave one empty and those scholars enter their own hours."
       onClose={onClose}
       dismissible={!busy}
       footer={
@@ -402,24 +438,393 @@ function HoursSettingsDialog({ getToken, onClose, onSaved }: {
     >
       {error && <Alert tone="danger">{error}</Alert>}
       {!values ? (!error && <TableSkeleton rows={4} label="Loading settings" />) : (
-        <form className="grid grid-cols-2 gap-4" onSubmit={e => { e.preventDefault(); save(); }}>
-          {GRANT_PERCENTAGES.map(p => (
-            <Field key={p} label={`${p}% grant`} optional>
-              <TextInput
-                type="number"
-                inputMode="decimal"
-                min={0}
-                max={1000}
-                step="0.5"
-                value={values[p]}
-                onChange={e => setValues(v => (v ? { ...v, [p]: e.target.value } : v))}
-                placeholder="Scholar enters it"
-                disabled={busy}
-              />
-            </Field>
+        <form className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-3 gap-y-3" onSubmit={e => { e.preventDefault(); save(); }}>
+          <span className="text-xs font-medium text-ink-subtle">Grant</span>
+          {YEAR_GROUPS.map(({ key: g, label }) => (
+            <span key={g} className="text-xs font-medium text-ink-subtle">{label}</span>
           ))}
-          <p className="col-span-2 text-xs text-ink-subtle">Set each grantee's percentage on their approved SFAG application.</p>
+          {GRANT_PERCENTAGES.map(p => (
+            <React.Fragment key={p}>
+              <span className="text-sm font-medium text-ink">{p}%</span>
+              {YEAR_GROUPS.map(({ key: g, label }) => (
+                <TextInput
+                  key={g}
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={1000}
+                  step="0.5"
+                  aria-label={`Hours for a ${p}% grant, ${label}`}
+                  value={values[g][p]}
+                  onChange={e => { const text = e.target.value; setValues(v => (v ? { ...v, [g]: { ...v[g], [p]: text } } : v)); }}
+                  placeholder="Scholar enters it"
+                  disabled={busy}
+                />
+              ))}
+            </React.Fragment>
+          ))}
+          <p className="col-span-3 text-xs text-ink-subtle">Hours are per term. Set each grantee's percentage on their approved SFAG application; their year level comes from their profile (5th year counts with 3rd year and up).</p>
         </form>
+      )}
+    </Modal>
+  );
+}
+
+// Random assign (AdSO, Oct 2026: scholars are assigned to offices at
+// random; bigger offices take more). The AdSO keeps a list of offices and
+// how many scholars each takes (saved, reused every term); this deals the
+// term's scholars without an office into the free slots at random, one
+// office at a time so they're spread out, and shows the result before
+// anything is saved. Offices can still be changed one by one afterwards.
+
+interface SlotRow { id: number; office: string; slots: string }
+
+// Fisher–Yates shuffle (a copy).
+function shuffled<T>(items: T[]): T[] {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Deals scholars into offices' free slots round by round (each office with
+// room gets one per round, in a random order), so a short list is spread
+// across offices instead of filling the first one.
+function dealScholars(scholars: ScholarRow[], free: { office: string; free: number }[]) {
+  const queue = shuffled(scholars);
+  const left = new Map(free.map(f => [f.office, f.free]));
+  const result = new Map<string, ScholarRow[]>();
+  while (queue.length) {
+    const open = shuffled([...left.entries()].filter(([, n]) => n > 0).map(([office]) => office));
+    if (!open.length) break;
+    for (const office of open) {
+      const scholar = queue.shift();
+      if (!scholar) break;
+      result.set(office, [...(result.get(office) ?? []), scholar]);
+      left.set(office, (left.get(office) ?? 0) - 1);
+    }
+  }
+  return { byOffice: result, leftOver: queue };
+}
+
+function RandomAssignDialog({ rows, term, offices, officeCounts, getToken, onClose, onDone }: {
+  rows: ScholarRow[];
+  term: TermKey;
+  offices: string[];
+  officeCounts: Record<string, number>;
+  getToken: () => Promise<string | null>;
+  onClose: () => void;
+  onDone: (assigned: number) => void;
+}) {
+  const [slots, setSlots] = useState<SlotRow[] | null>(null);
+  const [nextId, setNextId] = useState(1000);
+  const [preview, setPreview] = useState<{ byOffice: Map<string, ScholarRow[]>; leftOver: ScholarRow[] } | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const unassigned = useMemo(() => rows.filter(r => !r.officeAssigned), [rows]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/settings`, { headers: await authHeaders(getToken) });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || 'Failed to load the office slots.');
+        const saved: { office: string; slots: number }[] = body.officeSlots ?? [];
+        const known = new Set(saved.map(s => s.office.toLowerCase()));
+        // Offices used before but not in the saved list start with a
+        // suggestion: more for the big offices.
+        const extra = offices.filter(o => !known.has(o.toLowerCase())).map(o => ({ office: o, slots: BIG_OFFICES.test(o) ? 5 : 2 }));
+        if (!cancelled) setSlots([...saved, ...extra].map((s, i) => ({ id: i, office: s.office, slots: String(s.slots) })));
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load the office slots.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getToken, offices]);
+
+  const named = (slots ?? []).filter(s => s.office.trim());
+  const slotError = (() => {
+    const seen = new Set<string>();
+    for (const s of named) {
+      const n = Number(s.slots);
+      if (s.slots.trim() === '' || !Number.isInteger(n) || n < 0 || n > 50) return `Slots for ${s.office.trim()} must be a whole number from 0 to 50.`;
+      const k = s.office.trim().replace(/\s+/g, ' ').toLowerCase();
+      if (seen.has(k)) return `${s.office.trim()} is listed twice.`;
+      seen.add(k);
+    }
+    return '';
+  })();
+  const free = named.map(s => ({ office: s.office.trim().replace(/\s+/g, ' '), free: Math.max(0, Number(s.slots) - (officeCounts[s.office.trim().replace(/\s+/g, ' ')] ?? 0)) }));
+  const freeTotal = slotError ? 0 : free.reduce((n, f) => n + f.free, 0);
+
+  const update = (id: number, patch: Partial<SlotRow>) => setSlots(prev => prev?.map(s => (s.id === id ? { ...s, ...patch } : s)) ?? prev);
+  const shuffle = () => setPreview(dealScholars(unassigned, free));
+
+  const assign = async () => {
+    if (!preview || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const headers = await authHeaders(getToken, true);
+      let res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/office-slots`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ officeSlots: named.map(s => ({ office: s.office.trim(), slots: Number(s.slots) })) }),
+      });
+      let body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Failed to save the office slots.');
+      let assigned = 0;
+      for (const [office, scholars] of preview.byOffice) {
+        res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/office`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ academicYear: term.academicYear, term: term.term, studentNumbers: scholars.map(s => s.studentNumber), officeAssigned: office }),
+        });
+        body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(`${body.error || 'Failed to assign.'}${assigned ? ` ${assigned} scholars were already assigned; reopen Random assign for the rest.` : ''}`);
+        assigned += scholars.length;
+      }
+      onDone(assigned);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign.');
+      setBusy(false);
+    }
+  };
+
+  const who = (n: number) => (n === 1 ? '1 scholar' : `${n} scholars`);
+
+  return (
+    <Modal
+      size="lg"
+      title="Random assign"
+      description={`${termLabel(term)} · ${who(unassigned.length)} without an office. Set how many scholars each office takes, then shuffle. Nothing is saved until you assign.`}
+      onClose={onClose}
+      dismissible={!busy}
+      footer={preview ? (
+        <>
+          <Button onClick={() => setPreview(null)} disabled={busy}>Back to slots</Button>
+          <Button icon={Shuffle} onClick={shuffle} disabled={busy}>Shuffle again</Button>
+          <Button variant="primary" onClick={assign} loading={busy} disabled={preview.byOffice.size === 0}>Assign {who(unassigned.length - preview.leftOver.length)}</Button>
+        </>
+      ) : (
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" icon={Shuffle} onClick={shuffle} disabled={!slots || !!slotError || unassigned.length === 0 || freeTotal === 0}>Shuffle</Button>
+        </>
+      )}
+    >
+      {error && <Alert tone="danger">{error}</Alert>}
+      {!slots ? (!error && <TableSkeleton rows={4} label="Loading office slots" />) : preview ? (
+        <div className="space-y-4">
+          {preview.leftOver.length > 0 && (
+            <Alert tone="warning">{who(preview.leftOver.length)} won't get an office: there aren't enough free slots. Go back to add slots, or assign them one by one later.</Alert>
+          )}
+          <ul className="divide-y divide-line rounded-control ring-1 ring-line">
+            {[...preview.byOffice].sort(([a], [b]) => a.localeCompare(b)).map(([office, scholars]) => (
+              <li key={office} className="p-3">
+                <p className="text-sm font-medium text-ink">{office} <span className="font-normal text-ink-subtle">· +{scholars.length}{officeCounts[office] ? ` (has ${officeCounts[office]})` : ''}</span></p>
+                <p className="mt-1 text-sm text-ink-muted">{scholars.map(s => (s.name ? titleCaseName(s.name) : s.studentNumber)).join(', ')}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {slotError && <Alert tone="danger">{slotError}</Alert>}
+          <div className="grid grid-cols-[1fr_6rem_auto] items-start gap-x-3 gap-y-2">
+            <span className="text-xs font-medium text-ink-subtle">Office</span>
+            <span className="text-xs font-medium text-ink-subtle">Slots</span>
+            {/* Keeps the header row three cells wide (an sr-only label takes no grid cell). */}
+            <span aria-hidden />
+
+            {slots.map(s => {
+              const has = officeCounts[s.office.trim().replace(/\s+/g, ' ')] ?? 0;
+              return (
+                <React.Fragment key={s.id}>
+                  <div className="min-w-0">
+                    <TextInput value={s.office} onChange={e => update(s.id, { office: e.target.value })} placeholder="Office name" aria-label="Office name" />
+                    {has > 0 && <span className="mt-0.5 block text-xs text-ink-subtle">Has {has} this term</span>}
+                  </div>
+                  <TextInput type="number" inputMode="numeric" min={0} max={50} step="1" value={s.slots} onChange={e => update(s.id, { slots: e.target.value })} aria-label={`Slots for ${s.office || 'this office'}`} />
+                  <Button size="sm" variant="ghost" onClick={() => setSlots(prev => prev?.filter(x => x.id !== s.id) ?? prev)} aria-label={`Remove ${s.office || 'this office'}`}>Remove</Button>
+                </React.Fragment>
+              );
+            })}
+          </div>
+          <Button size="sm" onClick={() => { setSlots(prev => [...(prev ?? []), { id: nextId, office: '', slots: '2' }]); setNextId(n => n + 1); }}>Add office</Button>
+          <p className="text-xs text-ink-subtle">
+            {freeTotal} free {freeTotal === 1 ? 'slot' : 'slots'} for {who(unassigned.length)}. Slots are the total an office takes; scholars it already has this term count toward them. Big offices (Registrar, Accounting, Admissions) usually take more.
+          </p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// Credited events (AdSO, Oct 2026): events set up by the scholarship
+// office or COSA that the office credits for duty hours — the credit is the
+// office's call, not the event's length. Scholars claim the ones they
+// attended; their hours count once a claim is approved here.
+
+interface AdminEvent extends CreditedEvent { claims: Record<ClaimStatus, number> }
+interface PendingClaim { studentNumber: string; name: string; eventId: string; claimedAt: string; event: CreditedEvent }
+interface EventDraft { id: string | null; name: string; date: string; organizer: EventOrganizer; creditHours: string }
+const emptyDraft = (): EventDraft => ({ id: null, name: '', date: todayInManila(), organizer: 'Scholarship office', creditHours: '3' });
+
+function EventsDialog({ term, getToken, onClose, onChanged }: {
+  term: TermKey;
+  getToken: () => Promise<string | null>;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [events, setEvents] = useState<AdminEvent[] | null>(null);
+  const [pending, setPending] = useState<PendingClaim[]>([]);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [draft, setDraft] = useState<EventDraft>(emptyDraft);
+  const [rejecting, setRejecting] = useState<{ key: string; note: string } | null>(null);
+  const [changed, setChanged] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/events?academicYear=${term.academicYear}&term=${encodeURIComponent(term.term)}`, { headers: await authHeaders(getToken) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Failed to load the events.');
+      setEvents(body.events ?? []);
+      setPending(body.pending ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load the events.');
+    }
+  }, [getToken, term.academicYear, term.term]);
+  useEffect(() => { load(); }, [load]);
+
+  const call = async (key: string, url: string, method: string, payload?: unknown) => {
+    setBusy(key);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/${url}`, {
+        method,
+        headers: await authHeaders(getToken, payload !== undefined),
+        body: payload === undefined ? undefined : JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Something went wrong.');
+      setChanged(true);
+      await load();
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveDraft = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const payload = { name: draft.name, date: draft.date, organizer: draft.organizer, creditHours: Number(draft.creditHours) };
+    const ok = draft.id ? await call('draft', `events/${draft.id}`, 'PUT', payload) : await call('draft', 'events', 'POST', payload);
+    if (ok) setDraft(emptyDraft());
+  };
+  const review = async (c: PendingClaim, status: 'Approved' | 'Rejected', note = '') => {
+    const ok = await call(`${c.studentNumber}|${c.eventId}`, 'claims', 'PUT', { studentNumber: c.studentNumber, eventId: c.eventId, status, note });
+    if (ok) setRejecting(null);
+  };
+  const close = () => { if (changed) onChanged(); onClose(); };
+
+  return (
+    <Modal
+      size="lg"
+      title="Events"
+      description={`${termLabel(term)} · Events credited as duty hours, set up by the scholarship office or COSA. Scholars claim the ones they attended; approve each claim before its hours count.`}
+      onClose={close}
+      dismissible={!busy}
+      footer={<Button onClick={close} disabled={!!busy}>Done</Button>}
+    >
+      {error && <Alert tone="danger">{error}</Alert>}
+      {!events ? (!error && <TableSkeleton rows={4} label="Loading events" />) : (
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-ink">Waiting for approval ({pending.length})</h3>
+            {pending.length === 0 ? <p className="text-sm text-ink-muted">No claims to review.</p> : (
+              <ul className="divide-y divide-line rounded-control ring-1 ring-line">
+                {pending.map(c => {
+                  const key = `${c.studentNumber}|${c.eventId}`;
+                  return (
+                    <li key={key} className="p-3 space-y-2">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-ink">{c.name ? titleCaseName(c.name) : c.studentNumber} <span className="font-normal text-ink-subtle">· {c.studentNumber}</span></p>
+                          <p className="text-xs text-ink-muted">{c.event.name} · {formatDutyDate(c.event.date, true)} · {formatHours(c.event.creditHours)} hours</p>
+                        </div>
+                        {rejecting?.key !== key && (
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={() => setRejecting({ key, note: '' })} disabled={!!busy}>Reject</Button>
+                            <Button size="sm" variant="primary" onClick={() => review(c, 'Approved')} loading={busy === key} disabled={!!busy && busy !== key}>Approve</Button>
+                          </div>
+                        )}
+                      </div>
+                      {rejecting?.key === key && (
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <TextInput value={rejecting.note} onChange={e => setRejecting({ key, note: e.target.value })} maxLength={500} placeholder="Reason (optional), e.g. not on the attendance sheet" aria-label="Reason for rejecting" />
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => setRejecting(null)} disabled={busy === key}>Cancel</Button>
+                            <Button size="sm" variant="danger" onClick={() => review(c, 'Rejected', rejecting.note)} loading={busy === key}>Reject claim</Button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-ink">{draft.id ? 'Edit event' : 'Add an event'}</h3>
+            <form onSubmit={saveDraft} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_9rem_11rem_6rem]">
+              <Field label="Event name"><TextInput value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} maxLength={200} placeholder="e.g. Scholars' Assembly" /></Field>
+              <Field label="Date"><TextInput type="date" value={draft.date} onChange={e => setDraft(d => ({ ...d, date: e.target.value }))} /></Field>
+              <Field label="Organized by">
+                <Select value={draft.organizer} onChange={v => setDraft(d => ({ ...d, organizer: v as EventOrganizer }))}>
+                  {EVENT_ORGANIZERS.map(o => <option key={o} value={o}>{o}</option>)}
+                </Select>
+              </Field>
+              <Field label="Credit hrs"><TextInput type="number" inputMode="decimal" min={0.25} max={24} step="0.25" value={draft.creditHours} onChange={e => setDraft(d => ({ ...d, creditHours: e.target.value }))} /></Field>
+              <div className="flex gap-2 sm:col-span-4">
+                {draft.id && <Button variant="ghost" onClick={() => setDraft(emptyDraft())} disabled={busy === 'draft'}>Cancel edit</Button>}
+                <Button type="submit" variant="primary" loading={busy === 'draft'}>{draft.id ? 'Save event' : 'Add event'}</Button>
+              </div>
+            </form>
+            <p className="text-xs text-ink-subtle">The credit is what the scholarship office approved for the event, not its length (e.g. a 1-hour event credited 3 hours). COSA events: add them once the office approves COSA's request.</p>
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-ink">Events this term ({events.length})</h3>
+            {events.length === 0 ? <p className="text-sm text-ink-muted">No events yet.</p> : (
+              <ul className="divide-y divide-line rounded-control ring-1 ring-line">
+                {events.map(ev => (
+                  <li key={ev._id} className="flex flex-wrap items-center justify-between gap-2 p-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-ink">{ev.name}</p>
+                      <p className="text-xs text-ink-muted">
+                        {weekday(ev.date)}, {formatDutyDate(ev.date, true)} · {ev.organizer} · {formatHours(ev.creditHours)} hours
+                        {' · '}{ev.claims.Approved} credited{ev.claims.Pending ? `, ${ev.claims.Pending} waiting` : ''}{ev.claims.Rejected ? `, ${ev.claims.Rejected} rejected` : ''}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => setDraft({ id: ev._id, name: ev.name, date: ev.date, organizer: ev.organizer, creditHours: String(ev.creditHours) })} disabled={!!busy}>Edit</Button>
+                      <Button size="sm" variant="ghost" onClick={() => { if (window.confirm(`Delete "${ev.name}"? Claims waiting for review are removed too.`)) call(`del-${ev._id}`, `events/${ev._id}`, 'DELETE'); }} loading={busy === `del-${ev._id}`} disabled={!!busy && busy !== `del-${ev._id}`}>Delete</Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
       )}
     </Modal>
   );

@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
-import { Award, BarChart3, Building2, Calculator, ChevronRight, Clock, GraduationCap, LayoutList, LogOut, Megaphone, Menu, RefreshCw, X } from 'lucide-react';
+import { Award, BarChart3, Building2, Calculator, ChevronRight, Clock, GraduationCap, LayoutList, LogOut, Megaphone, Menu, MessageSquare, RefreshCw, X } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import { Avatar, Badge, IconButton } from './AdminUI';
 
-export type MainView = 'applications' | 'renewals' | 'dutyHours' | 'analytics' | 'fse' | 'lifecycle' | 'announcements' | 'scholarships';
+export type MainView = 'applications' | 'renewals' | 'dutyHours' | 'analytics' | 'fse' | 'lifecycle' | 'messages' | 'announcements' | 'scholarships';
 
 export const VIEW_TITLES: Record<MainView, string> = {
   applications: 'Applications',
@@ -13,6 +13,7 @@ export const VIEW_TITLES: Record<MainView, string> = {
   analytics: 'Statistics',
   fse: 'FSE report',
   lifecycle: 'Scholars',
+  messages: 'Messages',
   announcements: 'Announcements',
   scholarships: 'Scholarships'
 };
@@ -20,7 +21,7 @@ export const VIEW_TITLES: Record<MainView, string> = {
 const SECTIONS: { title: string; items: { id: MainView; icon: React.ElementType }[] }[] = [
   { title: 'Review', items: [{ id: 'applications', icon: LayoutList }, { id: 'renewals', icon: RefreshCw }, { id: 'lifecycle', icon: GraduationCap }, { id: 'dutyHours', icon: Clock }] },
   { title: 'Insights', items: [{ id: 'analytics', icon: BarChart3 }, { id: 'fse', icon: Calculator }] },
-  { title: 'Communication', items: [{ id: 'announcements', icon: Megaphone }] },
+  { title: 'Communication', items: [{ id: 'messages', icon: MessageSquare }, { id: 'announcements', icon: Megaphone }] },
   { title: 'Manage', items: [{ id: 'scholarships', icon: Award }] }
 ];
 
@@ -36,6 +37,8 @@ interface AdminLayoutProps {
   adminEmail?: string;
   officeLabel: string;
   pendingCount?: number;
+  // Unread messages from students, shown on Messages.
+  messageCount?: number;
   // Views this admin can't open (e.g. announcements for office admins).
   hiddenViews?: MainView[];
   breadcrumbs: Crumb[];
@@ -48,7 +51,7 @@ interface AdminLayoutProps {
 // and table headers (sticky top-topbar) stay pinned while pages scroll.
 // Sidebar: full width from lg, an icon rail from md to lg, a drawer below md.
 export default function AdminLayout({
-  currentView, onNavigate, onLogout, adminEmail, officeLabel, pendingCount, hiddenViews = [], breadcrumbs, pageKey, children
+  currentView, onNavigate, onLogout, adminEmail, officeLabel, pendingCount, messageCount, hiddenViews = [], breadcrumbs, pageKey, children
 }: AdminLayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
@@ -77,6 +80,7 @@ export default function AdminLayout({
           adminEmail={adminEmail}
           officeLabel={officeLabel}
           pendingCount={pendingCount}
+          messageCount={messageCount}
           hiddenViews={hiddenViews}
         />
 
@@ -132,7 +136,7 @@ function Breadcrumbs({ items }: { items: Crumb[] }) {
   );
 }
 
-function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail, officeLabel, pendingCount, hiddenViews }: {
+function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail, officeLabel, pendingCount, messageCount, hiddenViews }: {
   currentView: MainView;
   onNavigate: (view: MainView) => void;
   open: boolean;
@@ -141,6 +145,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
   adminEmail?: string;
   officeLabel: string;
   pendingCount?: number;
+  messageCount?: number;
   hiddenViews: MainView[];
 }) {
   const sections = SECTIONS
@@ -195,7 +200,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
                   const Icon = item.icon;
                   const active = currentView === item.id;
                   const name = VIEW_TITLES[item.id];
-                  const count = item.id === 'applications' ? pendingCount ?? 0 : 0;
+                  const count = item.id === 'applications' ? pendingCount ?? 0 : item.id === 'messages' ? messageCount ?? 0 : 0;
                   return (
                     <li key={item.id}>
                       <button
@@ -209,7 +214,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
                         <Icon className={`size-4.5 shrink-0 ${active ? 'text-accent' : 'text-ink-subtle group-hover:text-ink-muted'}`} aria-hidden />
                         <span className="flex-1 truncate text-left md:max-lg:sr-only">
                           {name}
-                          {count > 0 && <span className="sr-only">, {count} awaiting review</span>}
+                          {count > 0 && <span className="sr-only">, {count} {item.id === 'messages' ? 'unread' : 'awaiting review'}</span>}
                         </span>
                         {count > 0 && (
                           <>

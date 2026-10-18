@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Download, FileText, Printer, Users } from 'lucide-react';
+import { ChevronRight, Download, FileText, MessageSquare, Printer, Users } from 'lucide-react';
 import {
   AdminApplication, AppStatus, academicCycles, academicYearOf, applicantEmail, applicantName, applicantPhone,
   applicantProgram, applicantYearLevel, formatDate, isReturningScholar, plural, shortAcademicYear, titleCaseName
@@ -7,9 +7,10 @@ import {
 import {
   Alert, Avatar, Badge, Button, Card, Checkbox, DropdownMenu, EmptyState, ErrorState, Menu, Modal, PageHeader,
   Pagination, RowLink, SearchInput, SegmentedControl, Select, StatusBadge, STATUS_META, Table, TableSkeleton, Td, Th,
-  Toolbar, Tr, Truncate, usePagination
+  Toolbar, Tooltip, Tr, Truncate, usePagination
 } from './AdminUI';
 import HistoryList from './HistoryList';
+import { collegeName, findProgram } from '../../data/programs';
 import { buildApplicationHistory, buildCombinedHistory } from './history';
 
 interface AdminScholarsProps {
@@ -23,6 +24,8 @@ interface AdminScholarsProps {
   onSelectStudent: (studentNumber: string | null) => void;
   // Opens one application in the Applications review.
   onOpenApplication: (applicationId: string) => void;
+  // Opens the AdSO's conversation with the student (AdSO only).
+  onMessageStudent?: (studentNumber: string) => void;
 }
 
 // --- Scholar aggregation (client-side; used for the list/detail views and
@@ -39,6 +42,7 @@ interface ScholarSummary {
   phone: string;
   program: string;
   yearLevel: string;
+  college: string;                    // college code from the profile, e.g. 'CEAT'
   applications: AdminApplication[];   // newest first
   cycles: string[];                   // distinct academic years, oldest first
   totalApplications: number;
@@ -74,6 +78,7 @@ function buildScholarSummaries(applications: AdminApplication[]): ScholarSummary
       phone: applicantPhone(latest),
       program: applicantProgram(latest),
       yearLevel: applicantYearLevel(latest),
+      college: latest.currentProfile?.college || findProgram(latest.currentProfile?.programCode)?.college || '',
       applications: sorted,
       cycles: academicCycles(apps),
       totalApplications: apps.length,
@@ -314,7 +319,7 @@ const SEGMENT_TO_RENEWAL: Record<ScholarSegment, RenewalFilter> = { 'All': 'all'
 const REFETCH_AFTER_MS = 30_000;
 
 export default function AdminScholars({
-  applications, isLoading, error, getToken, apiBaseUrl, onRefresh, selectedStudentNumber, onSelectStudent, onOpenApplication
+  applications, isLoading, error, getToken, apiBaseUrl, onRefresh, selectedStudentNumber, onSelectStudent, onOpenApplication, onMessageStudent
 }: AdminScholarsProps) {
   const [search, setSearch] = useState('');
   const [segment, setSegment] = useState<ScholarSegment>('All');
@@ -361,7 +366,8 @@ export default function AdminScholars({
       list = list.filter(s =>
         s.rawName.toLowerCase().includes(q) ||
         s.studentNumber.toLowerCase().includes(q) ||
-        s.program.toLowerCase().includes(q)
+        s.program.toLowerCase().includes(q) ||
+        s.college.toLowerCase().includes(q)
       );
     }
     const sorted = [...list];
@@ -408,6 +414,7 @@ export default function AdminScholars({
       <ScholarDetail
         scholar={selected}
         onOpenApplication={onOpenApplication}
+        onMessageStudent={onMessageStudent}
         exportError={exportError}
         onExportError={setExportError}
       />
@@ -448,7 +455,7 @@ export default function AdminScholars({
         flush
         headerSlot={
           <Toolbar>
-            <SearchInput value={search} onChange={setSearch} label="Search scholars" placeholder="Search name, student no. or program…" className="min-w-56 flex-1" />
+            <SearchInput value={search} onChange={setSearch} label="Search scholars" placeholder="Search name, student no., program or college…" className="min-w-56 flex-1" />
             <SegmentedControl<ScholarSegment>
               options={SEGMENTS}
               value={segment}
@@ -492,10 +499,11 @@ export default function AdminScholars({
           )
         ) : (
           <>
-            <Table label="Scholars" minWidth="60rem">
+            <Table label="Scholars" minWidth="66rem">
               <thead>
                 <tr>
                   <Th sticky={false}>Scholar</Th>
+                  <Th sticky={false} className="w-24">College</Th>
                   <Th sticky={false} className="w-48">Program</Th>
                   <Th sticky={false} className="w-32">Cycles</Th>
                   <Th sticky={false} className="w-36">Applications</Th>
@@ -517,6 +525,13 @@ export default function AdminScholars({
                           <p className="text-xs text-ink-subtle tabular-nums">{scholar.studentNumber}</p>
                         </div>
                       </div>
+                    </Td>
+                    <Td>
+                      {scholar.college ? (
+                        <Tooltip content={collegeName(scholar.college)} asChild>
+                          <span tabIndex={0} className="rounded-badge font-medium text-ink">{scholar.college}</span>
+                        </Tooltip>
+                      ) : <span className="text-ink-subtle">—</span>}
                     </Td>
                     <Td><Truncate>{scholar.program || 'Unspecified'}</Truncate></Td>
                     <Td>
@@ -560,9 +575,10 @@ const HISTORY_VIEWS: readonly HistoryView[] = ['By application', 'All activity']
 
 const isActive = (status: AppStatus) => status === 'Under Evaluation' || status === 'Needs Revision';
 
-function ScholarDetail({ scholar, onOpenApplication, exportError, onExportError }: {
+function ScholarDetail({ scholar, onOpenApplication, onMessageStudent, exportError, onExportError }: {
   scholar: ScholarSummary;
   onOpenApplication: (applicationId: string) => void;
+  onMessageStudent?: (studentNumber: string) => void;
   exportError: string;
   onExportError: (message: string) => void;
 }) {
@@ -616,7 +632,7 @@ function ScholarDetail({ scholar, onOpenApplication, exportError, onExportError 
       <PageHeader
         leading={<Avatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="lg" />}
         title={scholar.name}
-        description={[scholar.studentNumber, [scholar.program, scholar.yearLevel].filter(Boolean).join(' · ')].filter(Boolean).join(' · ')}
+        description={[scholar.studentNumber, [scholar.college && collegeName(scholar.college), scholar.program, scholar.yearLevel].filter(Boolean).join(' · ')].filter(Boolean).join(' · ')}
         meta={
           <>
             <span className="text-xs text-ink-subtle tabular-nums">{summary}</span>
@@ -625,13 +641,16 @@ function ScholarDetail({ scholar, onOpenApplication, exportError, onExportError 
           </>
         }
         actions={
-          <DropdownMenu
-            label="More actions"
-            items={[
-              { key: 'csv', label: 'Export CSV', icon: FileText, onSelect: () => exportScholarApplicationsToCSV(scholar) },
-              { key: 'print', label: 'Print', icon: Printer, onSelect: print }
-            ]}
-          />
+          <div className="flex items-center gap-2">
+            {onMessageStudent && <Button size="sm" icon={MessageSquare} onClick={() => onMessageStudent(scholar.studentNumber)}>Message student</Button>}
+            <DropdownMenu
+              label="More actions"
+              items={[
+                { key: 'csv', label: 'Export CSV', icon: FileText, onSelect: () => exportScholarApplicationsToCSV(scholar) },
+                { key: 'print', label: 'Print', icon: Printer, onSelect: print }
+              ]}
+            />
+          </div>
         }
       />
 

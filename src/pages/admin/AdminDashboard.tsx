@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth, useUser } from '@clerk/react';
-import { OFFICE_LABELS, OFFICE_SHORT_LABELS } from '../../data/scholarships';
+import { OFFICE_LABELS, OFFICE_SHORT_LABELS, acceptsOnlineApplications, mockScholarships, officeOf } from '../../data/scholarships';
 import { ScholarshipOffice } from '../../types';
 import AdminAnalytics from './AdminAnalytics';
 import AdminAnnouncements from './AdminAnnouncements';
@@ -10,6 +10,8 @@ import DutyHoursPage from './DutyHoursPage';
 import ScholarshipsManager from './ScholarshipsManager';
 import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
 import AdminScholars from './AdminScholars';
+import MessagesPage from './MessagesPage';
+import { MESSAGES_READ_EVENT } from '../../utils/messages';
 import ApplicationReview from './ApplicationReview';
 import ApplicationsList, { DEFAULT_FILTERS, ListFilters } from './ApplicationsList';
 import { filterApplications, statusTabFromUrl, writeStatusTabToUrl } from './applicationQueue';
@@ -46,7 +48,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   // Announcements, scholarship management and the FSE report are the
   // AdSO's alone; the server enforces the same rule.
   const isAdso = adminOfficeRaw === 'ADSO';
-  const hiddenViews: MainView[] = isAdso ? [] : ['announcements', 'scholarships', 'fse', 'dutyHours'];
+  // An office whose scholarships have no renewals (POLCA: scholars keep it
+  // until they graduate) has no Renewals page either.
+  const officeHasRenewals = !adminOffice || mockScholarships.some(s => officeOf(s) === adminOffice && !s.noRenewal && acceptsOnlineApplications(s));
+  const hiddenViews: MainView[] = isAdso ? [] : ['announcements', 'scholarships', 'fse', 'dutyHours', 'messages', ...(officeHasRenewals ? [] : ['renewals' as MainView])];
 
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,6 +123,27 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   }, [mainView, listFilters.status]);
 
   const pendingCount = useMemo(() => applications.filter(a => a.status === 'Under Evaluation').length, [applications]);
+
+  // Unread messages from students (AdSO only): on every page change, every
+  // minute, and when a conversation is read.
+  const [messageCount, setMessageCount] = useState(0);
+  const checkMessages = useCallback(async () => {
+    if (!isAdso) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/messages/admin/unread`, { headers: await authHeaders(getToken) });
+      if (res.ok && mounted.current) setMessageCount((await res.json()).unread ?? 0);
+    } catch {
+      // keep the last count
+    }
+  }, [isAdso, getToken]);
+  useEffect(() => {
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') checkMessages(); }, 60_000);
+    window.addEventListener(MESSAGES_READ_EVENT, checkMessages);
+    return () => { window.clearInterval(timer); window.removeEventListener(MESSAGES_READ_EVENT, checkMessages); };
+  }, [checkMessages]);
+  useEffect(() => { checkMessages(); }, [checkMessages, mainView]);
+  // Opens the conversation with a student (AdSO).
+  const messageStudent = (studentNumber: string) => { navigate('messages'); setSelectedScholar(studentNumber); };
   const selected = selectedId ? applications.find(a => a._id === selectedId) ?? null : null;
 
   // PATCH /:id/status doesn't run the avatarUrl lookup that GET / does, so
@@ -219,11 +245,20 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const nextId = queueIndex >= 0 && queueIndex < queue.length - 1 ? queue[queueIndex + 1] : null;
 
   let page: React.ReactNode;
-  if (mainView === 'fse' && isAdso) {
+  if (mainView === 'messages' && isAdso) {
+    page = (
+      <MessagesPage
+        getToken={getToken}
+        selectedStudent={selectedScholar}
+        onSelectStudent={studentNumber => (studentNumber ? setSelectedScholar(studentNumber) : backToList())}
+        onOpenApplication={applicationId => { navigate('applications'); openApplication(applicationId, []); }}
+      />
+    );
+  } else if (mainView === 'fse' && isAdso) {
     page = <FseReportPage getToken={getToken} />;
   } else if (mainView === 'dutyHours' && isAdso) {
     page = <DutyHoursPage getToken={getToken} />;
-  } else if (mainView === 'renewals') {
+  } else if (mainView === 'renewals' && !hiddenViews.includes('renewals')) {
     page = <RenewalsPage getToken={getToken} isAdso={isAdso} />;
   } else if (mainView === 'analytics') {
     page = (
@@ -252,6 +287,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           // Opened from a scholar, not the list: no Prev / Next.
           openApplication(applicationId, []);
         }}
+        onMessageStudent={isAdso ? messageStudent : undefined}
       />
     );
   } else if (mainView === 'announcements' && isAdso) {
@@ -278,6 +314,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onPrev={prevId ? () => stepTo(prevId) : undefined}
         onNext={nextId ? () => stepTo(nextId) : undefined}
         onOpenScholar={studentNumber => { navigate('lifecycle'); setSelectedScholar(studentNumber); }}
+        onMessageStudent={isAdso ? messageStudent : undefined}
         onAdminFieldsSaved={adminFields => setApplications(prev => prev.map(a => (a._id === selected._id ? { ...a, adminFields } : a)))}
       />
     );
@@ -305,6 +342,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       adminEmail={user?.primaryEmailAddress?.emailAddress}
       officeLabel={officeLabel}
       pendingCount={pendingCount}
+      messageCount={messageCount}
       hiddenViews={hiddenViews}
       breadcrumbs={breadcrumbs}
       pageKey={`${mainView}:${selectedId ?? ''}:${selectedScholar ?? ''}:${selectedScholarship ?? ''}`}

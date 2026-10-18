@@ -41,6 +41,11 @@ export interface Scholarship {
   // than built in.
   custom?: boolean;
   referenceCode?: string;
+  // No renewals: approved scholars keep it until they graduate or stop
+  // (POLCA). Same as noRenewal in the backend's data/scholarships.js.
+  noRenewal?: boolean;
+  // At most this many current scholars per college (POLCA: 2).
+  slotsPerCollege?: number;
   eligibilityCriteria?: {
     yearLevels?: string[];       // e.g. ['1st Year'] — omit if open to all
     applicantType?: 'incoming' | 'continuing' | 'any';

@@ -4,7 +4,7 @@ import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOver
 import { acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships, registerCustomScholarships } from './data/scholarships';
 import { mockAnnouncements } from './data/announcements';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
-import { Holdings, applicationWindowBlock, holdingNotice, isSfagScholar } from './utils/eligibility';
+import { Holdings, applyBlock, holdingNotice, isSfagScholar } from './utils/eligibility';
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout';
@@ -26,6 +26,7 @@ import Profile from './pages/student/Profile';
 import GPACalculator from './pages/student/GPACalculator';
 import Renewals from './pages/student/Renewals';
 import DutyHours from './pages/student/DutyHours';
+import Messages from './pages/student/Messages';
 
 // --- Persistence helpers -----------------------------------------------
 // Only page/navigation state lives here now — WHO is logged in is entirely
@@ -567,8 +568,9 @@ export default function App() {
       setCurrentPage('login');
       return;
     }
-    // Outside its window the SFAG can't be applied for (the server refuses it too).
-    if (applicationWindowBlock(id)) return;
+    // Outside its window the SFAG can't be applied for, nor POLCA from a
+    // full college (the server refuses both too).
+    if (applyBlock(id, holdings)) return;
     setSelectedScholarshipId(id);
     setResubmitApplication(null);
     // Info-only scholarships have no application form; show their details.
@@ -686,7 +688,7 @@ export default function App() {
         });
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled) setHoldings({ held: data.held ?? [], exclusive: data.exclusive ?? null });
+        if (!cancelled) setHoldings({ held: data.held ?? [], exclusive: data.exclusive ?? null, slotsFull: data.slotsFull ?? [] });
       } catch {
         // Leave it: the server still refuses a conflicting application.
       }
@@ -799,6 +801,7 @@ export default function App() {
         'gpa-calculator': 'GPA Calculator',
         renewals: 'Scholarship Renewal',
         'duty-hours': 'Duty Hours',
+        messages: 'Messages',
         'scholarship-details': 'Scholarship Specifications',
         'apply-scholarship': 'Scholarship Digital Application',
         announcements: 'Office Announcements',
@@ -848,6 +851,8 @@ export default function App() {
                 return isScholar ? <Renewals /> : null;
               case 'duty-hours':
                 return isSfag ? <DutyHours student={student} /> : null;
+              case 'messages':
+                return <Messages applications={applications} />;
               case 'scholarship-details':
                 return (
                   <ScholarshipDetails
@@ -857,7 +862,7 @@ export default function App() {
                     onBack={() => goBackTo('explore')}
                     onApply={handleApplyScholarship}
                     onResubmit={handleResubmitApplication}
-                    blockedReason={applicationWindowBlock(activeScholarship.id)}
+                    blockedReason={applyBlock(activeScholarship.id, holdings)}
                     notice={holdingNotice(activeScholarship.id, holdings)}
                   />
                 );

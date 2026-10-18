@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
 import {
-  Award, Bell, Calendar, CalendarClock, Clock, Facebook, FileEdit, ImagePlus, Megaphone, Pencil, Pin, PinOff,
+  Award, Bell, Calendar, CalendarClock, Clock, Facebook, FileEdit, ImagePlus, Mail, Megaphone, Pencil, Pin, PinOff,
   Plus, RotateCw, Send, Trash2, X
 } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatShortDate } from './adminData';
 import { mockScholarships } from '../../data/scholarships';
+import EmailAudience, { DEFAULT_EMAIL_TARGET, EmailTarget, describeTarget } from './EmailAudience';
 import {
   Alert, Badge, Button, Card, Checkbox, ConfirmDialog, DropdownMenu, EmptyState, ErrorState, Field, IconButton, Modal,
   PageHeader, SearchInput, Select, TableSkeleton, Tabs, TextInput, Textarea, Toolbar, Tooltip
@@ -48,7 +49,19 @@ interface AdminAnnouncement {
   fbPermalink: string | null;
   fbError: string | null;
   fbLastSyncedAt: string | null;
+  // "Also email students" (backend utils/announcementEmails.js): sent once
+  // to the students' Outlook when published, in batches.
+  emailEnabled: boolean;
+  emailAudience: EmailAudience;
+  emailTarget?: EmailTarget;
+  emailStatus: 'not_sent' | 'queued' | 'sending' | 'sent' | 'failed';
+  emailTotal: number;
+  emailSent: number;
+  emailError: string | null;
+  emailSentAt: string | null;
 }
+
+type EmailAudience = 'all' | 'applicants' | 'scholars';
 
 interface AnnouncementImage {
   id: string;
@@ -62,8 +75,9 @@ interface FacebookResult {
   tokenExpired?: boolean;
 }
 
-const FB_DEFAULTS: Pick<AdminAnnouncement, 'images' | 'fbEnabled' | 'fbStatus' | 'fbPostId' | 'fbPermalink' | 'fbError' | 'fbLastSyncedAt'> = {
-  images: [], fbEnabled: false, fbStatus: 'not_posted', fbPostId: null, fbPermalink: null, fbError: null, fbLastSyncedAt: null
+const FB_DEFAULTS: Partial<AdminAnnouncement> = {
+  images: [], fbEnabled: false, fbStatus: 'not_posted', fbPostId: null, fbPermalink: null, fbError: null, fbLastSyncedAt: null,
+  emailEnabled: false, emailAudience: 'all', emailStatus: 'not_sent', emailTotal: 0, emailSent: 0, emailError: null, emailSentAt: null
 };
 
 const normalize = (raw: Partial<AdminAnnouncement>): AdminAnnouncement => ({ ...FB_DEFAULTS, ...raw } as AdminAnnouncement);
@@ -102,6 +116,9 @@ interface EditorState {
   scholarshipId: string;         // '' = not about a specific scholarship
   isPinned: boolean;
   fbEnabled: boolean;
+  emailEnabled: boolean;
+  emailTarget: EmailTarget;
+  emailLocked?: boolean;         // the email already went out (or is going)
   existingImages: AnnouncementImage[];  // images already saved on the announcement
   schedule: ScheduleState;       // publish now or at a set time
 }
@@ -116,7 +133,7 @@ interface ImageItem {
 }
 
 const BLANK_FORM: Omit<EditorState, 'schedule'> = {
-  title: '', description: '', content: '', category: 'General', scholarshipId: '', isPinned: false, fbEnabled: true, existingImages: []
+  title: '', description: '', content: '', category: 'General', scholarshipId: '', isPinned: false, fbEnabled: true, emailEnabled: false, emailTarget: DEFAULT_EMAIL_TARGET, existingImages: []
 };
 
 const LIMITS = { title: 150, description: 500, content: 8000 };
@@ -177,8 +194,9 @@ function PreviewImages({ images }: { images: string[] }) {
   );
 }
 
-function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
+function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToken }: {
   initial: EditorState;
+  getToken: () => Promise<string | null>;
   onClose: () => void;
   onSave: (form: EditorState, images: ImageItem[], publish: boolean) => void;
   isSaving: boolean;
@@ -222,7 +240,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
     if (files.length === 0) return;
     const problems: string[] = [];
     const accepted = files.filter(file => {
-      if (!(file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name))) { problems.push(`${file.name} isn't a JPG.`); return false; }
+      if (!(['image/jpeg', 'image/png'].includes(file.type) || /\.(jpe?g|png)$/i.test(file.name))) { problems.push(`${file.name} isn't a JPG or PNG.`); return false; }
       if (file.size > MAX_IMAGE_BYTES) { problems.push(`${file.name} is over 10MB.`); return false; }
       return true;
     });
@@ -343,7 +361,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
           <Field
             label="Images"
             optional
-            helper={`Up to ${MAX_IMAGES} JPGs, 10MB each, shown in this order. Changing the images replaces the Facebook post.`}
+            helper={`Up to ${MAX_IMAGES} JPG or PNG images, 10MB each, shown in this order. Changing the images replaces the Facebook post.`}
             error={imageError || undefined}
             labelAside={images.length > 0 ? `${images.length}/${MAX_IMAGES}` : undefined}
           >
@@ -362,7 +380,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
                   </button>
                 </div>
               ))}
-              <input ref={fileInput} type="file" accept=".jpg,.jpeg,image/jpeg" multiple className="hidden" onChange={pickImages} disabled={isSaving} />
+              <input ref={fileInput} type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple className="hidden" onChange={pickImages} disabled={isSaving} />
               {images.length < MAX_IMAGES && (
                 <Button size="sm" icon={ImagePlus} onClick={() => fileInput.current?.click()} disabled={isSaving}>
                   {images.length > 0 ? 'Add more' : 'Add images'}
@@ -401,6 +419,27 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error }: {
         </div>
 
         <div className="space-y-3 lg:col-span-2">
+          <div className="space-y-3 rounded-control bg-surface-muted p-4 ring-1 ring-inset ring-line">
+            <Checkbox
+              checked={form.emailEnabled}
+              onChange={v => set('emailEnabled', v)}
+              disabled={isSaving || form.emailLocked}
+              label="Also email students (Outlook)"
+              description={form.emailLocked
+                ? 'Already emailed. Edits show on AniSkolar but are not emailed again.'
+                : 'Sent once to their school email when this is published (for a scheduled one, at its time), a few batches a minute.'}
+            />
+            {form.emailEnabled && !form.emailLocked && (
+              <EmailAudience
+                value={form.emailTarget}
+                onChange={t => set('emailTarget', t)}
+                relatedScholarshipId={form.scholarshipId}
+                getToken={getToken}
+                disabled={isSaving}
+              />
+            )}
+            {form.emailLocked && <p className="text-xs text-ink-muted">Sent to: {describeTarget(form.emailTarget)}</p>}
+          </div>
           <div className="rounded-control bg-surface-muted p-4 ring-1 ring-inset ring-line">
             <Checkbox
               checked={form.fbEnabled}
@@ -558,6 +597,9 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       scholarshipId: a.scholarshipId ?? '',
       isPinned: a.isPinned,
       fbEnabled: a.fbEnabled,
+      emailEnabled: a.emailEnabled,
+      emailTarget: a.emailTarget ?? DEFAULT_EMAIL_TARGET,
+      emailLocked: ['sending', 'sent'].includes(a.emailStatus) || a.emailSent > 0,
       existingImages: a.images,
       schedule: initialSchedule(a.status === 'scheduled' ? a.scheduledFor : null)
     });
@@ -583,6 +625,10 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       data.append('status', scheduled ? 'scheduled' : publish ? 'published' : 'draft');
       if (scheduled) data.append('scheduledFor', scheduleToIso(form.schedule).iso ?? '');
       data.append('fbEnabled', String(form.fbEnabled));
+      if (!form.emailLocked) {
+        data.append('emailEnabled', String(form.emailEnabled));
+        data.append('emailTarget', JSON.stringify(form.emailTarget));
+      }
       // Saved images to keep, then new files; the backend appends new images
       // after the kept ones, which matches the editor's order (new images
       // are always added at the end).
@@ -641,6 +687,23 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       if (!response.ok) throw new Error(body.error || 'Retry failed.');
       upsert(normalize(body.announcement));
       reportFacebook('Retried', body.facebook);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Retry failed.');
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  // Sends a failed announcement email again, from where it stopped.
+  const retryEmail = async (a: AdminAnnouncement) => {
+    if (retryingId) return;
+    setRetryingId(a.id);
+    setActionError('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/announcements/${a.id}/email/retry`, { method: 'POST', headers: await authHeaders(getToken) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Retry failed.');
+      upsert(normalize(body.announcement));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Retry failed.');
     } finally {
@@ -751,6 +814,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
                 onEdit={() => openEdit(a)}
                 onTogglePin={() => togglePin(a)}
                 onRetry={() => retryFacebook(a)}
+                onRetryEmail={() => retryEmail(a)}
                 onDelete={() => { setDeleteError(''); setPendingDelete(a); }}
               />
             ))}
@@ -765,6 +829,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
           onSave={saveAnnouncement}
           isSaving={isSaving}
           error={saveError}
+          getToken={getToken}
         />
       )}
 
@@ -793,7 +858,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
 
 // --- Row -----------------------------------------------------------------------
 
-function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onTogglePin, onRetry, onDelete }: {
+function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onTogglePin, onRetry, onRetryEmail, onDelete }: {
   a: AdminAnnouncement;
   pinBusy: boolean;
   retrying: boolean;
@@ -801,6 +866,7 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onToggle
   onEdit: () => void;
   onTogglePin: () => void;
   onRetry: () => void;
+  onRetryEmail: () => void;
   onDelete: () => void;
 }) {
   const CategoryIcon = CATEGORY_ICONS[a.category] ?? Bell;
@@ -849,6 +915,7 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onToggle
 
         <div className="mt-2 flex items-center gap-2 sm:mt-0 sm:shrink-0">
           {published ? <Badge tone="success" dot>Published</Badge> : scheduled ? <Badge tone="info" icon={CalendarClock}>Scheduled</Badge> : <Badge dot>Draft</Badge>}
+          <EmailIndicator a={a} retrying={retrying} retryDisabled={retryDisabled} onRetry={onRetryEmail} />
           <FacebookIndicator a={a} retrying={retrying} retryDisabled={retryDisabled} onRetry={onRetry} />
           <div className="ml-auto flex items-center gap-0.5 sm:ml-2">
             <IconButton
@@ -866,6 +933,55 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onToggle
         </div>
       </div>
     </li>
+  );
+}
+
+// The Outlook email's state as a small icon: muted when not emailed, a
+// count while sending, accent once sent, red with Retry when it failed.
+function EmailIndicator({ a, retrying, retryDisabled, onRetry }: {
+  a: AdminAnnouncement;
+  retrying: boolean;
+  retryDisabled: boolean;
+  onRetry: () => void;
+}) {
+  const box = 'inline-flex h-8 items-center justify-center gap-1 rounded-control px-1.5 text-xs';
+  if (a.emailStatus === 'failed') {
+    return (
+      <span className="flex items-center gap-1">
+        <Tooltip content={a.emailError || 'The email could not be sent.'} className={`${box} text-danger-fg`}>
+          <Mail className="size-4" aria-hidden />
+          <span className="sr-only">Email failed</span>
+        </Tooltip>
+        <Button size="sm" variant="danger-secondary" icon={RotateCw} loading={retrying} disabled={retryDisabled} onClick={onRetry}>
+          Retry
+          <span className="sr-only"> email for “{a.title}”</span>
+        </Button>
+      </span>
+    );
+  }
+  if (a.emailStatus === 'queued' || a.emailStatus === 'sending') {
+    const progress = a.emailTotal ? `Emailing ${a.emailSent} of ${a.emailTotal}` : 'Email queued';
+    return (
+      <Tooltip content={`${progress} — sent a few batches a minute.`} className={`${box} text-warning-fg`}>
+        <Mail className="size-4" aria-hidden />
+        <span className="tabular-nums">{a.emailTotal ? `${a.emailSent}/${a.emailTotal}` : '…'}</span>
+      </Tooltip>
+    );
+  }
+  if (a.emailStatus === 'sent') {
+    return (
+      <Tooltip content={`Emailed to ${a.emailTotal} student${a.emailTotal === 1 ? '' : 's'}${a.emailSentAt ? ` on ${formatShortDate(a.emailSentAt)}` : ''}.`} className={`${box} text-accent`}>
+        <Mail className="size-4" aria-hidden />
+        <span className="sr-only">Emailed</span>
+      </Tooltip>
+    );
+  }
+  const note = a.emailEnabled && a.status !== 'published' ? 'Emails students when published' : 'Not emailed';
+  return (
+    <Tooltip content={note} className={`${box} text-ink-subtle/60`}>
+      <Mail className="size-4" aria-hidden />
+      <span className="sr-only">{note}</span>
+    </Tooltip>
   );
 }
 

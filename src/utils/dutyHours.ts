@@ -12,10 +12,36 @@ export interface DutyEntry {
   timeOut: string;
 }
 
+// Event credit counted in the totals: approved claims on credited events
+// (added by the server), plus hours typed in on old logs.
 export interface SpecialEvent {
   _id?: string;
   name: string;
   hours: number;
+  eventId?: string;
+}
+
+// An event the scholarship office credits for duty hours (set up by the
+// office or by COSA). The credit is the office's call, not the event's
+// length. Mirrors the backend's models/DutyEvent.js.
+export type EventOrganizer = 'Scholarship office' | 'COSA';
+export const EVENT_ORGANIZERS: EventOrganizer[] = ['Scholarship office', 'COSA'];
+export interface CreditedEvent {
+  _id: string;
+  name: string;
+  date: string;            // YYYY-MM-DD
+  organizer: EventOrganizer;
+  creditHours: number;
+}
+
+// A scholar's claim to have attended one; only Approved ones count.
+export type ClaimStatus = 'Pending' | 'Approved' | 'Rejected';
+export interface EventClaim extends CreditedEvent {
+  eventId: string;
+  status: ClaimStatus;
+  note: string | null;
+  claimedAt: string | null;
+  reviewedAt: string | null;
 }
 
 export interface DutyLog {
@@ -32,14 +58,26 @@ export interface DutyLog {
 }
 
 // The scholar's SFAG grant percentage (set by the AdSO on their approved
-// application) and, when the AdSO has set hours for it, the required
-// hours that apply instead of the scholar's own.
+// application), their year group (from the profile's year level) and, when
+// the AdSO has set hours for that pair, the required hours that apply
+// instead of the scholar's own.
 export interface DutyRule {
   percentage: number | null;
+  yearGroup: YearGroup | null;
   requiredHours: number | null;
 }
 
 export const GRANT_PERCENTAGES = [100, 75, 50, 25] as const;
+
+// Duty hours differ by year level: 1st–2nd year render more than 3rd year
+// and up (5th year counts with 3rd–4th). Same groups as the backend's
+// models/DutySetting.js.
+export type YearGroup = 'lower' | 'upper';
+export const YEAR_GROUPS: { key: YearGroup; label: string }[] = [
+  { key: 'lower', label: '1st–2nd year' },
+  { key: 'upper', label: '3rd year and up' },
+];
+export const yearGroupLabel = (g: YearGroup | null) => YEAR_GROUPS.find(y => y.key === g)?.label ?? '';
 
 export interface DutySummary {
   regularHours: number;
@@ -57,6 +95,24 @@ const utc = (date: string) => new Date(`${date}T00:00:00Z`);
 
 export function isTimeRange(timeIn: string, timeOut: string): boolean {
   return /^\d{2}:\d{2}$/.test(timeIn) && /^\d{2}:\d{2}$/.test(timeOut) && minutes(timeOut) > minutes(timeIn);
+}
+
+// When duty may be rendered (AdSO, Oct 2026): Monday–Thursday 8:00 AM–6:00
+// PM, Friday 8:00 AM–5:00 PM, never across the 12:00–1:00 PM lunch break,
+// and at least 1.5 hours at a time. Returns the reason an entry breaks
+// these, or null. Mirrors dutyRuleError in the backend's utils/dutyHours.js.
+export const DUTY_RULES_TEXT = 'Mon–Thu 8:00 AM–6:00 PM, Fri 8:00 AM–5:00 PM, not across 12:00–1:00 PM, at least 1.5 hours per duty.';
+export function dutyRuleError({ date, timeIn, timeOut }: Pick<DutyEntry, 'date' | 'timeIn' | 'timeOut'>): string | null {
+  const day = utc(date).getUTCDay();
+  if (day === 0 || day === 6) return 'Duty is only on weekdays (Monday to Friday).';
+  const start = minutes(timeIn);
+  const end = minutes(timeOut);
+  if (start < 8 * 60) return 'Duty starts at 8:00 AM at the earliest.';
+  if (day === 5 && end > 17 * 60) return 'Duty ends by 5:00 PM on Fridays.';
+  if (end > 18 * 60) return 'Duty ends by 6:00 PM, Monday to Thursday.';
+  if (start < 13 * 60 && end > 12 * 60) return "Duty can't include the 12:00–1:00 PM lunch break. Log the morning and the afternoon as separate duties.";
+  if (end - start < 90) return 'A duty must be at least 1.5 hours.';
+  return null;
 }
 
 export function entryHours(e: Pick<DutyEntry, 'timeIn' | 'timeOut'>): number {

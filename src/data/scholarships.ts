@@ -226,9 +226,14 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Maintain a GPA of at least 2.50',
       'No failing grades',
       'Enrolled in the maximum number of units required by the curriculum',
-      'Good moral standing for the whole scholarship period'
+      'Good moral standing for the whole scholarship period',
+      'No renewals: the scholarship continues until you graduate'
     ],
     gpaRequirement: { stage: 'keep', minGpa: 2.5, noFailingGrade: true },
+    // POLCA takes 2 scholars per college and keeps them until they
+    // graduate (Oct 2026 — to confirm with POLCA). Mirrors the backend.
+    noRenewal: true,
+    slotsPerCollege: 2,
     documentSlots: POLCA_DOCUMENT_SLOTS,
     requirements: requirementLabels(POLCA_DOCUMENT_SLOTS),
     process: [
@@ -346,8 +351,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Satisfactory academic progress every semester',
       'The privilege is non-transferable and cannot be deferred'
     ],
-    // Assumed — neither the official page nor the AdSO's list (Oct 2026)
-    // gives the documents. The AdSO should confirm these.
+    // Confirmed with the AdSO (Oct 2026); the official page doesn't list
+    // the documents.
     documentKeys: ['reportCard'],
     customDocuments: [
       'Certificate of employment of the parent/guardian from DLSU-D or DLSMHSI',

@@ -3,7 +3,7 @@ import { useAuth } from '@clerk/react';
 import { AlertCircle, Building2, CalendarDays, Clock, Loader2, Plus, Printer, RefreshCw, Trash2, Check } from 'lucide-react';
 import { StudentProfile } from '../../types';
 import {
-  DUTY_TERMS, DutyEntry, DutyLog, DutyRule, DutySummary, DutyTerm, SpecialEvent, entryHours, format12h, formatDutyDate, formatHours,
+  ClaimStatus, CreditedEvent, DUTY_TERMS, DutyEntry, DutyLog, DutyRule, DutySummary, DutyTerm, EventClaim, entryHours, format12h, formatDutyDate, formatHours, yearGroupLabel, dutyRuleError, DUTY_RULES_TEXT,
   isTimeRange, sortEntries, summarize, termLabel, todayInManila, weekday, weeklyTotals
 } from '../../utils/dutyHours';
 
@@ -11,8 +11,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 
 // Duty hours for SFAG scholars, replacing the office's "SFAG Duty
 // Calculator" sheet: the AdSO assigns the office; the scholar enters the
-// deadline, required hours, each duty (date, time in, time out) and
-// special events; the day,
+// deadline, required hours and each duty (date, time in, time out), and
+// claims the credited events they attended; the day,
 // hours, totals and weekly breakdown are worked out here. Saved to
 // /api/duty-hours/mine so the AdSO can monitor it.
 
@@ -33,11 +33,14 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
   const [current, setCurrent] = useState<TermKey | null>(null);
   const [knownTerms, setKnownTerms] = useState<TermKey[]>([]);
   const [log, setLog] = useState<DutyLog | null>(null);
-  const [rule, setRule] = useState<DutyRule>({ percentage: null, requiredHours: null });
+  const [rule, setRule] = useState<DutyRule>({ percentage: null, yearGroup: null, requiredHours: null });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [saveError, setSaveError] = useState('');
+  const [events, setEvents] = useState<CreditedEvent[]>([]);
+  const [claims, setClaims] = useState<EventClaim[]>([]);
+  const [claimBusy, setClaimBusy] = useState<string | null>(null);
 
   const load = useCallback(async (t: TermKey | null) => {
     setLoading(true);
@@ -52,6 +55,8 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       setKnownTerms(body.terms ?? []);
       setLog(body.log);
       if (body.rule) setRule(body.rule);
+      setEvents(body.events ?? []);
+      setClaims(body.claims ?? []);
       setTerm({ academicYear: body.log.academicYear, term: body.log.term });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load your duty hours.');
@@ -79,12 +84,36 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       if (!res.ok) throw new Error(body.error || 'Failed to save your duty hours.');
       setLog(body.log);
       if (body.rule) setRule(body.rule);
+      if (body.claims) setClaims(body.claims);
       setSaveState('saved');
       if (term && !knownTerms.some(k => termKey(k) === termKey(term))) setKnownTerms(prev => [term, ...prev]);
     } catch (err) {
       setLog(previous);
       setSaveState('idle');
       setSaveError(err instanceof Error ? err.message : 'Failed to save your duty hours.');
+    }
+  };
+
+  // Claims (POST) or withdraws (DELETE) an event; the response is the log.
+  const claimEvent = async (eventId: string, withdraw: boolean) => {
+    setClaimBusy(eventId);
+    setSaveError('');
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_BASE_URL}/api/duty-hours/mine/claims${withdraw ? `/${eventId}` : ''}`, {
+        method: withdraw ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: withdraw ? undefined : JSON.stringify({ eventId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Failed to update your claim.');
+      setLog(body.log);
+      setClaims(body.claims ?? []);
+      if (term && !knownTerms.some(k => termKey(k) === termKey(term))) setKnownTerms(prev => [term, ...prev]);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to update your claim.');
+    } finally {
+      setClaimBusy(null);
     }
   };
 
@@ -164,7 +193,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       <RegularDutyTable log={log} onSave={save} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SpecialEventsCard log={log} onSave={save} />
+        <EventsCard events={events} claims={claims} busyId={claimBusy} onClaim={id => claimEvent(id, false)} onWithdraw={id => claimEvent(id, true)} />
         <WeeklyCard entries={log.entries} />
       </div>
     </div>
@@ -229,7 +258,12 @@ function DetailsCard({ log, rule, onSave, saveState }: {
       </div>
       {rule.percentage !== null && (
         <p className="text-[11px] text-slate-500">
-          {rule.percentage}% grant{hoursFromAdso ? `: ${formatHours(rule.requiredHours)} hours a term, set by the scholarship office.` : '. Enter the hours the scholarship office gave you.'}
+          {rule.percentage}% grant{rule.yearGroup ? `, ${yearGroupLabel(rule.yearGroup)}` : ''}
+          {hoursFromAdso
+            ? `: ${formatHours(rule.requiredHours)} hours a term, set by the scholarship office.`
+            : rule.yearGroup
+              ? '. Enter the hours the scholarship office gave you.'
+              : ". Add your year level to your profile so the office's hours apply, or enter the hours you were given."}
         </p>
       )}
     </div>
@@ -240,7 +274,7 @@ function SummaryCard({ summary }: { summary: DutySummary }) {
   const pct = summary.required ? Math.min(100, (summary.completed / summary.required) * 100) : null;
   const done = summary.remaining !== null && summary.remaining <= 0;
   const stats = [
-    { label: 'Hours completed', value: formatHours(summary.completed), hint: summary.specialHours ? `incl. ${formatHours(summary.specialHours)} from special events` : undefined },
+    { label: 'Hours completed', value: formatHours(summary.completed), hint: summary.specialHours ? `incl. ${formatHours(summary.specialHours)} from events` : undefined },
     { label: 'Hours remaining', value: summary.remaining === null ? '—' : formatHours(Math.max(0, summary.remaining)), hint: summary.remaining !== null && summary.remaining < 0 ? `${formatHours(-summary.remaining)} over the requirement` : summary.required === null ? 'Enter the required hours' : undefined },
     { label: 'Weekly hours needed', value: formatHours(summary.weeklyNeeded), hint: summary.weeklyNeeded === null ? (summary.required === null ? undefined : 'Enter the deadline') : 'to finish by the deadline' },
   ];
@@ -286,6 +320,8 @@ function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => 
     if (!date) { setError('Choose the date.'); return; }
     if (!timeIn || !timeOut) { setError('Enter the time in and time out.'); return; }
     if (!isTimeRange(timeIn, timeOut)) { setError('Time out must be after time in.'); return; }
+    const ruleError = dutyRuleError({ date, timeIn, timeOut });
+    if (ruleError) { setError(ruleError); return; }
     const overlap = log.entries.find(x => x.date === date && timeIn < x.timeOut && x.timeIn < timeOut);
     if (overlap) { setError(`This overlaps your ${format12h(overlap.timeIn)}–${format12h(overlap.timeOut)} duty that day.`); return; }
     setError('');
@@ -319,6 +355,7 @@ function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => 
         {date ? `${weekday(date)}, ${formatDutyDate(date, true)}` : 'Choose a date'}
         {hours !== null && <> · <span className="font-bold text-slate-700">{formatHours(hours)} hours</span></>}
       </p>
+      <p className="text-[11px] text-slate-500">Duty hours: {DUTY_RULES_TEXT}</p>
       {error && <p role="alert" className="text-xs font-semibold text-rose-600">{error}</p>}
     </form>
   );
@@ -381,55 +418,76 @@ function RegularDutyTable({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog
 
 // --- Special events & weekly -------------------------------------------------------
 
-function SpecialEventsCard({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => void }) {
-  const [name, setName] = useState('');
-  const [hours, setHours] = useState('');
-  const [error, setError] = useState('');
-  const add = (e: React.FormEvent) => {
-    e.preventDefault();
-    const n = Number(hours);
-    if (!name.trim()) { setError('Enter the event name.'); return; }
-    if (!Number.isFinite(n) || n <= 0 || n > 100) { setError('Enter the equivalent hours.'); return; }
-    setError('');
-    onSave({ ...log, specialEvents: [...log.specialEvents, { name: name.trim(), hours: n }] });
-    setName('');
-    setHours('');
-  };
-  const remove = (event: SpecialEvent) => {
-    const i = log.specialEvents.indexOf(event);
-    onSave({ ...log, specialEvents: log.specialEvents.filter((_, j) => j !== i) });
-  };
+// Credited events of the term: the scholar claims the ones they attended
+// and the scholarship office approves each claim before its hours count.
+const CLAIM_BADGE: Record<ClaimStatus, string> = {
+  Pending: 'bg-amber-50 text-amber-800 ring-amber-200',
+  Approved: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+  Rejected: 'bg-rose-50 text-rose-800 ring-rose-200',
+};
+
+function EventsCard({ events, claims, busyId, onClaim, onWithdraw }: {
+  events: CreditedEvent[];
+  claims: EventClaim[];
+  busyId: string | null;
+  onClaim: (eventId: string) => void;
+  onWithdraw: (eventId: string) => void;
+}) {
+  const today = todayInManila();
+  const claimOf = new Map(claims.map(c => [c.eventId, c]));
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
       <div className="px-5 sm:px-6 py-4 border-b border-slate-100">
-        <h3 className="font-display font-bold text-base text-slate-900">Special events</h3>
-        <p className="text-[11px] text-slate-400 mt-0.5">Events credited as duty, e.g. an orientation or a donation drive.</p>
+        <h3 className="font-display font-bold text-base text-slate-900">Events</h3>
+        <p className="text-[11px] text-slate-400 mt-0.5">Events credited by the scholarship office (including COSA events). Claim the ones you attended; the hours count once the office approves.</p>
       </div>
-      {log.specialEvents.length > 0 && (
+      {events.length === 0 ? (
+        <p className="px-5 sm:px-6 py-6 text-sm text-slate-500">No credited events this term yet.</p>
+      ) : (
         <ul className="divide-y divide-slate-100">
-          {log.specialEvents.map((event, i) => (
-            <li key={event._id ?? i} className="px-5 sm:px-6 py-2.5 flex items-center justify-between gap-3 text-sm">
-              <span className="min-w-0 truncate text-slate-700">{event.name}</span>
-              <span className="flex items-center gap-2 shrink-0">
-                <span className="font-bold text-slate-800">{formatHours(event.hours)}</span>
-                <button type="button" onClick={() => remove(event)} aria-label={`Delete ${event.name}`} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </span>
-            </li>
-          ))}
+          {events.map(event => {
+            const claim = claimOf.get(event._id);
+            const upcoming = event.date > today;
+            const busy = busyId === event._id;
+            return (
+              <li key={event._id} className="px-5 sm:px-6 py-3 flex items-start justify-between gap-3 text-sm">
+                <div className="min-w-0">
+                  <p className="font-semibold text-slate-800">{event.name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {weekday(event.date)}, {formatDutyDate(event.date, true)} · {event.organizer} · <span className="font-bold text-slate-700">{formatHours(event.creditHours)} hours credit</span>
+                  </p>
+                  {claim?.status === 'Rejected' && claim.note && <p className="mt-1 text-[11px] text-rose-700">{claim.note}</p>}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {claim ? (
+                    <>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset ${CLAIM_BADGE[claim.status]}`}>
+                        {claim.status === 'Pending' ? 'Waiting for approval' : claim.status}
+                      </span>
+                      {claim.status === 'Pending' && (
+                        <button type="button" onClick={() => onWithdraw(event._id)} disabled={busy} className="text-[11px] font-bold text-slate-500 hover:text-rose-600 disabled:opacity-50">
+                          Withdraw
+                        </button>
+                      )}
+                    </>
+                  ) : upcoming ? (
+                    <span className="text-[11px] text-slate-400">Upcoming</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onClaim(event._id)}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} I attended
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
-      <form onSubmit={add} className="px-5 sm:px-6 py-4 bg-slate-50 border-t border-slate-100 space-y-2" noValidate>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Event name" maxLength={200} aria-label="Event name" className={inputClass} />
-          <input type="number" inputMode="decimal" min={0} step="0.5" value={hours} onChange={e => setHours(e.target.value)} placeholder="Hours" aria-label="Equivalent hours" className={`${inputClass} sm:w-28`} />
-          <button type="submit" className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-100">
-            <Plus className="w-4 h-4" /> Add
-          </button>
-        </div>
-        {error && <p role="alert" className="text-xs font-semibold text-rose-600">{error}</p>}
-      </form>
     </div>
   );
 }

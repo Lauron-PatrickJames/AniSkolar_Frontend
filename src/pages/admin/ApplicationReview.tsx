@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, FileText, RotateCcw, ShieldCheck, XCircle
+  AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, FileText, MessageSquare, RotateCcw, ShieldCheck, XCircle
 } from 'lucide-react';
 import { AnswersStyleProvider, ApplicationFormAnswers, EvaluationSheetAnswers } from '../../components/grant-forms/GrantAnswersView';
 import PolcaAdminFieldsCard from '../../components/grant-forms/PolcaAdminFieldsCard';
@@ -46,13 +46,15 @@ interface ApplicationReviewProps {
   onPrev?: () => void;
   onNext?: () => void;
   onOpenScholar: (studentNumber: string) => void;
+  // Opens the AdSO's conversation with the applicant (AdSO only).
+  onMessageStudent?: (studentNumber: string) => void;
 }
 
 // One application: header with the applicant summary, Application form /
 // Documents / Activity tabs, and the decision panel. Mount with
 // key={app._id} so per-application state resets when switching.
 export default function ApplicationReview({
-  app, adminOffice, getToken, onUpdated, onAdminFieldsSaved, position, onPrev, onNext, onOpenScholar
+  app, adminOffice, getToken, onUpdated, onAdminFieldsSaved, position, onPrev, onNext, onOpenScholar, onMessageStudent
 }: ApplicationReviewProps) {
   const [activeTab, setActiveTab] = useState<ReviewTab>('form');
   const [toast, setToast] = useState<string | null>(null);
@@ -137,11 +139,16 @@ export default function ApplicationReview({
             </span>
           </>
         }
-        actions={position && position.total > 1 && (
+        actions={(onMessageStudent || (position && position.total > 1)) && (
           <div className="flex items-center gap-1">
-            <span className="mr-1 text-xs text-ink-subtle tabular-nums">{position.index + 1} of {position.total}</span>
-            <IconButton icon={ChevronLeft} label="Previous application (K)" onClick={onPrev} disabled={!onPrev} variant="secondary" />
-            <IconButton icon={ChevronRight} label="Next application (J)" onClick={onNext} disabled={!onNext} variant="secondary" />
+            {onMessageStudent && <Button size="sm" icon={MessageSquare} onClick={() => onMessageStudent(app.studentNumber)} className="mr-2">Message student</Button>}
+            {position && position.total > 1 && (
+              <>
+                <span className="mr-1 text-xs text-ink-subtle tabular-nums">{position.index + 1} of {position.total}</span>
+                <IconButton icon={ChevronLeft} label="Previous application (K)" onClick={onPrev} disabled={!onPrev} variant="secondary" />
+                <IconButton icon={ChevronRight} label="Next application (J)" onClick={onNext} disabled={!onNext} variant="secondary" />
+              </>
+            )}
           </div>
         )}
       />
@@ -191,6 +198,9 @@ export default function ApplicationReview({
           <InternalNotes app={app} getToken={getToken} onSaved={notes => onUpdated({ ...app, internalNotes: notes })} />
           {!adminOffice && app.scholarshipId === 's1' && app.status === 'Approved' && (
             <SfagGrantCard app={app} getToken={getToken} onSaved={updated => { onUpdated(updated); setToast('Saved the grant percentage.'); }} />
+          )}
+          {app.status === 'Approved' && mockScholarships.find(s => s.id === app.scholarshipId)?.noRenewal && (
+            <ScholarshipEndCard app={app} getToken={getToken} onSaved={(updated, msg) => { onUpdated(updated); setToast(msg); }} />
           )}
           {app.applicationFormType === 'polca' && (
             <PolcaAdminFieldsCard
@@ -411,6 +421,71 @@ function SfagGrantCard({ app, getToken, onSaved }: {
         </Field>
         {app.sfagPercentageSetAt && value === saved && (
           <p className="text-xs text-ink-subtle">Set {formatDateTime(app.sfagPercentageSetAt)}{app.sfagPercentageSetBy ? ` by ${app.sfagPercentageSetBy}` : ''}</p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// --- Graduated / stopped (scholarships without renewals) --------------------------------
+
+// POLCA has no renewals: a scholar keeps it until they graduate. The office
+// records it here, which ends the scholarship and frees the college slot.
+function ScholarshipEndCard({ app, getToken, onSaved }: {
+  app: AdminApplication;
+  getToken: () => Promise<string | null>;
+  onSaved: (updated: AdminApplication, message: string) => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const scholarship = mockScholarships.find(s => s.id === app.scholarshipId);
+
+  const save = async (reason: 'Graduated' | 'Stopped' | null) => {
+    if (reason && !window.confirm(`Mark this scholar as ${reason.toLowerCase()}? Their ${scholarship?.name ?? 'scholarship'} ends and their college slot opens.`)) return;
+    setBusy(reason ?? 'undo');
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/applications/${app._id}/end`, {
+        method: 'PATCH',
+        headers: await authHeaders(getToken, true),
+        body: JSON.stringify({ reason }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Couldn't save.");
+      onSaved(
+        { ...app, endedAt: body.application?.endedAt ?? null, endReason: body.application?.endReason ?? null, endedBy: body.application?.endedBy },
+        reason ? `Marked as ${reason.toLowerCase()}.` : 'The scholarship is active again.',
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card
+      title="Scholarship status"
+      description={`No renewals: it continues until the scholar graduates or stops.${scholarship?.slotsPerCollege ? ` ${scholarship.slotsPerCollege} slots per college.` : ''}`}
+    >
+      <div className="space-y-3">
+        {error && <Alert tone="danger">{error}</Alert>}
+        {app.endReason ? (
+          <>
+            <Badge tone="neutral">{app.endReason}</Badge>
+            <p className="text-xs text-ink-subtle">
+              {app.endedAt ? formatDateTime(app.endedAt) : ''}{app.endedBy ? ` by ${app.endedBy}` : ''}. The college slot is open.
+            </p>
+            <Button size="sm" variant="ghost" onClick={() => save(null)} loading={busy === 'undo'}>Undo — still a scholar</Button>
+          </>
+        ) : (
+          <>
+            <Badge tone="success" dot>Active scholar</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => save('Graduated')} loading={busy === 'Graduated'} disabled={!!busy}>Mark graduated</Button>
+              <Button size="sm" variant="ghost" onClick={() => save('Stopped')} loading={busy === 'Stopped'} disabled={!!busy}>Mark stopped</Button>
+            </div>
+          </>
         )}
       </div>
     </Card>

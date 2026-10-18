@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '@clerk/react';
+import { MESSAGES_API_BASE, MESSAGES_READ_EVENT } from '../utils/messages';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { StudentProfile, Application } from '../types';
@@ -31,6 +33,7 @@ export default function StudentLayout({
   id
 }: StudentLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const unreadMessages = useUnreadMessages(currentPage);
 
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
@@ -51,6 +54,7 @@ export default function StudentLayout({
         onLogout={onLogout}
         isScholar={applications.some(app => app.status === 'Approved')}
         isSfagScholar={isSfagScholar(applications)}
+        unreadMessages={unreadMessages}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen relative">
@@ -79,4 +83,28 @@ export default function StudentLayout({
       </div>
     </div>
   );
+}
+
+// Unread messages from the AdSO: checked on every page change, every
+// minute, and right after the Messages page marks them read.
+function useUnreadMessages(currentPage: string): number {
+  const { getToken } = useAuth();
+  const [unread, setUnread] = useState(0);
+  const check = useCallback(async () => {
+    try {
+      const token = await getToken();
+      const res = await fetch(`${MESSAGES_API_BASE}/api/messages/mine/unread`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+      if (res.ok) setUnread((await res.json()).unread ?? 0);
+    } catch {
+      // keep the last count
+    }
+  }, [getToken]);
+  useEffect(() => { check(); }, [check, currentPage]);
+  useEffect(() => {
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') check(); }, 60_000);
+    const onRead = () => setUnread(0);
+    window.addEventListener(MESSAGES_READ_EVENT, onRead);
+    return () => { window.clearInterval(timer); window.removeEventListener(MESSAGES_READ_EVENT, onRead); };
+  }, [check]);
+  return unread;
 }

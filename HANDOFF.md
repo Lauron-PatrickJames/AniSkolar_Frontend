@@ -18,6 +18,23 @@ cloned the old addresses.
    - `node scripts/backfill-student-names.js --apply` — writes the
      Student records.
 
+## Demo data
+`node scripts/seed-demo.js` (backend) wipes and fills the **aniskolar_demo**
+database (never the real one — the name must contain "demo") with sample
+students, applications in every status (SFAG, Entrance, EBPSP, POLCA,
+Alumni — POLCA and Alumni reviewed by their own offices, approved ones
+forwarded to the AdSO; one student holding two internal scholarships),
+renewal periods for SFAG and Alumni with renewals in every status (POLCA
+has none; CEAT's 2 POLCA slots are full and one POLCA scholar is marked
+Graduated), duty logs, offices, credited events
+and claims, and announcements (published, pinned with an image,
+scheduled, draft). Sample files go to the Azure container
+`aniskolar-demo`. Sample students have `@aniskolar-demo.invalid` emails,
+which `utils/mailer.js` never sends to. The real students' records are copied in, so your own
+accounts work (each gets an approved SFAG with duty hours). To use it,
+add `MONGODB_DB=aniskolar_demo` and `AZURE_STORAGE_CONTAINER=aniskolar-demo`
+to the backend `.env` and restart; remove both to go back.
+
 ## Rules worth knowing
 - **Scholarship cycle:** classes start in August, but applications open
   in June for the coming year (Entrance June 1–20; SFAG June 16 – July 3, 2026), so a cycle runs June–May
@@ -88,6 +105,21 @@ cloned the old addresses.
   `CompleteProfilePage.tsx` and the backend's `routes/students.js`
   (`validStudentNumber`, which also rejects non-strings so the value is
   safe in a query).
+- **POLCA: 2 scholars per college, no renewals** (Oct 2026 — to confirm
+  with POLCA): `noRenewal` and `slotsPerCollege: 2` on s3 in both
+  scholarship registries. A POLCA scholar holds it from approval until
+  POLCA (or the AdSO) marks them **Graduated** or **Stopped** on the
+  approved application (review screen → "Scholarship status";
+  `PATCH /api/applications/:id/end`, undoable), which frees the slot.
+  When a college (from the student's program) already has 2 current
+  scholars, its students can't apply (Explore shows why; the server
+  answers 409 `college_slots_full`) and POLCA can't approve one (409,
+  naming the current scholars). No renewal periods can be opened for
+  POLCA, and POLCA admins don't see the Renewals page (AdminDashboard
+  hides it for an office whose scholarships all have `noRenewal`). The
+  Applications and Scholars lists show each student's college. `findHeldScholarships` counts noRenewal scholarships until they
+  end, not just this AY or last (`utils/exclusivity.js`,
+  `utils/collegeSlots.js`).
 - **Reference numbers:** `<CODE>-<AY start year>-<SEQ>`, e.g.
   `ENT-2026-0001`, `SFAG-2026-0001`, from `utils/referenceCode.js` only. Old references
   are kept as they are.
@@ -145,15 +177,49 @@ cloned the old addresses.
   (`findCurrentHolders`: approved application in that AY, or renewed into
   that term) plus any other SFAG scholar who logged hours; status Not started /
   In progress / Overdue (deadline passed) / Completed; CSV export.
-- Required hours follow the grant percentage: the AdSO records it on the
-  approved SFAG application (review screen → "Grant percentage";
-  `PATCH /api/applications/:id/sfag-percentage`) and sets hours per
-  percentage on the Duty hours page ("Hours per grant";
-  `models/DutySetting.js`). When both are set, those hours apply and the
-  scholar can't change them; otherwise the scholar enters their own, as on
-  the sheet. Only 25% = 36 hours is filled in (as the team recalls it — to
-  confirm); 100 / 75 / 50% are empty until the AdSO enters them. The
+- Required hours follow the grant percentage and the year level: the AdSO
+  records the percentage on the approved SFAG application (review screen →
+  "Grant percentage"; `PATCH /api/applications/:id/sfag-percentage`); the
+  year level comes from the scholar's profile. Hours per term (AdSO,
+  Oct 2026; defaults in `models/DutySetting.js`, editable on the Duty hours
+  page → "Hours per grant"):
+
+  | Grant | 1st–2nd year | 3rd year and up |
+  |------:|-------------:|----------------:|
+  | 100%  | 180 | 95 |
+  | 75%   | 135 | 70 |
+  | 50%   | 100 | 55 |
+  | 25%   | 50  | 30 |
+
+  5th year counts with 3rd year and up. When the percentage, year level
+  and hours are all set, those hours apply and the scholar can't change
+  them; otherwise (e.g. no year level on the profile — the admin list says
+  "year level not set") the scholar enters their own, as on the sheet. The
   deadline is still entered by the scholar.
+- When duty may be logged (AdSO, Oct 2026; `dutyRuleError` in the
+  backend's utils/dutyHours.js and src/utils/dutyHours.ts — keep in sync):
+  Mon–Thu 8:00 AM–6:00 PM, Fri 8:00 AM–5:00 PM, no weekends, never across
+  12:00–1:00 PM (log the morning and afternoon separately), at least 1.5
+  hours per duty. Breaking one blocks saving with the reason.
+- Credited events (Duty hours → "Events"; `models/DutyEvent.js`,
+  `DutyLog.eventClaims`): events set up by the scholarship office or COSA
+  (the scholars' org; it asks Ms. Nor first) that the office credits for
+  duty. The credit is the office's call, not the event's length (a 1-hour
+  event can be worth 3 hours). The AdSO adds each event (name, date,
+  organizer, credit hours); scholars tap "I attended" on past events of
+  the term → Pending; the AdSO approves or rejects (optional reason) and
+  only approved claims count, at the event's current credit. Scholars can
+  withdraw a pending claim. Scholars can no longer type their own event
+  hours (`specialEvents` from old logs still count). An event with
+  credited claims can't be deleted or moved to another term.
+- Random assign (Duty hours → "Random assign"): the AdSO lists offices and
+  how many scholars each takes (`officeSlots` in DutySetting, saved and
+  reused every term; big offices — Registrar, Accounting, Admissions —
+  are suggested 5, others 2). Scholars without an office are dealt into
+  the free slots at random, one office at a time so they're spread out,
+  with a preview before anything is saved ("Shuffle again" to redo).
+  Office requests: asking for fewer scholars is fine; more depends on
+  availability (few scholars, many offices) — the AdSO adjusts the slots.
 
 ## Profile redesign + data consistency (done 2026-10-05)
 - Server stamps first/middle/last name from the Student record on every
@@ -266,8 +332,8 @@ Follow-ups:
   and closings themselves (the status dialog's announcement is optional).
 - Duty: offices are assigned by need — usually 1–2 scholars, more for the
   Registrar, Accounting and Admissions (up to ~10). Offices may request a
-  specific scholar if it doesn't take one from another office. 100% =
-  180 hours (default in `models/DutySetting.js`). The assign dialog shows
+  specific scholar if it doesn't take one from another office. Hours by
+  grant and year level: see "Duty hours" above. The assign dialog shows
   how many scholars each office already has.
 - Scholarship list (Oct 2026): PAG declined to partner (removed, was s9);
   EBPSP = Enhanced Brother President Scholarship Program; USG Student
@@ -322,15 +388,81 @@ Follow-ups:
   PDF is the older A.Y. 2025–26 version and gives no duty hours.
 
 ## Still needed
-- From the AdSO: duty hours for 75% and 50% grants (and confirm 25% = 36;
-  100% = 180), EBPSP documents (current ones are assumed), Heraldo
-  Filipino details.
+- From the AdSO: Heraldo Filipino details — still being coordinated.
+  (EBPSP documents and SFAG duty hours confirmed 2026-10-18.)
+- POLCA: confirm 2 scholars per college (by college, not program) and
+  that there are no renewals.
+- COSA: whether COSA gets its own AniSkolar account to propose events
+  (on hold — the group will talk to COSA). For now the AdSO enters COSA
+  events.
 - Group decisions: re-add PAG or not; whether the closing announcement
   starts unticked. (A "keep this one" button for a second internal
   scholarship was considered and dropped.)
+- Email: set up on 2026-10-18 (Azure resource group `aniskolar`:
+  `aniskolar-email` with a free Azure-managed domain, connected to
+  `aniskolar-comms`; data location Asia Pacific). The free domain allows
+  only 5 emails/minute and 10/hour — fine for testing, not for emailing
+  every student. **Azure Communication Services Email retires on
+  September 30, 2028** (maintenance mode; Microsoft advises against new
+  workloads). Long-term options: Microsoft 365 High Volume Email (HVE),
+  which sends to recipients inside the same tenant — every student and
+  the AdSO are @dlsud.edu.ph, so ask DLSU-D IT; or a third-party sender
+  with aniskolar.com. Only `utils/mailer.js` changes when switching.
 - Deployment: buy aniskolar.com; Heroku student credits (support ticket
   open); then Procfile/engines, Vercel config, production env vars,
   Clerk production instance + DNS, Microsoft OAuth app, Facebook Page.
+
+## Messages (student ↔ AdSO)
+- One conversation per student with the AdSO (`models/Message.js`,
+  `routes/messages.js`). Students: sidebar → Messages (unread badge).
+  AdSO: Communication → Messages (unread badge), plus "Message student"
+  on an application and on a scholar; "New message" by student number.
+  POLCA / Alumni admins don't have it (AdSO only, as decided).
+- Text up to 4000 characters, up to 3 JPG/PNG/PDF attachments of 10 MB
+  (checked by type and by their first bytes), stored like documents;
+  `GET /api/messages/files/:fileId` lets only that student or the AdSO
+  open them. A message can say which of the student's applications it's
+  about. Read receipts ("Seen"); pages refresh every 20 s.
+- Email alerts to Outlook (`utils/mailer.js`, Azure Communication
+  Services Email): the student's school email when the AdSO writes,
+  `ADSO_NOTIFY_EMAIL` when a student writes; one email per burst while
+  earlier messages are unread. Off (just logged) until the backend `.env`
+  has `ACS_EMAIL_CONNECTION_STRING` and `ACS_EMAIL_SENDER`; also set
+  `ADSO_NOTIFY_EMAIL` and `APP_URL` (see `.env.example`). Optional
+  `EMAIL_REPLY_TO` makes replies go to that address. At handover the AdSO
+  sets `ADSO_NOTIFY_EMAIL` and `EMAIL_REPLY_TO` to their own mailbox (the
+  team doesn't have access to it); sending truly as an @dlsud.edu.ph
+  address needs DLSU-D IT (HVE or Microsoft Graph).
+- Announcements can also be emailed ("Also email students (Outlook)" in
+  the editor and the scholarship open/close dialog;
+  `utils/announcementEmails.js`). "Email to" (`EmailAudience.tsx`,
+  backend `utils/emailTarget.js`, stored as `emailTarget`): all students,
+  applicants (of any chosen scholarships, optionally by application
+  status), current scholars (of chosen scholarships), or specific students
+  (search or paste student numbers); every mode can be narrowed by college
+  and year level. The editor shows "Will email N students" live
+  (`POST /api/announcements/email/preview`). Older announcements with
+  `emailAudience` still work. Sent once when published
+  (scheduled ones at their time), BCC batches of 50,
+  `ANNOUNCEMENT_EMAIL_BATCHES_PER_MINUTE` (default 2) per minute by the
+  server's minute timer, resuming where it stopped; the list shows
+  progress (sent/total), sent, or failed with Retry. Edits after sending
+  aren't re-emailed. Without the email settings it shows failed: "Email
+  isn't set up".
+- Email look (`utils/emailTemplate.js`), modelled on the office's own
+  Outlook announcements: images inline on top — the first one large
+  (≤ 1200 px wide), the next 4 as a 2×2 grid of thumbnails, and "+N more
+  photos" linking to AniSkolar, so many photos don't make it long; resized
+  with `sharp` (e.g. a 7 MB photo becomes ~230 KB, 8 photos ~400 KB in all;
+  the stored originals aren't changed), title, summary in bold, body with "-"/"•" lines as bullets
+  and clickable links, a "View on AniSkolar" / "Reply in AniSkolar"
+  button, optional signature (`EMAIL_SIGNATURE`, lines separated by "|")
+  and the office footer (address, email, phone). Plain-text copy too.
+- The office currently emails everyone from the Scholarship mailbox to
+  Outlook distribution lists ("DLSU-D Students", "DLSU-D STAFF",
+  "DLSU-D Faculty"). The ideal handover: DLSU-D IT lets AniSkolar send as
+  that mailbox (Microsoft Graph) to "DLSU-D Students" — one email, no
+  batches or Azure limits.
 
 ## Open ideas (not done)
 - Duty hours: let the AdSO set required hours and deadline per term

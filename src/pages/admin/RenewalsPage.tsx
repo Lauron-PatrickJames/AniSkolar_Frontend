@@ -48,7 +48,8 @@ const STATE_TONE: Record<RowState, Tone> = {
 const rowState = (row: ScholarRow): RowState => row.renewal?.status ?? 'Not submitted';
 
 // Read at render, so scholarships the AdSO created are included.
-const renewableScholarships = () => mockScholarships.filter(s => acceptsOnlineApplications(s));
+// POLCA has no renewals: its scholars keep it until they graduate.
+const renewableScholarships = () => mockScholarships.filter(s => acceptsOnlineApplications(s) && !s.noRenewal);
 
 export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Promise<string | null>; isAdso: boolean }) {
   const [periods, setPeriods] = useState<RenewalPeriod[]>([]);

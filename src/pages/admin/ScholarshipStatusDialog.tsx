@@ -92,6 +92,7 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
   const [draft, setDraft] = useState<Draft>(() => announcementFor(scholarship, next));
   const [announce, setAnnounce] = useState(true);
   const [fbEnabled, setFbEnabled] = useState(true);
+  const [emailEnabled, setEmailEnabled] = useState(false);
   const [schedule, setSchedule] = useState<ScheduleState>(() => initialSchedule());
   const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -125,6 +126,8 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
         scholarshipId: scholarship.id,
         isPinned: false,
         fbEnabled,
+        emailEnabled,
+        emailAudience: 'all',
         status: scheduling ? 'scheduled' : 'published',
         ...(scheduledFor ? { scheduledFor } : {}),
       }),
@@ -230,6 +233,13 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
               disabled={busy}
               label="Also post to Facebook"
               description={scheduling ? 'Posts to the Page when it publishes.' : 'Posts to the Page right away.'}
+            />
+            <Checkbox
+              checked={emailEnabled}
+              onChange={setEmailEnabled}
+              disabled={busy}
+              label="Also email all students (Outlook)"
+              description={scheduling ? 'Emails their school address when it publishes.' : 'Emails their school address right away, a few batches a minute.'}
             />
           </>
         )}

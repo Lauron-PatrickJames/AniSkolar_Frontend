@@ -101,6 +101,7 @@ export interface CurrentProfile {
   lastName?: string;
   course?: string;
   programCode?: string;
+  college?: string;     // college code, e.g. 'CEAT' (from the program)
   yearLevel?: string;
   section?: string;
   gpa?: number;
@@ -140,6 +141,11 @@ export interface AdminApplication {
   sfagPercentage?: number | null;
   sfagPercentageSetBy?: string;
   sfagPercentageSetAt?: string;
+  // Scholarships without renewals (POLCA): when the office marked the
+  // approved scholar as graduated or stopped, freeing their slot.
+  endedAt?: string | null;
+  endReason?: 'Graduated' | 'Stopped' | null;
+  endedBy?: string;
   // Set once a POLCA / Alumni office sends the application to the AdSO.
   forwardedAt?: string | null;
   forwardedBy?: string;

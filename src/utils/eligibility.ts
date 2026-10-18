@@ -168,7 +168,21 @@ export function isSfagScholar(applications: { scholarshipId: string; status: str
 }
 
 export interface HeldScholarship { scholarshipId: string; scholarshipName: string }
-export interface Holdings { held: HeldScholarship[]; exclusive: HeldScholarship | null }
+export interface Holdings {
+  held: HeldScholarship[];
+  exclusive: HeldScholarship | null;
+  // Scholarships whose slots for the student's college are full (POLCA).
+  slotsFull?: { scholarshipId: string; message: string }[];
+}
+
+// Why the student can't apply for a scholarship right now, or null: the
+// SFAG's June–July window, or a full college (POLCA's 2 per college; the
+// server refuses both).
+export function applyBlock(scholarshipId: string, holdings: Holdings | null, date = new Date()): string | null {
+  return applicationWindowBlock(scholarshipId, date)
+    ?? holdings?.slotsFull?.find(s => s.scholarshipId === scholarshipId)?.message
+    ?? null;
+}
 
 // One internally funded scholarship at a time (AdSO, Oct 2026). Every
 // scholarship in AniSkolar is internally funded. Students may still apply

@@ -46,6 +46,8 @@ export interface Scholarship {
   noRenewal?: boolean;
   // At most this many current scholars per college (POLCA: 2).
   slotsPerCollege?: number;
+  // At most this many current scholars in all, campus-wide (Alumni: 2).
+  totalSlots?: number;
   eligibilityCriteria?: {
     yearLevels?: string[];       // e.g. ['1st Year'] — omit if open to all
     applicantType?: 'incoming' | 'continuing' | 'any';

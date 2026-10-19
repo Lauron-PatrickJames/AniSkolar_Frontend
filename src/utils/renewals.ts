@@ -59,6 +59,8 @@ export interface RenewalEvaluation {
   remarks?: string;
   enteredBy?: string;
   enteredAt?: string;
+  // 'office' = the office head entered it in the office portal.
+  source?: 'office' | 'adso';
 }
 
 export interface Renewal {

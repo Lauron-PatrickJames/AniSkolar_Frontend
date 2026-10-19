@@ -27,6 +27,7 @@ import GPACalculator from './pages/student/GPACalculator';
 import Renewals from './pages/student/Renewals';
 import DutyHours from './pages/student/DutyHours';
 import Messages from './pages/student/Messages';
+import OfficePortal, { OfficeHeadInfo } from './pages/office/OfficePortal';
 
 // --- Persistence helpers -----------------------------------------------
 // Only page/navigation state lives here now — WHO is logged in is entirely
@@ -110,7 +111,9 @@ interface HistoryEntryState {
 // 'error' covers the case where the /api/students/me lookup itself failed
 // (network error, 5xx, etc) — kept distinct from 'signed-out' so a backend
 // hiccup can never silently render the student shell with empty data.
-type AuthPhase = 'loading' | 'signed-out' | 'needs-profile' | 'ready' | 'error';
+// 'office': the head of a duty office (OfficePortal), signed in with the
+// school email the AdSO listed for the office.
+type AuthPhase = 'loading' | 'signed-out' | 'needs-profile' | 'ready' | 'office' | 'error';
 
 // The backend (models/Application.js) stores SFAG form sections as
 // top-level fields on the document: personalInfo, contactSchool,
@@ -186,6 +189,7 @@ export default function App() {
   // GET /api/scholarships merged over the defaults in data/scholarships.ts.
   const [scholarships, setScholarships] = useState<Scholarship[]>(mockScholarships);
   const [authPhase, setAuthPhase] = useState<AuthPhase>('loading');
+  const [officeHead, setOfficeHead] = useState<OfficeHeadInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -370,6 +374,7 @@ export default function App() {
     if (!isSignedIn) {
       setAuthPhase('signed-out');
       setStudent(defaultStudent);
+      setOfficeHead(null);
       setApplications([]);
       setApplicationsLoaded(false);
       return;
@@ -432,6 +437,20 @@ export default function App() {
         if (cancelled) return;
 
         if (!res) throw lastErr instanceof Error ? lastErr : new Error('Failed to load profile');
+
+        // An office head (an email the AdSO listed in Duty hours → Offices)
+        // gets the office portal. Checked even when the account also has a
+        // student record, so the team can test with their own accounts.
+        if (res.status === 404 || res.ok) {
+          const officeToken = await getToken();
+          const officeRes = await fetch(`${API_BASE_URL}/api/office/me`, { headers: officeToken ? { Authorization: `Bearer ${officeToken}` } : undefined }).catch(() => null);
+          if (cancelled) return;
+          if (officeRes?.ok) {
+            setOfficeHead(await officeRes.json());
+            setAuthPhase('office');
+            return;
+          }
+        }
 
         if (res.status === 404) {
           // Signed in with Clerk, but this is their first time — no
@@ -522,6 +541,7 @@ export default function App() {
     setResubmitApplication(null);
     setApplications([]);
     setStudent(defaultStudent);
+    setOfficeHead(null);
 
     // Drafts are keyed by studentNumber in localStorage (ApplyScholarship.tsx),
     // which persists across accounts/browsers regardless of Clerk/Mongo state.
@@ -715,6 +735,11 @@ export default function App() {
         <div className="w-8 h-8 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
       </div>
     );
+  }
+
+  // The head of a duty office.
+  if (isSignedIn && authPhase === 'office' && officeHead) {
+    return <OfficePortal head={officeHead} onLogout={handleLogout} />;
   }
 
   // Signed in with Clerk, but no academic profile in MongoDB yet.

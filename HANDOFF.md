@@ -73,9 +73,9 @@ database (never the real one — the name must contain "demo") with sample
 students, applications in every status (SFAG, Entrance, EBPSP, POLCA,
 Alumni — POLCA and Alumni reviewed by their own offices, approved ones
 forwarded to the AdSO; one student holding two internal scholarships),
-renewal periods for SFAG and Alumni with renewals in every status (POLCA
-has none; CEAT's 2 POLCA slots are full and one POLCA scholar is marked
-Graduated), duty logs, offices, credited events
+an SFAG renewal period with renewals in every status (POLCA and Alumni
+have none; CEAT's 2 POLCA slots are full, Alumni's 2 campus-wide slots are
+full, and some older POLCA / Alumni scholars are marked Graduated), duty logs, offices, credited events
 and claims, and announcements (published, pinned with an image,
 scheduled, draft). Sample files go to the Azure container
 `aniskolar-demo`. Sample students have `@aniskolar-demo.invalid` emails,
@@ -157,9 +157,12 @@ with a few scholars still without an office, for Random assign. If you test anno
   `CompleteProfilePage.tsx` and the backend's `routes/students.js`
   (`validStudentNumber`, which also rejects non-strings so the value is
   safe in a query).
-- **POLCA: 2 scholars per college, no renewals** (Oct 2026 — to confirm
-  with POLCA): `noRenewal` and `slotsPerCollege: 2` on s3 in both
-  scholarship registries. A POLCA scholar holds it from approval until
+- **POLCA: 2 scholars per college; Alumni: 2 scholars for the whole
+  campus; neither has renewals** (Oct 2026; POLCA's rule to confirm with
+  POLCA): `noRenewal` plus `slotsPerCollege: 2` on s3 and `totalSlots: 2`
+  on s4, in both scholarship registries (`slotsFull` in
+  `utils/collegeSlots.js` handles both). Alumni works like POLCA below,
+  except the 2 slots are shared by all colleges. A POLCA scholar holds it from approval until
   POLCA (or the AdSO) marks them **Graduated** or **Stopped** on the
   approved application (review screen → "Scholarship status";
   `PATCH /api/applications/:id/end`, undoable), which frees the slot.
@@ -167,8 +170,9 @@ with a few scholars still without an office, for Random assign. If you test anno
   scholars, its students can't apply (Explore shows why; the server
   answers 409 `college_slots_full`) and POLCA can't approve one (409,
   naming the current scholars). No renewal periods can be opened for
-  POLCA, and POLCA admins don't see the Renewals page (AdminDashboard
-  hides it for an office whose scholarships all have `noRenewal`). The
+  POLCA or Alumni, and their admins don't see the Renewals page
+  (AdminDashboard hides it for an office whose scholarships all have
+  `noRenewal`), so Renewals is now the AdSO's alone. The
   Applications and Scholars lists show each student's college. `findHeldScholarships` counts noRenewal scholarships until they
   end, not just this AY or last (`utils/exclusivity.js`,
   `utils/collegeSlots.js`).
@@ -197,8 +201,13 @@ with a few scholars still without an office, for Random assign. If you test anno
 - Scholars submit GPA, failing grade yes/no and the documents, or say
   they're not continuing (OJT, graduating, …). The admin list shows every
   holder, including those who haven't submitted.
-- Head evaluation (SFAG): staff enter the 1–5 ratings from the head's
-  form; average below 4 = interview before deciding. Renewing is refused
+- Head evaluation (SFAG): the head of the office the scholar rendered
+  duty in evaluates them (confirmed 2026-10-19). The Renewals list shows
+  each scholar's **duty office** for the term being evaluated (the term
+  before the period's, from Duty hours), and the evaluation's "Evaluating
+  office" starts as that office (editable, e.g. if they moved). The head
+  enters the 1–5 ratings in the office portal (or staff type them from a
+  paper form); average below 4 = interview before deciding. Renewing is refused
   until it's entered when the period requires it. Ratings and remarks are
   never sent to scholars.
 - Decisions follow the application rules (message required for Needs
@@ -273,6 +282,47 @@ with a few scholars still without an office, for Random assign. If you test anno
   with a preview before anything is saved ("Shuffle again" to redo).
   Office requests: asking for fewer scholars is fine; more depends on
   availability (few scholars, many offices) — the AdSO adjusts the slots.
+  An office may also request a specific scholar: assign them to it first
+  (Office column / "Assign office"), then Random assign deals out the rest
+  and counts the requested ones toward the office's slots. That office's
+  head later evaluates the scholar for renewal (see "Renewals").
+
+## Office portal (duty office heads)
+Paperless duty sign-off and evaluations (2026-10-19). The AdSO lists each
+duty office's head in Duty hours → **Offices** (name + @dlsud.edu.ph
+email; `DutySetting.officeSlots` also holds the Random-assign slots).
+That person signs in to AniSkolar with that school email — no separate
+account — and gets the **office portal** (`src/pages/office/OfficePortal.tsx`,
+backend `routes/office.js`, `middleware/requireOfficeHead.js`,
+`utils/offices.js`) instead of the student pages. An email listed as a
+head wins even if it also has a student record (so the team can test with
+their own accounts). One head per office.
+- **Scholars & duties:** their SFAG scholars, all semesters on one page
+  grouped by semester, newest first (`GET /api/office/scholars?all=1`; the
+  Semester dropdown narrows it to one); each duty can be
+  confirmed or flagged (with a note the scholar sees), one by one or
+  "Confirm all waiting". Once an office has a head, **only confirmed duties
+  count** (`summarize(…, { confirmationRequired })` in both
+  `utils/dutyHours`); offices without a head count everything, as before.
+  A scholar's save keeps confirmations (and ids) on duties whose date and
+  times didn't change; an edited duty waits again.
+- **Evaluations:** for open renewal periods that need one, the scholars who
+  did duty in their office in the term the renewal looks back on; the head
+  rates the 1–5 items online (`DutyLog.evaluation`, copied into the
+  renewal — now or when the scholar submits; source `office`). Editable
+  until the AdSO decides the renewal. Opening such a period emails the
+  heads (one BCC email); Renewals → ⋯ → "Email office heads to evaluate"
+  sends a reminder. The AdSO can still type a paper evaluation in.
+- **Requests:** a specific scholar, more / fewer scholars, or other
+  (`models/OfficeRequest.js`); the AdSO is emailed and answers in Duty
+  hours → **Requests** (done / declined + reply the head sees).
+- **Messages:** one conversation per office with the AdSO (`Message.office`);
+  shows in the AdSO's Messages next to students (and "New message" → a
+  duty office); emails both ways.
+- Demo: three offices have sample heads (`.invalid` emails), duties before
+  Oct 5 confirmed, one flagged, an open request and an office message. To
+  see the portal yourself, put your own school email as a head in Duty
+  hours → Offices (on the demo database) and sign in again.
 
 ## Messages (student ↔ AdSO)
 - One conversation per student with the AdSO (`models/Message.js`,
@@ -551,7 +601,8 @@ Follow-ups:
 - From the AdSO: Heraldo Filipino details — still being coordinated.
   (EBPSP documents and SFAG duty hours confirmed 2026-10-18.)
 - POLCA: confirm 2 scholars per college (by college, not program) and
-  that there are no renewals.
+  that there are no renewals. (Alumni's 2 campus-wide, no renewals:
+  confirmed by the group, 2026-10-19.)
 - COSA: whether COSA gets its own AniSkolar account to propose events
   (on hold — the group will talk to COSA). For now the AdSO enters COSA
   events.
@@ -571,8 +622,8 @@ Follow-ups:
 
 ## Open ideas (not done)
 - Duty hours: let the AdSO set the deadline per term (required hours are
-  already set per grant and year level); head sign-off on logged hours
-  (needs department head accounts); COSA accounts to propose events.
+  already set per grant and year level); COSA accounts to propose events.
+  (Head sign-off on duties and online evaluations: done — office portal.)
 - AdSO screen to verify profiles and handle correction requests (the
   endpoints exist).
 - Announcement email: the office's banner image in the footer, if the
@@ -582,8 +633,6 @@ Follow-ups:
   frontend's `src/utils/renewals.ts`); add the other 4 once the AdSO shares
   the form. The label for a rating of 1 is assumed ("Poor").
 - Show the head's evaluation and remarks to scholars once Dr. May agrees.
-- School administrators (department heads) entering evaluations
-  themselves needs a new account role.
 - Let admins edit the message to the applicant without changing the
   decision, recorded as its own "Message updated" history entry.
 - A server-side stats endpoint (`/api/applications/stats?from&to`) once

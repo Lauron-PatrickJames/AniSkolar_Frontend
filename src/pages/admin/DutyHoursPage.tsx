@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { AlertTriangle, Building2, CalendarCheck, CheckCircle2, Clock, Download, Hourglass, Pencil, Shuffle, SlidersHorizontal, Users } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Building2, CalendarCheck, Check, CheckCircle2, Clock, Plus, Search, Download, Hourglass, Inbox, Pencil, Shuffle, SlidersHorizontal, Users } from 'lucide-react';
 import {
   ClaimStatus, CreditedEvent, DutyLog, DutySummary, DutyTerm, EVENT_ORGANIZERS, EventOrganizer, GRANT_PERCENTAGES, YEAR_GROUPS, YearGroup, entryHours, format12h, formatDutyDate, formatHours, sortEntries, termLabel,
   todayInManila, weekday, weeklyTotals
@@ -7,7 +7,7 @@ import {
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
 import {
   Alert, Avatar, Badge, Button, Card, DetailField, EmptyState, ErrorState, Field, KpiCard, KpiGrid, MobileList, Modal, PageHeader,
-  SearchInput, Select, Table, TableSkeleton, Td, TextInput, Th, Toast, Tone, Tr
+  SearchInput, Select, Table, TableSkeleton, Td, TextInput, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
 
 // AdSO: duty hours of every SFAG holder for a term (plus any other SFAG
@@ -68,6 +68,19 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
   const [hoursOpen, setHoursOpen] = useState(false);
   const [randomOpen, setRandomOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
+  const [officesOpen, setOfficesOpen] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
+  // Open office requests (from the office portal), for the button.
+  const [openRequests, setOpenRequests] = useState(0);
+  const loadRequestCount = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/requests?status=open`, { headers: await authHeaders(getToken) });
+      if (res.ok) setOpenRequests((await res.json()).open ?? 0);
+    } catch {
+      // keep the last count
+    }
+  }, [getToken]);
+  useEffect(() => { loadRequestCount(); }, [loadRequestCount]);
   const today = todayInManila();
 
   const load = useCallback(async (t: TermKey | null) => {
@@ -181,6 +194,8 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
         description="Duty hours rendered by SFAG scholars, from the logs they keep in AniSkolar."
         actions={
           <>
+            <Button icon={Inbox} onClick={() => setRequestsOpen(true)}>Requests{openRequests ? ` (${openRequests})` : ''}</Button>
+            <Button icon={Building2} onClick={() => setOfficesOpen(true)}>Offices</Button>
             <Button icon={CalendarCheck} onClick={() => setEventsOpen(true)} disabled={!term}>Events{pendingClaimCount ? ` (${pendingClaimCount} to review)` : ''}</Button>
             <Button icon={Shuffle} onClick={() => setRandomOpen(true)} disabled={!term || unassignedCount === 0}>Random assign</Button>
             <Button icon={SlidersHorizontal} onClick={() => setHoursOpen(true)}>Hours per grant</Button>
@@ -336,6 +351,13 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
           onClose={() => setAssigning(null)}
           onAssigned={onAssigned}
         />
+      )}
+
+      {officesOpen && (
+        <OfficesDialog getToken={getToken} offices={offices} onClose={() => setOfficesOpen(false)} onSaved={() => { setOfficesOpen(false); setToast('Saved the offices.'); if (term) load(term); }} />
+      )}
+      {requestsOpen && (
+        <RequestsDialog getToken={getToken} onClose={() => { setRequestsOpen(false); loadRequestCount(); }} />
       )}
 
       {eventsOpen && term && (
@@ -830,6 +852,172 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
   );
 }
 
+// --- Offices and their heads ----------------------------------------------------
+
+// The duty offices: how many scholars each takes (Random assign) and its
+// head, who signs in with that school email to the office portal to
+// confirm duties, evaluate scholars and send requests.
+interface OfficeRow { id: number; office: string; slots: string; headName: string; headEmail: string }
+
+function OfficesDialog({ getToken, offices, onClose, onSaved }: {
+  getToken: () => Promise<string | null>;
+  offices: string[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [rows, setRows] = useState<OfficeRow[] | null>(null);
+  const [nextId, setNextId] = useState(1000);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/settings`, { headers: await authHeaders(getToken) });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || 'Failed to load the offices.');
+        const saved: { office: string; slots: number; headName?: string; headEmail?: string }[] = body.officeSlots ?? [];
+        const known = new Set(saved.map(o => o.office.toLowerCase()));
+        const extra = offices.filter(o => !known.has(o.toLowerCase())).map(o => ({ office: o, slots: BIG_OFFICES.test(o) ? 5 : 2 }));
+        if (!cancelled) setRows([...saved, ...extra].map((o, i) => ({ id: i, office: o.office, slots: String(o.slots), headName: (o as { headName?: string }).headName ?? '', headEmail: (o as { headEmail?: string }).headEmail ?? '' })));
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load the offices.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getToken, offices]);
+
+  const update = (id: number, patch: Partial<OfficeRow>) => setRows(prev => prev?.map(r => (r.id === id ? { ...r, ...patch } : r)) ?? prev);
+  const save = async () => {
+    if (!rows) return;
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/office-slots`, {
+        method: 'PUT',
+        headers: await authHeaders(getToken, true),
+        body: JSON.stringify({ officeSlots: rows.filter(r => r.office.trim()).map(r => ({ office: r.office.trim(), slots: Number(r.slots), headName: r.headName.trim(), headEmail: r.headEmail.trim() })) }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Failed to save the offices.');
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save the offices.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      size="lg"
+      title="Offices"
+      description="Duty offices, how many SFAG scholars each takes, and their heads. A head signs in to AniSkolar with this school email to confirm their scholars' duties, evaluate them for renewal, and send you requests. Once an office has a head, only the duties they confirm count."
+      onClose={onClose}
+      dismissible={!busy}
+      footer={<><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="primary" onClick={save} loading={busy} disabled={!rows}>Save</Button></>}
+    >
+      {error && <Alert tone="danger">{error}</Alert>}
+      {!rows ? (!error && <TableSkeleton rows={4} label="Loading offices" />) : (
+        <div className="space-y-3">
+          <div className="hidden grid-cols-[1fr_4.5rem_1fr_1.2fr_auto] gap-2 text-xs font-medium text-ink-subtle sm:grid">
+            <span>Office</span><span>Slots</span><span>Head</span><span>Head's school email</span><span aria-hidden />
+          </div>
+          {rows.map(r => (
+            <div key={r.id} className="grid grid-cols-1 gap-2 rounded-control p-2 ring-1 ring-line sm:grid-cols-[1fr_4.5rem_1fr_1.2fr_auto] sm:p-0 sm:ring-0">
+              <TextInput value={r.office} onChange={e => update(r.id, { office: e.target.value })} placeholder="Office name" aria-label="Office name" disabled={busy} />
+              <TextInput type="number" min={0} max={50} value={r.slots} onChange={e => update(r.id, { slots: e.target.value })} aria-label={`Slots for ${r.office || 'this office'}`} disabled={busy} />
+              <TextInput value={r.headName} onChange={e => update(r.id, { headName: e.target.value })} placeholder="e.g. Dr. Juan Dela Cruz" aria-label={`Head of ${r.office || 'this office'}`} disabled={busy} />
+              <TextInput type="email" value={r.headEmail} onChange={e => update(r.id, { headEmail: e.target.value })} placeholder="name@dlsud.edu.ph" aria-label={`Head's email for ${r.office || 'this office'}`} disabled={busy} />
+              <Button size="sm" variant="ghost" onClick={() => setRows(prev => prev?.filter(x => x.id !== r.id) ?? prev)} disabled={busy} aria-label={`Remove ${r.office || 'this office'}`}>Remove</Button>
+            </div>
+          ))}
+          <Button size="sm" onClick={() => { setRows(prev => [...(prev ?? []), { id: nextId, office: '', slots: '2', headName: '', headEmail: '' }]); setNextId(n => n + 1); }} disabled={busy}>Add office</Button>
+          <p className="text-xs text-ink-subtle">The head's email must be their @dlsud.edu.ph address — it's how AniSkolar knows it's them when they sign in. Leave it empty for an office that isn't using AniSkolar yet (its scholars' hours count without confirmation).</p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// --- Office requests --------------------------------------------------------------
+
+interface AdminOfficeRequest { _id: string; office: string; headName?: string; headEmail?: string; kind: 'specific' | 'more' | 'fewer' | 'other'; scholar?: string; count?: number; note?: string; status: 'open' | 'done' | 'declined'; response?: string; createdAt: string; resolvedAt?: string }
+const REQUEST_KIND: Record<AdminOfficeRequest['kind'], string> = { specific: 'Specific scholar', more: 'More scholars', fewer: 'Fewer scholars', other: 'Other' };
+
+function RequestsDialog({ getToken, onClose }: { getToken: () => Promise<string | null>; onClose: () => void }) {
+  const [list, setList] = useState<AdminOfficeRequest[] | null>(null);
+  const [error, setError] = useState('');
+  const [replies, setReplies] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/requests`, { headers: await authHeaders(getToken) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Failed to load the requests.');
+      setList(body.requests ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load the requests.');
+    }
+  }, [getToken]);
+  useEffect(() => { load(); }, [load]);
+
+  const resolve = async (r: AdminOfficeRequest, status: AdminOfficeRequest['status']) => {
+    setBusy(r._id);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/requests/${r._id}`, {
+        method: 'PATCH',
+        headers: await authHeaders(getToken, true),
+        body: JSON.stringify({ status, response: replies[r._id] ?? r.response ?? '' }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Failed to update the request.');
+      setList(prev => prev?.map(x => (x._id === r._id ? body.request : x)) ?? prev);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update the request.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Modal size="lg" title="Office requests" description="Requests duty offices sent from the office portal. Assign scholars as usual, then mark the request done with a note — the office sees your reply." onClose={onClose} footer={<Button onClick={onClose}>Done</Button>}>
+      {error && <Alert tone="danger">{error}</Alert>}
+      {!list ? (!error && <TableSkeleton rows={3} label="Loading requests" />) : list.length === 0 ? <EmptyState icon={Inbox} title="No requests" description="Requests from office heads appear here." /> : (
+        <ul className="divide-y divide-line rounded-control ring-1 ring-line">
+          {list.map(r => (
+            <li key={r._id} className="space-y-2 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-ink">{r.office}</span>
+                <span className="text-sm text-ink-muted">· {REQUEST_KIND[r.kind]}{r.scholar ? `: ${r.scholar}` : ''}{r.count ? ` (${r.count})` : ''}</span>
+                <Badge tone={r.status === 'done' ? 'success' : r.status === 'declined' ? 'danger' : 'warning'} dot>{r.status === 'open' ? 'Open' : r.status === 'done' ? 'Done' : 'Declined'}</Badge>
+                <span className="ml-auto text-xs text-ink-subtle">{formatDateTime(r.createdAt)}{r.headName ? ` · ${r.headName}` : ''}</span>
+              </div>
+              {r.note && <p className="text-sm text-ink-muted">{r.note}</p>}
+              {r.status === 'open' ? (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <TextInput value={replies[r._id] ?? ''} onChange={e => setReplies(v => ({ ...v, [r._id]: e.target.value }))} maxLength={1000} placeholder="Reply to the office (optional)" aria-label="Reply to the office" />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => resolve(r, 'declined')} disabled={!!busy}>Decline</Button>
+                    <Button size="sm" variant="primary" onClick={() => resolve(r, 'done')} loading={busy === r._id} disabled={!!busy && busy !== r._id}>Mark done</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  {r.response && <p className="text-sm text-ink"><b>Your reply:</b> {r.response}</p>}
+                  <Button size="sm" variant="ghost" onClick={() => resolve(r, 'open')} disabled={!!busy}>Reopen</Button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
+  );
+}
+
 function OfficeButton({ row, onClick }: { row: ScholarRow; onClick: () => void }) {
   return (
     <button
@@ -867,8 +1055,38 @@ function AssignOfficeDialog({ scholars, term, offices, officeCounts, getToken, o
   const [office, setOffice] = useState(current.length === 1 ? current[0] : '');
   const [busy, setBusy] = useState<'assign' | 'remove' | null>(null);
   const [error, setError] = useState('');
-  const listId = useId();
+  const [query, setQuery] = useState('');
+  // Slots and heads from Duty hours → Offices (missing = not set yet).
+  const [saved, setSaved] = useState<{ office: string; slots: number; headName?: string }[] | null>(null);
   const single = scholars.length === 1 ? scholars[0] : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/settings`, { headers: await authHeaders(getToken) });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled) setSaved(res.ok ? body.officeSlots ?? [] : []);
+      } catch {
+        if (!cancelled) setSaved([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getToken]);
+
+  // Every known office: saved ones plus any used in a log.
+  const choices = useMemo(() => {
+    const byName = new Map<string, { name: string; slots: number | null; headName: string }>();
+    for (const o of saved ?? []) byName.set(o.office.toLowerCase(), { name: o.office, slots: Number(o.slots) || 0, headName: o.headName ?? '' });
+    for (const o of offices) if (!byName.has(o.toLowerCase())) byName.set(o.toLowerCase(), { name: o, slots: null, headName: '' });
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [saved, offices]);
+  const q = query.trim().toLowerCase();
+  const shown = q ? choices.filter(c => c.name.toLowerCase().includes(q)) : choices;
+  const isNew = !!q && !choices.some(c => c.name.toLowerCase() === q);
+  const picked = office.trim();
+  const incoming = (name: string) => scholars.filter(sc => sc.officeAssigned !== name).length;
+  const pick = (name: string) => { setOffice(name); if (error) setError(''); };
   const anyAssigned = scholars.some(s => s.officeAssigned);
   const replacing = scholars.filter(s => s.officeAssigned && s.officeAssigned !== office.trim()).length;
 
@@ -915,41 +1133,102 @@ function AssignOfficeDialog({ scholars, term, offices, officeCounts, getToken, o
         </div>
       }
     >
-      <form className="space-y-4" onSubmit={e => { e.preventDefault(); submit(office, 'assign'); }}>
+      <form
+        className="space-y-4"
+        onSubmit={e => {
+          e.preventDefault();
+          // Enter in the search box picks the only match or the new office.
+          if (q && shown.length === 1 && !isNew) pick(shown[0].name);
+          else if (isNew && shown.length === 0) pick(query.trim().replace(/\s+/g, ' '));
+          else submit(office, 'assign');
+        }}
+      >
         <Field
           label="Office"
           error={error || undefined}
           helper={replacing > 0 && !single
             ? `${replacing} of them already have a different office; it will be replaced.`
-            : single
-              ? 'Where the scholar renders duty hours this term. They see it on their Duty Hours page.'
-              : 'Where these scholars render duty hours this term. They see it on their Duty Hours page.'}
+            : `Where ${single ? 'the scholar renders' : 'these scholars render'} duty hours this term. They see it on their Duty Hours page.`}
         >
-          <TextInput
-            value={office}
-            onChange={e => { setOffice(e.target.value); if (error) setError(''); }}
-            list={listId}
-            maxLength={200}
-            placeholder="e.g. University Library"
-            autoFocus
-          />
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-subtle" aria-hidden />
+            <TextInput
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              maxLength={200}
+              placeholder="Search offices, or type a new one"
+              className="pl-9"
+              autoFocus
+            />
+          </div>
         </Field>
-        {office.trim() && (() => {
-          const name = office.trim();
-          const already = officeCounts[name] ?? 0;
-          const after = already + scholars.filter(sc => sc.officeAssigned !== name).length;
-          const big = BIG_OFFICES.test(name);
+        <div role="listbox" aria-label="Offices" className="max-h-72 divide-y divide-line overflow-y-auto rounded-control ring-1 ring-line">
+          {!saved && !choices.length && <p className="px-3 py-3 text-sm text-ink-subtle">Loading offices…</p>}
+          {shown.map(c => {
+            const has = officeCounts[c.name] ?? 0;
+            const selectedHere = c.name === picked;
+            const after = has + (selectedHere ? incoming(c.name) : 0);
+            const full = c.slots !== null && c.slots > 0 && has >= c.slots;
+            const over = c.slots !== null && c.slots > 0 && after > c.slots;
+            const isCurrent = current.length === 1 && current[0] === c.name;
+            return (
+              <button
+                key={c.name}
+                type="button"
+                role="option"
+                aria-selected={selectedHere}
+                onClick={() => pick(c.name)}
+                className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${selectedHere ? 'bg-accent-subtle' : 'hover:bg-surface-muted'}`}
+              >
+                <span className={`flex size-4 shrink-0 items-center justify-center rounded-full ring-1 ${selectedHere ? 'bg-accent ring-accent text-white' : 'ring-line-strong'}`}>
+                  {selectedHere && <Check className="size-3" aria-hidden />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium text-ink">{c.name}</span>
+                    {isCurrent && <Badge tone="neutral">Current</Badge>}
+                  </span>
+                  <span className="block truncate text-xs text-ink-subtle">{c.headName ? `Head: ${c.headName}` : 'No head listed'}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className={`block text-sm tabular-nums ${over ? 'font-medium text-warning-fg' : 'text-ink'}`}>
+                    {c.slots ? `${after} / ${c.slots}` : after}
+                  </span>
+                  <span className={`block text-xs ${full && !selectedHere ? 'text-warning-fg' : 'text-ink-subtle'}`}>
+                    {c.slots ? (full && !selectedHere ? 'Full' : 'slots used') : `${after === 1 ? 'scholar' : 'scholars'}`}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+          {isNew && (
+            <button
+              type="button"
+              role="option"
+              aria-selected={picked.toLowerCase() === q}
+              onClick={() => pick(query.trim().replace(/\s+/g, ' '))}
+              className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${picked.toLowerCase() === q ? 'bg-accent-subtle' : 'hover:bg-surface-muted'}`}
+            >
+              <Plus className="size-4 shrink-0 text-accent" aria-hidden />
+              <span className="min-w-0 truncate text-ink">Use new office “<span className="font-medium">{query.trim()}</span>”</span>
+            </button>
+          )}
+          {!!q && !shown.length && !isNew && <p className="px-3 py-3 text-sm text-ink-subtle">No office matches.</p>}
+        </div>
+        {picked && (() => {
+          const c = choices.find(x => x.name === picked);
+          const after = (officeCounts[picked] ?? 0) + incoming(picked);
+          const overSlots = !!c?.slots && after > c.slots;
+          const overUsual = !c?.slots && !BIG_OFFICES.test(picked) && after > 2;
           return (
-            <p className={`text-xs ${!big && after > 2 ? 'text-warning-fg' : 'text-ink-subtle'}`}>
-              {already ? `${name} has ${already} ${already === 1 ? 'scholar' : 'scholars'} this term` : `No scholars in ${name} yet this term`}
-              {` · ${after} after this.`}
-              {!big && after > 2 ? ' Most offices take 1–2; the Registrar, Accounting and Admissions take more.' : ''}
+            <p className={`text-xs ${overSlots || overUsual ? 'text-warning-fg' : 'text-ink-subtle'}`}>
+              <span className="font-medium text-ink">{picked}</span>
+              {` will have ${after} ${after === 1 ? 'scholar' : 'scholars'} this term`}
+              {c?.slots ? ` (${c.slots} ${c.slots === 1 ? 'slot' : 'slots'})` : ''}.
+              {overSlots ? ' That is more than its slots.' : overUsual ? ' Most offices take 1–2; the Registrar, Accounting and Admissions take more.' : ''}
             </p>
           );
         })()}
-        <datalist id={listId}>
-          {offices.map(o => <option key={o} value={o}>{officeCounts[o] ? `${officeCounts[o]} this term` : 'none this term'}</option>)}
-        </datalist>
         {!single && (
           <ul className="max-h-48 divide-y divide-line overflow-y-auto rounded-control text-sm ring-1 ring-line">
             {scholars.map(s => (
@@ -1015,10 +1294,14 @@ function DutyLogModal({ logId, row, getToken, onClose, onChangeOffice }: {
             <h3 className="text-sm font-semibold text-ink">Regular duty ({data.log.entries.length})</h3>
             {data.log.entries.length === 0 ? <p className="text-sm text-ink-muted">None logged.</p> : (
               <Table label="Regular duty" minWidth="32rem">
-                <thead><tr><Th sticky={false}>Date</Th><Th sticky={false} className="w-20">Day</Th><Th sticky={false} className="w-28">Time in</Th><Th sticky={false} className="w-28">Time out</Th><Th sticky={false} numeric className="w-24">Hours</Th></tr></thead>
+                <thead><tr><Th sticky={false}>Date</Th><Th sticky={false} className="w-20">Day</Th><Th sticky={false} className="w-28">Time in</Th><Th sticky={false} className="w-28">Time out</Th><Th sticky={false} numeric className="w-24">Hours</Th>{data.summary.confirmationRequired && <Th sticky={false} className="w-32">Office</Th>}</tr></thead>
                 <tbody>
                   {sortEntries(data.log.entries).map((e, i) => (
-                    <Tr key={e._id ?? i}><Td>{formatDutyDate(e.date, true)}</Td><Td>{weekday(e.date)}</Td><Td>{format12h(e.timeIn)}</Td><Td>{format12h(e.timeOut)}</Td><Td numeric>{formatHours(entryHours(e))}</Td></Tr>
+                    <Tr key={e._id ?? i}><Td>{formatDutyDate(e.date, true)}</Td><Td>{weekday(e.date)}</Td><Td>{format12h(e.timeIn)}</Td><Td>{format12h(e.timeOut)}</Td><Td numeric>{formatHours(entryHours(e))}</Td>
+                      {data.summary.confirmationRequired && (
+                        <Td>{e.status === 'confirmed' ? <Badge tone="success" dot>Confirmed</Badge> : e.status === 'flagged' ? <Tooltip content={e.note || 'Flagged by the office'}><Badge tone="danger" dot>Flagged</Badge></Tooltip> : <Badge tone="warning" dot>Waiting</Badge>}</Td>
+                      )}
+                    </Tr>
                   ))}
                 </tbody>
               </Table>

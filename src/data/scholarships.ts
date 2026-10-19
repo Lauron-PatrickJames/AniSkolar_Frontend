@@ -276,8 +276,14 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     },
     rules: { applicantType: 'incoming' },
     customEligibility: [
-      'Related to an alumnus/alumna of DLSU-EAC, DLSU-Aguinaldo, or DLSU-Dasmariñas, up to the 2nd degree of consanguinity (parent, sibling, grandparent, or grandchild)'
+      'Related to an alumnus/alumna of DLSU-EAC, DLSU-Aguinaldo, or DLSU-Dasmariñas, up to the 2nd degree of consanguinity (parent, sibling, grandparent, or grandchild)',
+      'Only 2 scholars at a time for the whole campus; a slot opens when a current scholar graduates'
     ],
+    retentionConditions: ['No renewals: the scholarship continues until you graduate'],
+    // 2 scholars campus-wide, kept until they graduate; no renewals
+    // (Oct 2026). Mirrors the backend.
+    noRenewal: true,
+    totalSlots: 2,
     documentSlots: ALUMNI_DOCUMENT_SLOTS,
     requirements: requirementLabels(ALUMNI_DOCUMENT_SLOTS),
     submissionNote: 'Submit complete requirements to the Alumni Office.',

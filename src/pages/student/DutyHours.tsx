@@ -41,6 +41,8 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
   const [events, setEvents] = useState<CreditedEvent[]>([]);
   const [claims, setClaims] = useState<EventClaim[]>([]);
   const [claimBusy, setClaimBusy] = useState<string | null>(null);
+  // The office has a head in AniSkolar: only duties they confirm count.
+  const [confirmationRequired, setConfirmationRequired] = useState(false);
 
   const load = useCallback(async (t: TermKey | null) => {
     setLoading(true);
@@ -54,6 +56,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       setCurrent(body.current);
       setKnownTerms(body.terms ?? []);
       setLog(body.log);
+      setConfirmationRequired(!!body.summary?.confirmationRequired);
       if (body.rule) setRule(body.rule);
       setEvents(body.events ?? []);
       setClaims(body.claims ?? []);
@@ -83,6 +86,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Failed to save your duty hours.');
       setLog(body.log);
+      setConfirmationRequired(!!body.summary?.confirmationRequired);
       if (body.rule) setRule(body.rule);
       if (body.claims) setClaims(body.claims);
       setSaveState('saved');
@@ -131,7 +135,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
     return list.sort((a, b) => b.academicYear - a.academicYear || DUTY_TERMS.indexOf(b.term) - DUTY_TERMS.indexOf(a.term));
   }, [current, knownTerms]);
 
-  const summary = useMemo(() => (log ? summarize(log) : null), [log]);
+  const summary = useMemo(() => (log ? summarize(log, undefined, { confirmationRequired }) : null), [log, confirmationRequired]);
 
   if (loading && !log) {
     return <div className="flex items-center justify-center py-16 text-slate-400"><Loader2 className="w-6 h-6 animate-spin" aria-label="Loading duty hours" /></div>;
@@ -190,7 +194,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
 
       <AddDutyForm log={log} onSave={save} />
 
-      <RegularDutyTable log={log} onSave={save} />
+      <RegularDutyTable log={log} onSave={save} confirmationRequired={confirmationRequired} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <EventsCard events={events} claims={claims} busyId={claimBusy} onClaim={id => claimEvent(id, false)} onWithdraw={id => claimEvent(id, true)} />
@@ -274,7 +278,15 @@ function SummaryCard({ summary }: { summary: DutySummary }) {
   const pct = summary.required ? Math.min(100, (summary.completed / summary.required) * 100) : null;
   const done = summary.remaining !== null && summary.remaining <= 0;
   const stats = [
-    { label: 'Hours completed', value: formatHours(summary.completed), hint: summary.specialHours ? `incl. ${formatHours(summary.specialHours)} from events` : undefined },
+    {
+      label: summary.confirmationRequired ? 'Hours confirmed' : 'Hours completed',
+      value: formatHours(summary.completed),
+      hint: [
+        summary.specialHours ? `incl. ${formatHours(summary.specialHours)} from events` : '',
+        summary.waitingHours ? `${formatHours(summary.waitingHours)} waiting for your office to confirm` : '',
+        summary.flaggedCount ? `${summary.flaggedCount} flagged by your office` : '',
+      ].filter(Boolean).join(' · ') || undefined,
+    },
     { label: 'Hours remaining', value: summary.remaining === null ? '—' : formatHours(Math.max(0, summary.remaining)), hint: summary.remaining !== null && summary.remaining < 0 ? `${formatHours(-summary.remaining)} over the requirement` : summary.required === null ? 'Enter the required hours' : undefined },
     { label: 'Weekly hours needed', value: formatHours(summary.weeklyNeeded), hint: summary.weeklyNeeded === null ? (summary.required === null ? undefined : 'Enter the deadline') : 'to finish by the deadline' },
   ];
@@ -361,7 +373,7 @@ function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => 
   );
 }
 
-function RegularDutyTable({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => void }) {
+function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: DutyLog; onSave: (log: DutyLog) => void; confirmationRequired?: boolean }) {
   const entries = sortEntries(log.entries);
   const remove = (entry: DutyEntry) => {
     const i = log.entries.indexOf(entry);
@@ -385,6 +397,7 @@ function RegularDutyTable({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog
                 <th className="px-3 py-2.5 text-left">Time in</th>
                 <th className="px-3 py-2.5 text-left">Time out</th>
                 <th className="px-3 py-2.5 text-right">Duty hours</th>
+                {confirmationRequired && <th className="px-3 py-2.5 text-left">Office</th>}
                 <th className="w-12" />
               </tr>
             </thead>
@@ -400,6 +413,13 @@ function RegularDutyTable({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog
                     <td className="px-3 py-2.5 text-slate-600">{format12h(entry.timeIn)}</td>
                     <td className="px-3 py-2.5 text-slate-600">{format12h(entry.timeOut)}</td>
                     <td className="px-3 py-2.5 text-right font-bold text-slate-800">{formatHours(entryHours(entry))}</td>
+                    {confirmationRequired && (
+                      <td className="px-3 py-2.5">
+                        {entry.status === 'confirmed' ? <span className="text-[11px] font-bold text-emerald-700">Confirmed</span>
+                          : entry.status === 'flagged' ? <span className="text-[11px] font-bold text-rose-700" title={entry.note ?? ''}>Flagged{entry.note ? `: ${entry.note}` : ''}</span>
+                            : <span className="text-[11px] font-bold text-amber-700">Waiting</span>}
+                      </td>
+                    )}
                     <td className="pr-4 text-right">
                       <button type="button" onClick={() => remove(entry)} aria-label={`Delete duty on ${formatDutyDate(entry.date)} ${format12h(entry.timeIn)}`} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
                         <Trash2 className="w-3.5 h-3.5" />

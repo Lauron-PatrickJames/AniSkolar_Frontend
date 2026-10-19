@@ -13,7 +13,9 @@ type GetToken = () => Promise<string | null>;
 
 interface Props {
   messages: ChatMessage[];
-  viewer: 'student' | 'adso';
+  viewer: 'student' | 'adso' | 'office';
+  // Where attachments are served from (office heads have their own path).
+  filesPath?: string;
   getToken: GetToken;
   // The student's applications, to say which one a message is about.
   applications?: { id: string; label: string }[];
@@ -27,7 +29,7 @@ const dayLabel = (iso: string) => new Date(iso).toLocaleDateString('en-PH', { we
 const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 const sizeLabel = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-export default function Conversation({ messages, viewer, getToken, applications = [], onSend, emptyText, placeholder, className = '' }: Props) {
+export default function Conversation({ messages, viewer, filesPath, getToken, applications = [], onSend, emptyText, placeholder, className = '' }: Props) {
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [applicationId, setApplicationId] = useState('');
@@ -87,14 +89,14 @@ export default function Conversation({ messages, viewer, getToken, applications 
               {showDay && <p className="pt-2 text-center text-[11px] font-semibold text-slate-400">{day}</p>}
               <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 py-2.5 text-sm shadow-xs ${mine ? 'bg-brand-green text-white rounded-br-md' : 'bg-white text-slate-800 ring-1 ring-slate-200 rounded-bl-md'}`}>
-                  {!mine && <p className="mb-0.5 text-[11px] font-bold text-slate-500">{m.authorName || (m.from === 'adso' ? 'Admissions and Scholarship Office' : 'Student')}</p>}
+                  {!mine && <p className="mb-0.5 text-[11px] font-bold text-slate-500">{m.authorName || (m.from === 'adso' ? 'Admissions and Scholarship Office' : m.from === 'office' ? 'Office' : 'Student')}</p>}
                   {m.applicationRef && (
                     <p className={`mb-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${mine ? 'bg-white/20' : 'bg-slate-100 text-slate-600'}`}>About {m.applicationRef}</p>
                   )}
                   {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
                   {m.attachments.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {m.attachments.map(a => <Attachment key={a.fileId} file={a} mine={mine} getToken={getToken} />)}
+                      {m.attachments.map(a => <Attachment key={a.fileId} file={a} mine={mine} getToken={getToken} filesPath={filesPath} />)}
                     </div>
                   )}
                   <p className={`mt-1 text-right text-[10px] ${mine ? 'text-white/75' : 'text-slate-400'}`}>
@@ -172,12 +174,12 @@ export default function Conversation({ messages, viewer, getToken, applications 
   );
 }
 
-function Attachment({ file, mine, getToken }: { file: MessageAttachment; mine: boolean; getToken: GetToken }) {
+function Attachment({ file, mine, getToken, filesPath }: { file: MessageAttachment; mine: boolean; getToken: GetToken; filesPath?: string }) {
   const isImage = file.mimetype.startsWith('image/');
-  const { url } = useAttachmentUrl(isImage ? file.fileId : null, getToken);
+  const { url } = useAttachmentUrl(isImage ? file.fileId : null, getToken, filesPath);
   const [error, setError] = useState('');
   useEffect(() => setError(''), [file.fileId]);
-  const open = () => openAttachment(file.fileId, getToken).catch(err => setError(err instanceof Error ? err.message : "Couldn't open the file."));
+  const open = () => openAttachment(file.fileId, getToken, filesPath).catch(err => setError(err instanceof Error ? err.message : "Couldn't open the file."));
   if (isImage) {
     return (
       <button type="button" onClick={open} className="overflow-hidden rounded-lg ring-1 ring-black/10" aria-label={`Open ${file.filename}`}>

@@ -10,6 +10,11 @@ export interface DutyEntry {
   date: string;     // YYYY-MM-DD
   timeIn: string;   // HH:mm, 24-hour
   timeOut: string;
+  // Set by the office head in the office portal; unset = waiting. When the
+  // office has a head in AniSkolar, only confirmed duties count.
+  status?: 'confirmed' | 'flagged' | null;
+  note?: string | null;
+  reviewedAt?: string | null;
 }
 
 // Event credit counted in the totals: approved claims on credited events
@@ -87,6 +92,11 @@ export interface DutySummary {
   remaining: number | null;
   weeklyNeeded: number | null;
   lastDutyDate: string | null;
+  // The office has a head in AniSkolar: only confirmed duties count.
+  confirmationRequired?: boolean;
+  waitingHours?: number;
+  waitingCount?: number;
+  flaggedCount?: number;
 }
 
 const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
@@ -123,8 +133,15 @@ export function todayInManila(date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(date);
 }
 
-export function summarize(log: Pick<DutyLog, 'entries' | 'specialEvents' | 'requiredHours' | 'deadline'>, today = todayInManila()): DutySummary {
-  const regular = log.entries.reduce((sum, e) => sum + entryHours(e), 0);
+// Mirrors summarize() in the backend's utils/dutyHours.js.
+export function summarize(
+  log: Pick<DutyLog, 'entries' | 'specialEvents' | 'requiredHours' | 'deadline'>,
+  today = todayInManila(),
+  { confirmationRequired = false }: { confirmationRequired?: boolean } = {},
+): DutySummary {
+  const counts = (e: DutyEntry) => !confirmationRequired || e.status === 'confirmed';
+  const waiting = confirmationRequired ? log.entries.filter(e => !e.status) : [];
+  const regular = log.entries.filter(counts).reduce((sum, e) => sum + entryHours(e), 0);
   const special = log.specialEvents.reduce((sum, e) => sum + (Number(e.hours) || 0), 0);
   const completed = round2(regular + special);
   const required = log.requiredHours ?? null;
@@ -141,6 +158,10 @@ export function summarize(log: Pick<DutyLog, 'entries' | 'specialEvents' | 'requ
   return {
     regularHours: round2(regular), specialHours: round2(special), completed, required, remaining, weeklyNeeded,
     lastDutyDate: dates[dates.length - 1] ?? null,
+    confirmationRequired,
+    waitingHours: round2(waiting.reduce((sum, e) => sum + entryHours(e), 0)),
+    waitingCount: waiting.length,
+    flaggedCount: log.entries.filter(e => e.status === 'flagged').length,
   };
 }
 

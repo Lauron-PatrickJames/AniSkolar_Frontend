@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CalendarClock, CheckCircle2, ClipboardCheck, Download, FileText, Lock, LockOpen, Pencil, Plus, RefreshCw, Users, XCircle
+  CalendarClock, CheckCircle2, ClipboardCheck, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, XCircle
 } from 'lucide-react';
 import { mockScholarships, acceptsOnlineApplications } from '../../data/scholarships';
 import { retentionMinGpa } from '../../utils/eligibility';
@@ -31,6 +31,9 @@ interface ScholarRow {
   avatarUrl?: string;
   holder: { referenceCode?: string; renewedFrom?: string } | null;
   renewal: Renewal | null;
+  // The office they rendered duty in during the term being evaluated
+  // (Duty hours); its head evaluates them.
+  dutyOffice?: string | null;
 }
 
 type RowState = RenewalStatus | 'Not submitted';
@@ -65,8 +68,25 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
   const [search, setSearch] = useState('');
   const [editingPeriod, setEditingPeriod] = useState<RenewalPeriod | 'new' | null>(null);
   const [openRow, setOpenRow] = useState<string | null>(null);
+  // The term the renewal looks back on (for the duty office column).
+  const [dutyTerm, setDutyTerm] = useState<{ academicYear: number; term: string } | null>(null);
+  const showDutyOffice = rows.some(r => r.dutyOffice);
   const [toast, setToast] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+
+  // Reminds the heads of offices with scholars to evaluate (one email).
+  const notifyOfficeHeads = async () => {
+    if (!selectedId) return;
+    setActionError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/renewals/admin/periods/${selectedId}/notify-offices`, { method: 'POST', headers: await authHeaders(getToken) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Failed to email the office heads.');
+      setToast(body.emailed ? `Emailed ${body.emailed} office head${body.emailed === 1 ? '' : 's'}.` : 'No office heads to email — list them in Duty hours → Offices.');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to email the office heads.');
+    }
+  };
 
   const loadPeriods = useCallback(async (select?: string) => {
     setPeriodsLoading(true);
@@ -96,6 +116,7 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Failed to load scholars.');
       setRows(body.scholars ?? []);
+      setDutyTerm(body.dutyTerm ?? null);
     } catch (err) {
       setRowsError(err instanceof Error ? err.message : 'Failed to load scholars.');
     } finally {
@@ -183,6 +204,9 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
                     period.open
                       ? { key: 'close', label: 'Close period', icon: Lock, onSelect: () => setOpen(false) }
                       : { key: 'open', label: 'Reopen period', icon: LockOpen, onSelect: () => setOpen(true) },
+                    ...(period.open && period.requiresEvaluation
+                      ? [{ key: 'notify', label: 'Email office heads to evaluate', icon: Mail, onSelect: notifyOfficeHeads }]
+                      : []),
                   ] : []),
                 ]}
               />
@@ -263,6 +287,7 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
                       <tr>
                         <Th sticky={false}>Scholar</Th>
                         <Th sticky={false} className="w-36">Program</Th>
+                        {showDutyOffice && <Th sticky={false} className="w-44">Duty office{dutyTerm ? ` (${dutyTerm.term.replace(' Semester', ' sem')})` : ''}</Th>}
                         <Th sticky={false} numeric className="w-24">GPA</Th>
                         {period.requiresEvaluation && <Th sticky={false} numeric className="w-32">Evaluation</Th>}
                         <Th sticky={false} numeric className="w-24">Documents</Th>
@@ -282,6 +307,7 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
                             </div>
                           </Td>
                           <Td><span className="block truncate" title={row.program}>{row.program || '—'}</span></Td>
+                          {showDutyOffice && <Td><span className="block truncate" title={row.dutyOffice ?? ''}>{row.dutyOffice || '—'}</span></Td>}
                           <Td numeric><GpaCell renewal={row.renewal} minGpa={period.minGpa} /></Td>
                           {period.requiresEvaluation && <Td numeric><EvaluationCell renewal={row.renewal} /></Td>}
                           <Td numeric>{row.renewal?.continuing ? `${row.renewal.documents.length}/${period.requirements.length}` : '—'}</Td>
@@ -588,6 +614,7 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
             ) : editingEvaluation || !renewal.evaluation ? (
               <EvaluationForm
                 renewal={renewal}
+                dutyOffice={row.dutyOffice ?? null}
                 getToken={getToken}
                 onCancel={renewal.evaluation ? () => setEditingEvaluation(false) : undefined}
                 onSaved={updated => { setEditingEvaluation(false); onUpdated(updated); }}
@@ -636,15 +663,19 @@ function EvaluationSummary({ renewal }: { renewal: Renewal }) {
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <DetailField label="Evaluated by" value={ev.evaluatorName} />
         <DetailField label="Assigned office" value={ev.assignedOffice} />
-        <DetailField label="Entered" value={ev.enteredAt ? `${formatDateTime(ev.enteredAt)}${ev.enteredBy ? ` by ${ev.enteredBy}` : ''}` : undefined} />
+        <DetailField
+          label={ev.source === 'office' ? 'Submitted by the office' : 'Entered'}
+          value={ev.enteredAt ? `${formatDateTime(ev.enteredAt)}${ev.enteredBy ? ` by ${ev.enteredBy}` : ''}` : undefined}
+        />
       </dl>
       {ev.remarks && <DetailField label="Remarks (staff only)" value={<span className="whitespace-pre-line font-normal">{ev.remarks}</span>} />}
     </div>
   );
 }
 
-function EvaluationForm({ renewal, getToken, onCancel, onSaved }: {
+function EvaluationForm({ renewal, dutyOffice, getToken, onCancel, onSaved }: {
   renewal: Renewal;
+  dutyOffice: string | null;
   getToken: () => Promise<string | null>;
   onCancel?: () => void;
   onSaved: (renewal: Renewal) => void;
@@ -652,7 +683,8 @@ function EvaluationForm({ renewal, getToken, onCancel, onSaved }: {
   const ev = renewal.evaluation;
   const [scores, setScores] = useState<Record<string, number>>(ev?.scores ?? {});
   const [evaluatorName, setEvaluatorName] = useState(ev?.evaluatorName ?? '');
-  const [assignedOffice, setAssignedOffice] = useState(ev?.assignedOffice ?? '');
+  // The scholar's duty office (Duty hours) unless one was saved before.
+  const [assignedOffice, setAssignedOffice] = useState(ev?.assignedOffice ?? dutyOffice ?? '');
   const [remarks, setRemarks] = useState(ev?.remarks ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -703,7 +735,9 @@ function EvaluationForm({ renewal, getToken, onCancel, onSaved }: {
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Evaluated by" optional><TextInput value={evaluatorName} onChange={e => setEvaluatorName(e.target.value)} disabled={saving} maxLength={200} placeholder="Department head" /></Field>
-        <Field label="Assigned office" optional><TextInput value={assignedOffice} onChange={e => setAssignedOffice(e.target.value)} disabled={saving} maxLength={200} /></Field>
+        <Field label="Evaluating office" optional helper={dutyOffice ? (assignedOffice === dutyOffice ? 'Their duty office, from Duty hours.' : `Duty hours says: ${dutyOffice}`) : 'No duty office in Duty hours for that term.'}>
+          <TextInput value={assignedOffice} onChange={e => setAssignedOffice(e.target.value)} disabled={saving} maxLength={200} />
+        </Field>
       </div>
       <Field label="Remarks" optional helper="Staff only. Not shown to the scholar.">
         <Textarea rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} disabled={saving} maxLength={2000} />

@@ -17,7 +17,7 @@ export interface MessageAttachment {
 
 export interface ChatMessage {
   _id: string;
-  from: 'student' | 'adso';
+  from: 'student' | 'adso' | 'office';
   authorName?: string;
   body: string;
   attachments: MessageAttachment[];
@@ -36,33 +36,35 @@ export const ATTACHMENT_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
 // Fired after a conversation is marked read, so unread badges refresh.
 export const MESSAGES_READ_EVENT = 'aniskolar:messages-read';
 
-async function fetchAttachment(fileId: string, getToken: GetToken): Promise<string> {
+// filesPath: where attachments are served — students and the AdSO use
+// /api/messages/files, office heads /api/messages/office/files.
+async function fetchAttachment(fileId: string, getToken: GetToken, filesPath = '/api/messages/files'): Promise<string> {
   const token = await getToken();
-  const res = await fetch(`${API_BASE_URL}/api/messages/files/${fileId}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+  const res = await fetch(`${API_BASE_URL}${filesPath}/${fileId}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   if (!res.ok) throw new Error(res.status === 404 ? 'File not found.' : "Couldn't load the file.");
   return URL.createObjectURL(await res.blob());
 }
 
-export function useAttachmentUrl(fileId: string | null, getToken: GetToken): { url: string | null; error: string } {
+export function useAttachmentUrl(fileId: string | null, getToken: GetToken, filesPath?: string): { url: string | null; error: string } {
   const [state, setState] = useState<{ url: string | null; error: string }>({ url: null, error: '' });
   useEffect(() => {
     if (!fileId) return;
     let url: string | null = null;
     let cancelled = false;
-    fetchAttachment(fileId, getToken)
+    fetchAttachment(fileId, getToken, filesPath)
       .then(u => { if (cancelled) URL.revokeObjectURL(u); else { url = u; setState({ url: u, error: '' }); } })
       .catch(err => { if (!cancelled) setState({ url: null, error: err instanceof Error ? err.message : "Couldn't load the file." }); });
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
-  }, [fileId, getToken]);
+  }, [fileId, getToken, filesPath]);
   return state;
 }
 
 // Opens an attachment in a new tab (opened inside the click so it isn't
 // blocked as a pop-up).
-export async function openAttachment(fileId: string, getToken: GetToken): Promise<void> {
+export async function openAttachment(fileId: string, getToken: GetToken, filesPath?: string): Promise<void> {
   const win = window.open('', '_blank');
   try {
-    const url = await fetchAttachment(fileId, getToken);
+    const url = await fetchAttachment(fileId, getToken, filesPath);
     if (win) win.location.href = url; else window.location.href = url;
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (err) {

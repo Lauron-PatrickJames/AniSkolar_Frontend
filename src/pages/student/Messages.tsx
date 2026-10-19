@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { Application } from '../../types';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_API_BASE, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
+import { ChatSkeleton } from '../../components/Skeletons';
 
 // The student's conversation with the Admissions and Scholarship Office
 // (backend routes/messages.js). Opening it marks the office's messages
@@ -61,7 +62,7 @@ export default function Messages({ applications }: { applications: Application[]
         </div>
       )}
       {!messages && !error && (
-        <div className="flex items-center justify-center py-16 text-slate-400"><Loader2 className="w-6 h-6 animate-spin" aria-label="Loading messages" /></div>
+        <ChatSkeleton label="Loading messages" />
       )}
       {messages && (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-xs">

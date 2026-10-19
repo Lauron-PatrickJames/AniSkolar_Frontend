@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { AlertCircle, CheckCircle, FileText, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle, FileText } from 'lucide-react';
 import { Application, DocumentSlot, GrantApplicationDetails, Scholarship, StoredDocument, StudentProfile } from '../../types';
 import { OFFICE_LABELS, officeOf } from '../../data/scholarships';
 import {
@@ -20,6 +20,7 @@ import {
   BackLink, DraftIndicator, DraftStatus, FormBanner, PrivacyNote, RevisionNote, SectionNav, SectionPanel,
   SubmittedScreen, WizardFooter, WizardHeader
 } from '../../components/grant-forms/WizardShell';
+import { FormSkeleton } from '../../components/Skeletons';
 
 // Application wizard for the grant-form scholarships (POLCA, DLSU-D Alumni
 // Association). Rendered by ApplyScholarship.tsx when the scholarship's
@@ -471,10 +472,7 @@ export default function GrantApplication({
 
   if (!hydrated) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-3 text-slate-400">
-        <Loader2 className="w-7 h-7 animate-spin text-brand-green" />
-        <p className="text-xs font-semibold">Loading your saved progress…</p>
-      </div>
+      <FormSkeleton label="Loading your saved progress" caption="Loading your saved progress…" />
     );
   }
 

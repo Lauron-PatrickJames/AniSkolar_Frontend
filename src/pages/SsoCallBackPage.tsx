@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useClerk, useSignIn, useSignUp } from '@clerk/react';
+import { AppSkeleton } from '../components/Skeletons';
 
 const ALLOWED_EMAIL_DOMAIN = 'dlsud.edu.ph';
 
@@ -283,13 +284,10 @@ export default function SsoCallbackPage() {
   }, [clerk.loaded, signIn, signUp]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="text-center space-y-3">
-        <div className="w-8 h-8 border-2 border-brand-green border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-xs font-semibold text-slate-500">Finishing sign-in...</p>
-      </div>
+    <>
+      <AppSkeleton label="Finishing sign-in" caption="Finishing sign-in…" />
       {/* A sign-in transferred to a sign-up can require captcha verification */}
       <div id="clerk-captcha" />
-    </div>
+    </>
   );
 }

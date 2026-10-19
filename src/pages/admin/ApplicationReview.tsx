@@ -17,7 +17,7 @@ import {
 } from './adminData';
 import {
   Alert, Avatar, Badge, Button, ButtonVariant, Card, ConfirmDialog, CopyButton, EmptyState, Field, IconButton,
-  LinkButton, PageHeader, Quote, Select, StatusBadge, STATUS_META, Tabs, Textarea, Toast, Tooltip
+  LinkButton, PageHeader, Quote, Select, Skeleton, StatusBadge, STATUS_META, Tabs, Textarea, Toast, Tooltip
 } from './AdminUI';
 import HistoryList from './HistoryList';
 import { buildApplicationHistory, latestDecision, partnerOfficeDecision, relativeTime } from './history';
@@ -372,7 +372,7 @@ function DocumentPreview({ doc, getToken }: { doc: AdminDocument; getToken: () =
         {error ? (
           <p className="px-6 text-center text-sm text-ink-muted">{error}</p>
         ) : !url ? (
-          <p className="px-6 text-center text-sm text-ink-muted">Loading…</p>
+          <Skeleton className="size-full rounded-none" />
         ) : isImage && !failed ? (
           <img src={url} alt={doc.docType} className="max-h-full max-w-full object-contain" onError={() => setFailed(true)} />
         ) : isPdf ? (

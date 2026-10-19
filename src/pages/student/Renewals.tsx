@@ -7,6 +7,7 @@ import {
 import {
   NOT_CONTINUING_REASONS, NotContinuingReason, Renewal, RenewalPeriod, RenewalStatus, formatGpa, periodLabel
 } from '../../utils/renewals';
+import { CardsSkeleton } from '../../components/Skeletons';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -112,9 +113,7 @@ export default function Renewals() {
       )}
 
       {loading && renewals.length === 0 && available.length === 0 ? (
-        <div className="flex items-center justify-center py-16 text-slate-400">
-          <Loader2 className="w-6 h-6 animate-spin" aria-label="Loading renewals" />
-        </div>
+        <CardsSkeleton label="Loading renewals" />
       ) : error ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center space-y-3">
           <p className="text-sm font-semibold text-rose-900">{error}</p>

@@ -6,6 +6,7 @@ import {
   ClaimStatus, CreditedEvent, DUTY_TERMS, DutyEntry, DutyLog, DutyRule, DutySummary, DutyTerm, EventClaim, entryHours, format12h, formatDutyDate, formatHours, yearGroupLabel, dutyRuleError, DUTY_RULES_TEXT,
   isTimeRange, sortEntries, summarize, termLabel, todayInManila, weekday, weeklyTotals
 } from '../../utils/dutyHours';
+import { StatsTableSkeleton } from '../../components/Skeletons';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -138,7 +139,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
   const summary = useMemo(() => (log ? summarize(log, undefined, { confirmationRequired }) : null), [log, confirmationRequired]);
 
   if (loading && !log) {
-    return <div className="flex items-center justify-center py-16 text-slate-400"><Loader2 className="w-6 h-6 animate-spin" aria-label="Loading duty hours" /></div>;
+    return <StatsTableSkeleton label="Loading duty hours" />;
   }
   if (loadError && !log) {
     return (

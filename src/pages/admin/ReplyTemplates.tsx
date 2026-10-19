@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom';
 import { BookmarkPlus, ChevronDown, MessageSquareText, Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
 import { API_BASE_URL, authHeaders } from './adminData';
-import { Alert, Badge, Button, Field, Modal, SearchInput, Select, TextInput, Textarea } from './AdminUI';
+import { Alert, Badge, Button, Field, Modal, SearchInput, Select, Skeleton, TextInput, Textarea } from './AdminUI';
 
 // Saved replies (backend routes/replyTemplates.js): messages the office
 // sends often, shared by the office. "Templates" next to a message box
@@ -163,7 +163,7 @@ export function TemplatePicker({ getToken, context, decision, vars, value, onIns
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {error ? <p className="p-3 text-sm text-danger">{error}</p>
-              : !templates ? <p className="p-3 text-sm text-ink-subtle">Loading…</p>
+              : !templates ? <div role="status" className="space-y-3 p-3"><span className="sr-only">Loading templates…</span>{[0, 1, 2].map(i => <div key={i} className="space-y-1.5"><Skeleton className="h-3.5 w-1/2" /><Skeleton className="h-3 w-full" /></div>)}</div>
                 : !list.length ? <p className="p-3 text-sm text-ink-subtle">{q ? 'No template matches.' : 'No templates here yet.'}</p>
                   : (
                     <>

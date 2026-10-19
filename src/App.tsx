@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { AppSkeleton, FormSkeleton } from './components/Skeletons';
 import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, SaveResult } from './types';
 import { acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships, registerCustomScholarships } from './data/scholarships';
@@ -721,9 +722,7 @@ export default function App() {
   // scholarship-details page re-rendering underneath before the form swaps in.
   if (isLoadingResubmit) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-8 h-8 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
-      </div>
+      <div className="min-h-screen bg-slate-50"><FormSkeleton label="Opening your application" /></div>
     );
   }
 
@@ -731,9 +730,7 @@ export default function App() {
   // avoid flashing the landing page or dashboard before that's known.
   if (!userLoaded || authPhase === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-8 h-8 border-2 border-brand-green border-t-transparent rounded-full animate-spin" />
-      </div>
+      <AppSkeleton />
     );
   }
 

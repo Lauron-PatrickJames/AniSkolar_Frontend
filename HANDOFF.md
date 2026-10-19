@@ -409,6 +409,14 @@ happens.
   open them. A message can say which of the student's applications it's
   about. Read receipts ("Seen"); pages refresh every 20 s.
 
+- **Explicit words** (2026-10-19): a message with explicit words (English
+  and Filipino / Taglish, incl. disguises like "f.u.c.k", "sh1t",
+  "fuuuck") isn't sent, from anyone. The message box warns while typing and
+  disables Send; the server refuses it too. Lists: backend
+  `utils/profanity.js` and frontend `src/utils/profanity.ts` (keep them
+  the same). Words only match on their own ("class", "leche flan",
+  "cum laude", "Dick Gordon" are fine); add false alarms to `ALLOWED`.
+
 ## Email (Outlook)
 Sent through Azure Communication Services Email (`utils/mailer.js` — the
 only file to change when switching providers). Students' and the AdSO's

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { TemplatePicker, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
 import {
   AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, FileText, MessageSquare, RotateCcw, ShieldCheck, XCircle
 } from 'lucide-react';
@@ -8,7 +9,7 @@ import { SfagAnswers, StandardProfileAnswers } from '../../components/grant-form
 import { mockScholarships, officeDisplayName } from '../../data/scholarships';
 import { GrantApplicationDetails, PolcaAdminFields, Scholarship, SfagApplicationDetails } from '../../types';
 import { isGrantFormType, toGrantDetails } from '../../utils/grantForms';
-import { useDocumentUrl } from '../../utils/documents';
+import { downloadZip, useDocumentUrl } from '../../utils/documents';
 import {
   API_BASE_URL, AdminApplication, AdminDocument, AppStatus, applicantEmail, applicantName, applicantPhone,
   applicantProgram, applicantYearLevel, authHeaders, formatBytes, formatDate, formatDateTime,
@@ -172,7 +173,7 @@ export default function ApplicationReview({
         <Card flush className="min-w-0 lg:col-span-2" headerSlot={<Tabs<ReviewTab> tabs={tabs} value={activeTab} onChange={setActiveTab} label="Application sections" />}>
           <div role="tabpanel" aria-label={tabs.find(t => t.key === activeTab)?.label} className="p-5 sm:p-6">
             {activeTab === 'form' && <FormTab app={app} scholarship={scholarship} grantDetails={grantDetails} />}
-            {activeTab === 'documents' && <DocumentsTab docs={app.documents} missing={missing} getToken={getToken} />}
+            {activeTab === 'documents' && <DocumentsTab appId={app._id} docs={app.documents} missing={missing} getToken={getToken} />}
             {activeTab === 'activity' && <HistoryList events={events} empty="No history recorded for this application yet." label="Application activity" />}
           </div>
         </Card>
@@ -287,12 +288,33 @@ function missingDocuments(app: AdminApplication, scholarship: Scholarship | unde
   return scholarship.requirements.filter(req => !present.has(req));
 }
 
-function DocumentsTab({ docs, missing, getToken }: { docs: AdminDocument[]; missing: string[]; getToken: () => Promise<string | null> }) {
+function DocumentsTab({ appId, docs, missing, getToken }: { appId: string; docs: AdminDocument[]; missing: string[]; getToken: () => Promise<string | null> }) {
   const [selectedId, setSelectedId] = useState<string | null>(docs[0]?.fileId ?? null);
   const selected = docs.find(d => d.fileId === selectedId) ?? null;
+  const [zipping, setZipping] = useState(false);
+  const [zipError, setZipError] = useState('');
+
+  const downloadAll = async () => {
+    setZipping(true);
+    setZipError('');
+    try {
+      await downloadZip(`application/${appId}`, getToken);
+    } catch (err) {
+      setZipError(err instanceof Error ? err.message : "Couldn't prepare the download.");
+    } finally {
+      setZipping(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
+      {docs.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-ink-muted">{docs.length} {docs.length === 1 ? 'file' : 'files'}</p>
+          <Button size="sm" icon={Download} onClick={downloadAll} loading={zipping}>Download all (.zip)</Button>
+        </div>
+      )}
+      {zipError && <Alert tone="danger" onDismiss={() => setZipError('')}>{zipError}</Alert>}
       {missing.length > 0 ? (
         <Alert tone="warning" icon={AlertTriangle} title={`${missing.length} required ${missing.length === 1 ? 'document is' : 'documents are'} missing`}>
           <ul className="mt-1 list-disc space-y-0.5 pl-4">{missing.map(m => <li key={m}>{m}</li>)}</ul>
@@ -583,6 +605,8 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
       ? 'The applicant sees the new status and your message in their portal.'
       : 'The applicant sees the new status in their portal.');
     if (status === 'Needs Revision') lines.push('They can update their documents and resubmit.');
+    const unfilled = unfilledParts(message);
+    if (unfilled.length) lines.push(`Your message still has ${unfilled.join(', ')} to fill in.`);
     if (adminOffice && status === 'Approved' && !app.forwardedAt) lines.push('It is sent to the AdSO automatically.');
     if (!adminOffice && officeApp) lines.push(`This replaces the ${officeDisplayName(app.office)}'s decision; they can no longer change it.`);
     return lines;
@@ -624,6 +648,16 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
           <>
             <Field
               label="Message to applicant"
+              labelAside={
+                <TemplatePicker
+                  getToken={getToken}
+                  context="application"
+                  vars={{ firstName: firstNameOf(name), scholarship: app.scholarshipName, referenceCode: app.referenceCode }}
+                  value={message}
+                  onInsert={text => { setMessage(text); if (noteError) setNoteError(''); }}
+                  disabled={busy}
+                />
+              }
               optional={!changing}
               helper={noteError ? undefined : changing ? 'Required: explain why the decision changed. The applicant will see this.' : 'The applicant will see this.'}
               error={noteError || undefined}
@@ -638,6 +672,7 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
                 disabled={busy}
               />
             </Field>
+            <UnfilledHint text={message} />
             {adminOffice && !app.forwardedAt && (
               <p className="text-xs text-ink-subtle">Approving also sends this application to the AdSO.</p>
             )}

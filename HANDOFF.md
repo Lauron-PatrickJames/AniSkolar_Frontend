@@ -60,6 +60,7 @@ storage · Programs list · FSE report · Still needed · Open ideas.
 | `EMAIL_SIGNATURE` | Optional: signature lines separated by `\|`, e.g. `Name, MS\|Scholarship Associate`. |
 | `APP_URL` | The frontend address used in email links. |
 | `ANNOUNCEMENT_EMAIL_BATCHES_PER_MINUTE` | Announcement BCC batches of 50 per minute (1 while on the free sender). |
+| `EMAIL_SENDS_PER_MINUTE` | Personal emails (reminders, summaries) sent per minute from the outbox; default 1. |
 | `FB_PAGE_ID`, `FB_PAGE_ACCESS_TOKEN`, `FB_GRAPH_VERSION` | Facebook Page cross-posting (`services/facebook.js`). |
 
 Azure (Azure for Students, resource group `aniskolar`):
@@ -213,6 +214,14 @@ with a few scholars still without an office, for Random assign. If you test anno
 - Decisions follow the application rules (message required for Needs
   Revision, Not Renewed, and changing a decision; same status → 409).
 - Documents are JPEG, stored in the same GridFS bucket as applications.
+- **Renewal check** (2026-10-19, backend `utils/renewalCheck.js`): each
+  submitted renewal gets Eligible / Waiting / Needs review / Not eligible
+  from GPA vs the minimum, failing grade, documents, last term's duty hours
+  (SFAG; confirmed hours only) and the evaluation (below 4 = review). The
+  Check column shows it (hover for why) and the renewal shows the list.
+  "Renew N" renews every Under Evaluation renewal that's Eligible in one go
+  (`POST /api/renewals/admin/periods/:id/renew-eligible`, re-checked on the
+  server; history says "renewed in bulk"). The check never decides alone.
 
 ## Duty hours (student: Duty Hours; AdSO: Review → Duty hours)
 - Replaces the office's "SFAG Duty Calculator" sheet. Only SFAG scholars
@@ -323,6 +332,70 @@ their own accounts). One head per office.
   Oct 5 confirmed, one flagged, an open request and an office message. To
   see the portal yourself, put your own school email as a head in Duty
   hours → Offices (on the demo database) and sign in again.
+
+## Download all files (.zip)
+Added 2026-10-19 (backend `routes/documentZips.js`, `archiver` package;
+frontend `downloadZip` in `src/utils/documents.ts`). The zip is streamed
+as it's built, with the same access as single files (an office only gets
+its own applications and renewals):
+- Application → Documents tab → **Download all (.zip)**.
+- Scholars → a scholar → More actions → **Download all files (.zip)**:
+  every application and renewal, one folder each.
+- Renewals → More actions → **Download all documents (.zip)**: every
+  renewal of the period, one folder per scholar.
+Each scholar's files sit in a `<Name>-documents` folder (e.g. `Reyes, Maria
+S-documents`; the student number is added if two share a name), and the
+one-application and one-scholar zips are named the same way.
+A file that can't be read is listed in `MISSING FILES.txt` inside the zip
+instead of failing the download.
+
+## Message templates (saved replies)
+Added 2026-10-19 (backend `models/ReplyTemplate.js`,
+`routes/replyTemplates.js`; frontend `src/pages/admin/ReplyTemplates.tsx`).
+A **Templates** button sits by the message box of application decisions,
+renewal decisions and Messages. Picking one inserts it with `{firstName}`,
+`{scholarship}`, `{referenceCode}` and `{term}` filled in; `[brackets]` are
+left for the admin, and "Still to fill in" shows until they're replaced
+(the decision confirmation repeats it). Renewal templates for the chosen
+decision are listed first; most-used templates rise to the top.
+- Per office (AdSO, POLCA and Alumni each have their own), shared by
+  everyone in it. Each office gets 13 starter templates the first time;
+  "Save this message" turns what you typed into a template, "Manage" edits
+  or deletes them. Deleted starters don't come back.
+
+## Automation (AdSO: Manage → Automation)
+Added 2026-10-19 (backend `utils/automation.js`, `utils/outbox.js`,
+`routes/automation.js`, models `AutomationSetting`, `OutboxEmail`). Every
+job starts **off**; the AdSO turns them on. "Preview / run now" shows who
+would be emailed (and, for the rollover, who goes where) before anything
+happens.
+- **Duty hours reminders** (Mondays 8 AM): SFAG scholars behind an even
+  pace (16 weeks, 20% leeway) or not started by week 3 get hours done /
+  left and the weekly pace.
+- **Office head reminders** (Mondays 8 AM): duties to confirm and scholars
+  to evaluate, one email per head.
+- **Deadline reminders** (daily 8 AM): 3 and 1 days before a renewal
+  deadline (holders who haven't submitted) or a scholarship deadline
+  (students with an unsent draft); once, 3 days after "Needs Revision".
+  Deadlines are free text, so only ones typed as a single date count
+  ("January 20, 2027"; "June 1–20, 2026" is skipped).
+- **Morning summary** (daily 7 AM) to the AdSO emails listed: new
+  applications, renewals to decide, unread messages, office requests,
+  event claims, scholars without an office. Skipped when nothing's waiting.
+- **Start-of-semester office assignment** (daily 6 AM, first 8 weeks of a
+  semester; terms start Aug 1 / Jan 1): SFAG holders without an office get
+  last semester's office if it has a free slot (switchable), else a random
+  one by the office slots; scholars and heads are emailed. Late renewals
+  are picked up the next morning.
+- Timers: `runDueJobs` every 15 minutes (each job claims its day/week
+  atomically, so it runs once even with several servers). Emails go to the
+  outbox with a unique key per person and period, so nobody gets the same
+  reminder twice; the outbox sends `EMAIL_SENDS_PER_MINUTE` a minute and
+  retries a refused email 5 times, 10 minutes apart. Failed ones are listed
+  on the page with "Try them again".
+- Demo caution: the demo has real team addresses (e.g. the demo students
+  linked to your own accounts, and any head emails you typed in Offices).
+  Preview before "Run now" there.
 
 ## Messages (student ↔ AdSO)
 - One conversation per student with the AdSO (`models/Message.js`,
@@ -618,14 +691,36 @@ Follow-ups:
   production instance + DNS, Microsoft OAuth app, Facebook Page.
 - Before going live: switch off the demo (`MONGODB_DB`,
   `AZURE_STORAGE_CONTAINER=aniskolar-files`), and set
-  `ANNOUNCEMENT_EMAIL_BATCHES_PER_MINUTE` to what the sender allows.
+  `ANNOUNCEMENT_EMAIL_BATCHES_PER_MINUTE` and `EMAIL_SENDS_PER_MINUTE` to
+  what the sender allows; turn on the Automation jobs the office wants.
 
 ## Open ideas (not done)
-- Duty hours: let the AdSO set the deadline per term (required hours are
-  already set per grant and year level); COSA accounts to propose events.
-  (Head sign-off on duties and online evaluations: done — office portal.)
-- AdSO screen to verify profiles and handle correction requests (the
-  endpoints exist).
+Done from earlier lists (2026-10-19): reminders, morning summary and
+start-of-semester office assignment (Automation), renewal check + bulk
+renew, message templates, download all files (.zip), office portal.
+
+Recommended next, most useful first:
+1. Decision emails: email the student when an application or renewal is
+   decided (approved, needs revision, not renewed), not only in the portal.
+2. Auto-close periods: renewal / application periods close at their
+   deadline; holders who never submitted become "Not renewed – no
+   submission" (undoable); the closing announcement goes out.
+3. Duty deadline per term set by the AdSO (scholars type their own today),
+   so duty reminders and "hours a week" are right for everyone.
+4. AdSO "To do" page: applications, renewals, claims, office requests and
+   messages in one list, by deadline.
+5. Auto-end scholarships: 4th-year scholars' scholarships end as
+   "Graduated" after their last semester (frees POLCA / Alumni slots).
+6. Profile verification screen for the AdSO (the endpoints exist).
+7. GPA cross-check: flag renewals whose typed GPA looks off against past
+   semesters or the profile.
+8. Office head monthly summary of their scholars (hours, flagged duties,
+   who's behind).
+9. FSE report emailed to the AdSO at the end of each semester.
+10. End-of-semester duty summary per office, printable for the paper files.
+
+Smaller / waiting on others:
+- COSA accounts to propose events (on hold; the group talks to COSA).
 - Announcement email: the office's banner image in the footer, if the
   office provides the file.
 - Renewal evaluation: the form has 19 items but our copy shows 15

@@ -1,4 +1,5 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { findExplicitWords } from '../../utils/profanity';
 import { FileText, Loader2, Paperclip, Send, X } from 'lucide-react';
 import {
   ATTACHMENT_TYPES, ChatMessage, MAX_ATTACHMENTS, MAX_ATTACHMENT_SIZE, MAX_MESSAGE_LENGTH, MessageAttachment, openAttachment, useAttachmentUrl
@@ -40,6 +41,8 @@ export default function Conversation({ messages, viewer, filesPath, getToken, ap
   const [error, setError] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Explicit words in the draft: warned about here, refused by the server.
+  const explicit = useMemo(() => findExplicitWords(body), [body]);
 
   // Keep the newest message in view.
   useLayoutEffect(() => {
@@ -63,6 +66,7 @@ export default function Conversation({ messages, viewer, filesPath, getToken, ap
   const send = async () => {
     if (sending) return;
     if (!body.trim() && !files.length) { setError('Write a message or attach a file.'); return; }
+    if (explicit.length) { setError('Please remove the inappropriate language before sending.'); return; }
     setSending(true);
     setError('');
     try {
@@ -139,8 +143,15 @@ export default function Conversation({ messages, viewer, filesPath, getToken, ap
           rows={3}
           placeholder={placeholder || 'Write a message…'}
           aria-label="Message"
-          className="w-full resize-y rounded-xl border border-slate-200 px-3.5 py-2.5 text-base sm:text-sm focus:border-brand-green focus:outline-hidden focus:ring-2 focus:ring-brand-green/20"
+          aria-invalid={explicit.length > 0 || undefined}
+          aria-describedby={explicit.length ? 'message-explicit-warning' : undefined}
+          className="w-full resize-y rounded-xl border border-slate-200 px-3.5 py-2.5 text-base sm:text-sm focus:border-brand-green focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 aria-[invalid=true]:border-amber-400 aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-amber-200"
         />
+        {explicit.length > 0 && (
+          <p id="message-explicit-warning" role="alert" className="text-xs font-semibold text-amber-700">
+            Please remove inappropriate language ({explicit.join(', ')}). Messages with it can't be sent. If you're reporting something someone said, describe it without the word.
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <input ref={fileRef} type="file" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" className="hidden" onChange={e => addFiles(e.target.files)} />
           <button
@@ -166,7 +177,7 @@ export default function Conversation({ messages, viewer, filesPath, getToken, ap
           <span className="ml-auto hidden text-[11px] text-slate-400 sm:inline">Ctrl+Enter to send</span>
           <button
             type="submit"
-            disabled={sending}
+            disabled={sending || explicit.length > 0}
             className="inline-flex items-center gap-1.5 rounded-xl bg-brand-green px-4 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-green-dark disabled:opacity-60"
           >
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send

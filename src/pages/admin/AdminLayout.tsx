@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
-import { Award, BarChart3, Building2, Calculator, ChevronRight, Clock, GraduationCap, LayoutList, LogOut, Megaphone, Menu, MessageSquare, RefreshCw, X } from 'lucide-react';
+import { Award, BarChart3, Building2, Calculator, ChevronRight, Clock, GraduationCap, LayoutList, LogOut, Megaphone, Menu, MessageSquare, RefreshCw, X, Zap } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import { Avatar, Badge, IconButton } from './AdminUI';
 
-export type MainView = 'applications' | 'renewals' | 'dutyHours' | 'analytics' | 'fse' | 'lifecycle' | 'messages' | 'announcements' | 'scholarships';
+export type MainView = 'applications' | 'renewals' | 'dutyHours' | 'analytics' | 'fse' | 'lifecycle' | 'messages' | 'announcements' | 'scholarships' | 'automation';
 
 export const VIEW_TITLES: Record<MainView, string> = {
   applications: 'Applications',
@@ -15,14 +15,15 @@ export const VIEW_TITLES: Record<MainView, string> = {
   lifecycle: 'Scholars',
   messages: 'Messages',
   announcements: 'Announcements',
-  scholarships: 'Scholarships'
+  scholarships: 'Scholarships',
+  automation: 'Automation'
 };
 
 const SECTIONS: { title: string; items: { id: MainView; icon: React.ElementType }[] }[] = [
   { title: 'Review', items: [{ id: 'applications', icon: LayoutList }, { id: 'renewals', icon: RefreshCw }, { id: 'lifecycle', icon: GraduationCap }, { id: 'dutyHours', icon: Clock }] },
   { title: 'Insights', items: [{ id: 'analytics', icon: BarChart3 }, { id: 'fse', icon: Calculator }] },
   { title: 'Communication', items: [{ id: 'messages', icon: MessageSquare }, { id: 'announcements', icon: Megaphone }] },
-  { title: 'Manage', items: [{ id: 'scholarships', icon: Award }] }
+  { title: 'Manage', items: [{ id: 'scholarships', icon: Award }, { id: 'automation', icon: Zap }] }
 ];
 
 export interface Crumb {

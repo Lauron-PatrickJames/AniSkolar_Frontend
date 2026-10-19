@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CalendarClock, CheckCircle2, ClipboardCheck, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, XCircle
+  BadgeCheck, CalendarClock, CheckCircle2, CircleAlert, CircleDashed, ClipboardCheck, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, XCircle
 } from 'lucide-react';
 import { mockScholarships, acceptsOnlineApplications } from '../../data/scholarships';
 import { retentionMinGpa } from '../../utils/eligibility';
@@ -9,12 +9,13 @@ import {
   RenewalDecision, RenewalPeriod, RenewalStatus, RenewalTerm, academicYearLabel, currentAcademicYear, formatGpa, meetsGpa,
   periodLabel, ratingLabel
 } from '../../utils/renewals';
-import { openDocument } from '../../utils/documents';
+import { downloadZip, openDocument } from '../../utils/documents';
 import { API_BASE_URL, authHeaders, formatDate, formatDateTime, officeName, titleCaseName } from './adminData';
 import {
-  Alert, Avatar, Badge, Button, Card, Checkbox, DetailField, DropdownMenu, EmptyState, ErrorState, Field, KpiCard, KpiGrid,
-  MobileList, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table, TableSkeleton, Td, TextInput, Textarea, Th, Toast, Tone, Tr
+  Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, DetailField, DropdownMenu, EmptyState, ErrorState, Field, KpiCard, KpiGrid,
+  MobileList, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table, TableSkeleton, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
+import { TemplatePicker, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
 
 // Renewals: the AdSO opens a renewal period per scholarship and term;
 // scholars holding the scholarship submit their grades (or say they're not
@@ -34,6 +35,53 @@ interface ScholarRow {
   // The office they rendered duty in during the term being evaluated
   // (Duty hours); its head evaluates them.
   dutyOffice?: string | null;
+  // Pre-check of a submitted renewal (backend utils/renewalCheck.js).
+  check?: RenewalCheck | null;
+}
+
+// What the office checks by hand before renewing: GPA, failing grade,
+// documents, duty hours (SFAG) and the evaluation. The worst item decides.
+type CheckStatus = 'pass' | 'fail' | 'review' | 'waiting';
+type CheckResult = 'eligible' | 'waiting' | 'review' | 'not_eligible';
+interface RenewalCheck { result: CheckResult; items: { key: string; label: string; status: CheckStatus; detail: string }[] }
+const CHECK_META: Record<CheckResult, { label: string; tone: Tone }> = {
+  eligible: { label: 'Eligible', tone: 'success' },
+  waiting: { label: 'Waiting', tone: 'neutral' },
+  review: { label: 'Needs review', tone: 'warning' },
+  not_eligible: { label: 'Not eligible', tone: 'danger' },
+};
+const ITEM_META: Record<CheckStatus, { icon: React.ElementType; className: string }> = {
+  pass: { icon: CheckCircle2, className: 'text-success-fg' },
+  fail: { icon: XCircle, className: 'text-danger' },
+  review: { icon: CircleAlert, className: 'text-warning-fg' },
+  waiting: { icon: CircleDashed, className: 'text-ink-subtle' },
+};
+
+function CheckList({ check }: { check: RenewalCheck }) {
+  return (
+    <ul className="space-y-1.5">
+      {check.items.map(item => {
+        const { icon: Icon, className } = ITEM_META[item.status];
+        return (
+          <li key={item.key} className="flex items-start gap-2 text-sm">
+            <Icon className={`mt-0.5 size-4 shrink-0 ${className}`} aria-hidden />
+            <span className="min-w-0"><span className="font-medium text-ink">{item.label}:</span> <span className="text-ink-muted">{item.detail}</span></span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function CheckBadge({ check }: { check: RenewalCheck | null | undefined }) {
+  if (!check) return <span className="text-ink-subtle">—</span>;
+  const meta = CHECK_META[check.result];
+  const notes = check.items.filter(i => i.status !== 'pass');
+  return (
+    <Tooltip content={notes.length ? notes.map(i => `${i.label}: ${i.detail}`).join(' · ') : 'Passes every check'}>
+      <Badge tone={meta.tone}>{meta.label}</Badge>
+    </Tooltip>
+  );
 }
 
 type RowState = RenewalStatus | 'Not submitted';
@@ -73,6 +121,11 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
   const showDutyOffice = rows.some(r => r.dutyOffice);
   const [toast, setToast] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState('');
+  // Under evaluation and passing every check: can be renewed together.
+  const eligibleRows = useMemo(() => rows.filter(r => r.renewal?.status === 'Under Evaluation' && r.check?.result === 'eligible'), [rows]);
 
   // Reminds the heads of offices with scholars to evaluate (one email).
   const notifyOfficeHeads = async () => {
@@ -127,6 +180,27 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
   useEffect(() => { setFilter('All'); setSearch(''); loadRows(); }, [loadRows]);
 
   const period = periods.find(p => p._id === selectedId) ?? null;
+
+  const renewEligible = async () => {
+    if (!selectedId) return;
+    setBulkBusy(true);
+    setBulkError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/renewals/admin/periods/${selectedId}/renew-eligible`, {
+        method: 'POST', headers: await authHeaders(getToken, true), body: JSON.stringify({ renewalIds: eligibleRows.map(r => r.renewal!._id) }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Failed to renew.');
+      setBulkOpen(false);
+      setToast(`Renewed ${body.renewed} scholar${body.renewed === 1 ? '' : 's'}.${body.skipped ? ` ${body.skipped} skipped: their check or status changed; open them to decide.` : ''}`);
+      loadRows();
+      loadPeriods(selectedId);
+    } catch (err) {
+      setBulkError(err instanceof Error ? err.message : 'Failed to renew.');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   const counts = useMemo(() => {
     const c: Record<RowState, number> = { 'Not submitted': 0, 'Under Evaluation': 0, 'Needs Revision': 0, Renewed: 0, 'Not Renewed': 0, 'Not Continuing': 0 };
@@ -199,6 +273,14 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
                 label="More actions"
                 items={[
                   { key: 'export', label: 'Export to CSV', icon: Download, onSelect: exportCsv },
+                  {
+                    key: 'files', label: 'Download all documents (.zip)', icon: FileText,
+                    onSelect: () => {
+                      setActionError('');
+                      setToast('Preparing the download…');
+                      downloadZip(`renewal-period/${period._id}`, getToken).catch(err => setActionError(err instanceof Error ? err.message : "Couldn't prepare the download."));
+                    },
+                  },
                   ...(isAdso ? [
                     { key: 'edit', label: 'Edit period', icon: Pencil, onSelect: () => setEditingPeriod(period) },
                     period.open
@@ -251,6 +333,17 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
             <KpiCard label="Renewed" value={counts.Renewed} icon={CheckCircle2} tone="success" active={filter === 'Renewed'} onClick={() => setFilter('Renewed')} loading={rowsLoading && rows.length === 0} hint={counts['Not Renewed'] + counts['Not Continuing'] ? `${counts['Not Renewed']} not renewed · ${counts['Not Continuing']} not continuing` : undefined} />
           </KpiGrid>
 
+          {eligibleRows.length > 0 && (
+            <Alert
+              tone="success"
+              icon={BadgeCheck}
+              title={`${eligibleRows.length} renewal${eligibleRows.length === 1 ? ' passes' : 's pass'} every check`}
+              action={<Button size="sm" variant="primary" onClick={() => setBulkOpen(true)}>Renew {eligibleRows.length}</Button>}
+            >
+              GPA, no failing grade, documents{period?.scholarshipId === 's1' ? ', duty hours' : ''}{period?.requiresEvaluation ? ' and an evaluation of 4 or higher' : ''}. Renew them together; decide the rest one by one.
+            </Alert>
+          )}
+
           <Card
             flush
             headerSlot={
@@ -291,6 +384,7 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
                         <Th sticky={false} numeric className="w-24">GPA</Th>
                         {period.requiresEvaluation && <Th sticky={false} numeric className="w-32">Evaluation</Th>}
                         <Th sticky={false} numeric className="w-24">Documents</Th>
+                        <Th sticky={false} className="w-32">Check</Th>
                         <Th sticky={false} className="w-40">Status</Th>
                       </tr>
                     </thead>
@@ -311,6 +405,7 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
                           <Td numeric><GpaCell renewal={row.renewal} minGpa={period.minGpa} /></Td>
                           {period.requiresEvaluation && <Td numeric><EvaluationCell renewal={row.renewal} /></Td>}
                           <Td numeric>{row.renewal?.continuing ? `${row.renewal.documents.length}/${period.requirements.length}` : '—'}</Td>
+                          <Td><CheckBadge check={row.check} /></Td>
                           <Td><Badge tone={STATE_TONE[rowState(row)]} dot>{rowState(row) === 'Under Evaluation' ? 'To review' : rowState(row)}</Badge></Td>
                         </Tr>
                       ))}
@@ -329,7 +424,7 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
                         <Avatar name={row.name || row.studentNumber} avatarUrl={row.avatarUrl} size="sm" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-ink">{row.name ? titleCaseName(row.name) : 'Unknown student'}</span>
-                          <span className="block truncate text-xs text-ink-subtle">{row.studentNumber} · GPA {formatGpa(row.renewal?.gpa)}</span>
+                          <span className="block truncate text-xs text-ink-subtle">{row.studentNumber} · GPA {formatGpa(row.renewal?.gpa)}{row.check ? ` · ${CHECK_META[row.check.result].label}` : ''}</span>
                         </span>
                         <Badge tone={STATE_TONE[rowState(row)]} dot>{rowState(row) === 'Under Evaluation' ? 'To review' : rowState(row)}</Badge>
                       </button>
@@ -367,6 +462,28 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
             loadPeriods(period._id);
           }}
         />
+      )}
+
+      {bulkOpen && period && (
+        <ConfirmDialog
+          title={`Renew ${eligibleRows.length} scholar${eligibleRows.length === 1 ? '' : 's'}?`}
+          description={`${period.scholarshipName}, ${periodLabel(period)}. Each passes every check; AniSkolar checks again before renewing, and the history notes it was renewed in bulk.`}
+          confirmLabel={`Renew ${eligibleRows.length}`}
+          confirmIcon={CheckCircle2}
+          onConfirm={renewEligible}
+          onCancel={() => { setBulkOpen(false); setBulkError(''); }}
+          busy={bulkBusy}
+          error={bulkError}
+        >
+          <ul className="max-h-48 divide-y divide-line overflow-y-auto rounded-control text-sm ring-1 ring-line">
+            {eligibleRows.map(r => (
+              <li key={r.studentNumber} className="flex items-center justify-between gap-3 px-3 py-2">
+                <span className="min-w-0 truncate text-ink">{r.name ? titleCaseName(r.name) : r.studentNumber}</span>
+                <span className="shrink-0 text-xs text-ink-subtle">GPA {formatGpa(r.renewal?.gpa)}</span>
+              </li>
+            ))}
+          </ul>
+        </ConfirmDialog>
       )}
 
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
@@ -571,6 +688,16 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
           <DetailField label="Email" value={row.email} />
         </dl>
 
+        {row.check && (
+          <section className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-ink">Renewal check</h3>
+              <Badge tone={CHECK_META[row.check.result].tone}>{CHECK_META[row.check.result].label}</Badge>
+            </div>
+            <CheckList check={row.check} />
+          </section>
+        )}
+
         {renewal.continuing && (
           <section className="space-y-2">
             <h3 className="text-sm font-semibold text-ink">Documents</h3>
@@ -623,7 +750,7 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
           </section>
         )}
 
-        <DecisionPanel renewal={renewal} period={period} getToken={getToken} onUpdated={onUpdated} />
+        <DecisionPanel renewal={renewal} period={period} studentName={row.name} getToken={getToken} onUpdated={onUpdated} />
 
         {renewal.history.length > 0 && (
           <section className="space-y-2">
@@ -760,9 +887,10 @@ function EvaluationForm({ renewal, dutyOffice, getToken, onCancel, onSaved }: {
 
 const DECISION_ICONS: Record<RenewalDecision, React.ElementType> = { Renewed: CheckCircle2, 'Needs Revision': RefreshCw, 'Not Renewed': XCircle };
 
-function DecisionPanel({ renewal, period, getToken, onUpdated }: {
+function DecisionPanel({ renewal, period, studentName, getToken, onUpdated }: {
   renewal: Renewal;
   period: RenewalPeriod;
+  studentName: string;
   getToken: () => Promise<string | null>;
   onUpdated: (renewal: Renewal) => void;
 }) {
@@ -824,11 +952,23 @@ function DecisionPanel({ renewal, period, getToken, onUpdated }: {
         <>
           <Field
             label="Message to the scholar"
+            labelAside={
+              <TemplatePicker
+                getToken={getToken}
+                context="renewal"
+                decision={decision}
+                vars={{ firstName: firstNameOf(studentName), scholarship: renewal.scholarshipName, term: periodLabel(period) }}
+                value={note}
+                onInsert={setNote}
+                disabled={saving}
+              />
+            }
             optional={!noteRequired}
             helper={decision === 'Needs Revision' ? 'Say what to fix or upload again.' : 'The scholar sees this on their Renewal page.'}
           >
             <Textarea rows={3} value={note} onChange={e => setNote(e.target.value)} disabled={saving} maxLength={2000} />
           </Field>
+          <UnfilledHint text={note} />
           {needsEvaluation && <Alert tone="warning">Enter the department head's evaluation before renewing.</Alert>}
           <div className="flex justify-end">
             <Button variant="primary" onClick={save} loading={saving} disabled={needsEvaluation}>Save decision</Button>

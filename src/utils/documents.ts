@@ -40,6 +40,28 @@ export function useDocumentUrl(fileId: string | null | undefined, getToken: GetT
   return state;
 }
 
+// "Download all": a .zip the backend builds (routes/documentZips.js), e.g.
+// downloadZip('application/<id>'). Saved under the name the server gives.
+export async function downloadZip(path: string, getToken: GetToken): Promise<void> {
+  const token = await getToken();
+  const res = await fetch(`${API_BASE_URL}/api/documents/${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Couldn't prepare the download.");
+  }
+  const name = res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'documents.zip';
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 // Opens a file in a new tab. The tab is opened right away (inside the
 // click, so it isn't blocked as a pop-up) and pointed at the file once it
 // has loaded.

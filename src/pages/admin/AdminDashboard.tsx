@@ -7,6 +7,7 @@ import AdminAnnouncements from './AdminAnnouncements';
 import FseReportPage from './FseReportPage';
 import RenewalsPage from './RenewalsPage';
 import DutyHoursPage from './DutyHoursPage';
+import AutomationPage from './AutomationPage';
 import ScholarshipsManager from './ScholarshipsManager';
 import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
 import AdminScholars from './AdminScholars';
@@ -51,7 +52,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   // An office whose scholarships have no renewals (POLCA: scholars keep it
   // until they graduate) has no Renewals page either.
   const officeHasRenewals = !adminOffice || mockScholarships.some(s => officeOf(s) === adminOffice && !s.noRenewal && acceptsOnlineApplications(s));
-  const hiddenViews: MainView[] = isAdso ? [] : ['announcements', 'scholarships', 'fse', 'dutyHours', 'messages', ...(officeHasRenewals ? [] : ['renewals' as MainView])];
+  const hiddenViews: MainView[] = isAdso ? [] : ['announcements', 'scholarships', 'automation', 'fse', 'dutyHours', 'messages', ...(officeHasRenewals ? [] : ['renewals' as MainView])];
 
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -258,6 +259,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     page = <FseReportPage getToken={getToken} />;
   } else if (mainView === 'dutyHours' && isAdso) {
     page = <DutyHoursPage getToken={getToken} />;
+  } else if (mainView === 'automation' && isAdso) {
+    page = <AutomationPage getToken={getToken} />;
   } else if (mainView === 'renewals' && !hiddenViews.includes('renewals')) {
     page = <RenewalsPage getToken={getToken} isAdso={isAdso} />;
   } else if (mainView === 'analytics') {

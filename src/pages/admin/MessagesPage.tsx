@@ -5,6 +5,7 @@ import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messa
 import { collegeName } from '../../data/programs';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
 import { Alert, Avatar, Button, Card, EmptyState, ErrorState, Field, Modal, PageHeader, SearchInput, Select, TableSkeleton, TextInput } from './AdminUI';
+import { TemplatePicker, UnfilledHint, firstNameOf } from './ReplyTemplates';
 
 // AdSO: conversations with students (backend routes/messages.js), one per
 // student. Left: every conversation, newest first, with unread counts;
@@ -225,6 +226,12 @@ function ThreadView({ studentNumber, getToken, onBack, onOpenApplication, onChan
         onSend={send}
         emptyText="No messages yet. Write the first one below — the student is also emailed."
         placeholder="Write to the student…"
+        composerTools={(body, setBody) => (
+          <>
+            <TemplatePicker getToken={getToken} context="message" vars={{ firstName: firstNameOf(s.name) }} value={body} onInsert={setBody} />
+            <UnfilledHint text={body} />
+          </>
+        )}
       />
     </Card>
   );

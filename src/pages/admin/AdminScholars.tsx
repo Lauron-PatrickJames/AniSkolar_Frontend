@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Download, FileText, MessageSquare, Printer, Users } from 'lucide-react';
+import { downloadZip } from '../../utils/documents';
 import {
   AdminApplication, AppStatus, academicCycles, academicYearOf, applicantEmail, applicantName, applicantPhone,
   applicantProgram, applicantYearLevel, formatDate, isReturningScholar, plural, shortAcademicYear, titleCaseName
@@ -413,6 +414,7 @@ export default function AdminScholars({
     return (
       <ScholarDetail
         scholar={selected}
+        getToken={getToken}
         onOpenApplication={onOpenApplication}
         onMessageStudent={onMessageStudent}
         exportError={exportError}
@@ -575,7 +577,8 @@ const HISTORY_VIEWS: readonly HistoryView[] = ['By application', 'All activity']
 
 const isActive = (status: AppStatus) => status === 'Under Evaluation' || status === 'Needs Revision';
 
-function ScholarDetail({ scholar, onOpenApplication, onMessageStudent, exportError, onExportError }: {
+function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent, exportError, onExportError }: {
+  getToken: () => Promise<string | null>;
   scholar: ScholarSummary;
   onOpenApplication: (applicationId: string) => void;
   onMessageStudent?: (studentNumber: string) => void;
@@ -646,6 +649,10 @@ function ScholarDetail({ scholar, onOpenApplication, onMessageStudent, exportErr
             <DropdownMenu
               label="More actions"
               items={[
+                {
+                  key: 'files', label: 'Download all files (.zip)', icon: Download,
+                  onSelect: () => { onExportError(''); downloadZip(`student/${encodeURIComponent(scholar.studentNumber)}`, getToken).catch(err => onExportError(err instanceof Error ? err.message : "Couldn't prepare the download.")); },
+                },
                 { key: 'csv', label: 'Export CSV', icon: FileText, onSelect: () => exportScholarApplicationsToCSV(scholar) },
                 { key: 'print', label: 'Print', icon: Printer, onSelect: print }
               ]}

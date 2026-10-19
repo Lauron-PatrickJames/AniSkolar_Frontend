@@ -23,13 +23,16 @@ interface Props {
   emptyText: string;
   placeholder?: string;
   className?: string;
+  // Extra controls by the Attach button (the AdSO's message templates):
+  // given the current text and a way to replace it.
+  composerTools?: (body: string, setBody: (text: string) => void) => React.ReactNode;
 }
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
 const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 const sizeLabel = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-export default function Conversation({ messages, viewer, filesPath, getToken, applications = [], onSend, emptyText, placeholder, className = '' }: Props) {
+export default function Conversation({ messages, viewer, filesPath, getToken, applications = [], onSend, emptyText, placeholder, className = '', composerTools }: Props) {
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [applicationId, setApplicationId] = useState('');
@@ -148,6 +151,7 @@ export default function Conversation({ messages, viewer, filesPath, getToken, ap
           >
             <Paperclip className="h-4 w-4" /> Attach
           </button>
+          {composerTools?.(body, setBody)}
           {applications.length > 0 && (
             <select
               value={applicationId}

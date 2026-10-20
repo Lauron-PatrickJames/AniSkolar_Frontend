@@ -149,8 +149,14 @@ export const EXCLUSIVE_SCHOLARSHIP_ID = SFAG_ID;
 // The SFAG takes new applications in June and July only (Manila time),
 // before the 1st semester enrollment; the rest of the year is for
 // renewals. Mirrors inSfagApplicationWindow() in the backend's
-// utils/academicYear.js.
+// utils/academicYear.js. The backend can lift the limit for demos
+// (SFAG_OPEN_ALL_YEAR); App.tsx passes that on from GET /api/scholarships.
+let sfagOpenAllYear = false;
+export function setSfagOpenAllYear(value: boolean): void {
+  sfagOpenAllYear = value;
+}
 export function inSfagApplicationWindow(date = new Date()): boolean {
+  if (sfagOpenAllYear) return true;
   const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', month: 'numeric' }).format(date));
   return month === 6 || month === 7;
 }

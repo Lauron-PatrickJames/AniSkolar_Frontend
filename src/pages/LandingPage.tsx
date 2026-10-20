@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { mockScholarships } from '../data/scholarships';
-import { Scholarship } from '../types';
-import { mockAnnouncements } from '../data/announcements';
+import { Announcement, Scholarship } from '../types';
 import ScholarshipCard from '../components/ScholarshipCard';
+import { Bone } from '../components/Skeletons';
 import { ArrowRight, BookOpen, ShieldCheck, HelpCircle, ChevronDown, ChevronUp, Star, Users, DollarSign, Calendar, Info, AlertCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -14,13 +14,17 @@ interface LandingPageProps {
   onExploreClick: () => void;
   onViewScholarship: (id: string) => void;
   scholarships?: Scholarship[];
+  // The office's published announcements (latest first); the newest two are
+  // previewed. The section is hidden when there are none.
+  announcements?: Announcement[];
+  announcementsLoaded?: boolean;
 }
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   invalid_domain: 'Please sign in with your official DLSU-D email address (@dlsud.edu.ph). Other email accounts are not allowed.',
 };
 
-export default function LandingPage({ onLoginClick, onExploreClick, onViewScholarship, scholarships = mockScholarships }: LandingPageProps) {
+export default function LandingPage({ onLoginClick, onExploreClick, onViewScholarship, scholarships = mockScholarships, announcements = [], announcementsLoaded = true }: LandingPageProps) {
   // Local state for Accordion FAQs
   const [openFaqIdx, setOpenFaqIdx] = useState<number | null>(0);
 
@@ -246,7 +250,8 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
         </div>
       </section>
 
-      {/* 5. Latest Announcements Preview */}
+      {/* 5. Latest Announcements Preview (real posts; hidden when there are none) */}
+      {(!announcementsLoaded || announcements.length > 0) && (
       <section id="announcements" className="py-20 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
@@ -256,7 +261,16 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            {mockAnnouncements.slice(0, 2).map((ann) => (
+            {!announcementsLoaded && [0, 1].map(i => (
+              <div key={i} role="status" className="bg-white p-6 rounded-xl border border-slate-100 card-shadow space-y-3">
+                <span className="sr-only">Loading announcements…</span>
+                <div className="flex justify-between"><Bone className="h-5 w-20 rounded-full" /><Bone className="h-4 w-24" /></div>
+                <Bone className="h-5 w-3/4" />
+                <Bone className="h-3 w-full" /><Bone className="h-3 w-5/6" />
+                <Bone className="h-3 w-24" />
+              </div>
+            ))}
+            {announcements.slice(0, 2).map((ann) => (
               <div key={ann.id} className="bg-white p-6 rounded-xl border border-slate-100 card-shadow">
                 <div className="flex items-center justify-between text-xs text-slate-400 mb-3">
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-brand-green border border-emerald-100 font-bold">{ann.category}</span>
@@ -280,6 +294,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
           </div>
         </div>
       </section>
+      )}
 
       {/* 6. Frequently Asked Questions */}
       <section id="faqs" className="py-20 bg-white">

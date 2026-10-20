@@ -92,8 +92,8 @@ export default function Footer() {
             © {new Date().getFullYear()} De La Salle University–Dasmariñas. All Rights Reserved.
           </p>
           <p className="flex items-center justify-center space-x-1">
-            <span>Designed by </span>
-            <span className="text-brand-green font-semibold">CloudCore</span>
+            <span>Developed by </span>
+            <span className="text-brand-green font-semibold">Paula Ng, Allyson Martin, and Patrick Lauron</span>
           </p>
         </div>
       </div>

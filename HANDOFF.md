@@ -664,6 +664,39 @@ Follow-ups:
   which has known advisories). Keep the tarball committed; `npm install`
   needs it.
 
+## Deploying (Render backend + Vercel frontend)
+The backend runs on **Render in Singapore**, next to MongoDB Atlas
+(AWS ap-southeast-1) and the Azure storage/email in Southeast Asia (a US
+host such as Heroku adds about 1–2 s per page). The frontend's static files
+are on Vercel's CDN. Nothing is stored on the backend server itself
+(files go to Azure), so moving it to Azure App Service at handover only
+means copying the settings and changing `VITE_API_BASE_URL`.
+
+Backend on Render (`render.yaml` in the backend repo is a Blueprint):
+1. render.com → New → **Blueprint** → connect the AniSkolar_Backend repo.
+   It creates `aniskolar-api` in Singapore on the work branch
+   (`npm ci`, `npm start`, health check `/`).
+2. Fill in the settings it asks for from your backend `.env` (type them
+   in the dashboard; never commit them). `FRONTEND_ORIGINS` / `APP_URL`
+   can wait until the frontend has its address.
+3. Open `https://aniskolar-api.onrender.com/` → "AniSkolar API is running".
+4. MongoDB Atlas → Network Access: allow `0.0.0.0/0` (Render's IPs change).
+5. `plan: free` sleeps after 15 minutes idle (first visit ~1 min; timers
+   pause). Switch to **Starter** for real use.
+
+Frontend on Vercel (`vercel.json`: every path serves `index.html`, needed
+for `/sso-callback`):
+1. Import the AniSkolar_Frontend repo (Vite; `npm run build`, output
+   `dist`); production branch = the work branch until it's merged to main.
+2. Environment variables: `VITE_CLERK_PUBLISHABLE_KEY` and
+   `VITE_API_BASE_URL=https://aniskolar-api.onrender.com`.
+3. In Render, set `FRONTEND_ORIGINS` and `APP_URL` to the Vercel address
+   (no trailing slash); it redeploys by itself.
+
+Clerk's development keys work on these addresses (with a "development
+mode" badge); the production instance needs the custom domain. The
+backend also has a `Procfile`, used only if it's ever put on Heroku.
+
 ## Still needed
 - From the AdSO: Heraldo Filipino details — still being coordinated.
   (EBPSP documents and SFAG duty hours confirmed 2026-10-18.)

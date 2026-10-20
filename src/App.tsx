@@ -3,9 +3,8 @@ import { AppSkeleton, FormSkeleton } from './components/Skeletons';
 import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, SaveResult } from './types';
 import { acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships, registerCustomScholarships } from './data/scholarships';
-import { mockAnnouncements } from './data/announcements';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
-import { Holdings, applyBlock, holdingNotice, isSfagScholar } from './utils/eligibility';
+import { Holdings, applyBlock, holdingNotice, isSfagScholar, setSfagOpenAllYear } from './utils/eligibility';
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout';
@@ -182,10 +181,10 @@ export default function App() {
   // Scholarships the student holds now (GET /api/students/me/holdings): an
   // SFAG grantee can't apply for others.
   const [holdings, setHoldings] = useState<Holdings | null>(null);
-  // Published announcements from the API (GET /api/announcements/feed). The
-  // built-in sample announcements stay as a fallback if the feed can't be
-  // reached, so the portal still renders offline / without a backend.
-  const [announcements, setAnnouncements] = useState<Announcement[]>(mockAnnouncements);
+  // Published announcements from the API (GET /api/announcements/feed);
+  // empty until they load (or if the feed can't be reached).
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcementsLoaded, setAnnouncementsLoaded] = useState(false);
   // Scholarships with the AdSO's edits (status, deadline, details) from
   // GET /api/scholarships merged over the defaults in data/scholarships.ts.
   const [scholarships, setScholarships] = useState<Scholarship[]>(mockScholarships);
@@ -206,7 +205,9 @@ export default function App() {
           imageUrls: (a.imageUrls ?? []).map(url => `${API_BASE_URL}${url}`)
         })));
       } catch {
-        // Keep the fallback announcements.
+        // Leave the list empty.
+      } finally {
+        if (!cancelled) setAnnouncementsLoaded(true);
       }
     })();
     return () => { cancelled = true; };
@@ -220,6 +221,8 @@ export default function App() {
         if (!res.ok) return;
         const body = await res.json();
         if (!cancelled && Array.isArray(body.scholarships)) {
+          // The backend may lift the SFAG's June–July limit for demos.
+          setSfagOpenAllYear(body.sfagOpenAllYear === true);
           const all = applyScholarshipOverrides(mockScholarships, body.scholarships as ScholarshipOverride[]);
           // Scholarships the AdSO created become known to every lookup by id.
           registerCustomScholarships(all);
@@ -812,6 +815,8 @@ export default function App() {
                 }}
                 onViewScholarship={handleViewScholarship}
                 scholarships={scholarships}
+                announcements={announcements}
+                announcementsLoaded={announcementsLoaded}
               />
             </PublicLayout>
           );

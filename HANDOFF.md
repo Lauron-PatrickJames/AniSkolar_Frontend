@@ -9,6 +9,10 @@ AniSkolar_Backend); update your `origin` with `git remote set-url` if you
 cloned the old addresses.
 
 ## Where things stand
+- Demo mode was removed on 2026-10-20: the `aniskolar_demo` database, the
+  `aniskolar-demo` file container and `scripts/seed-demo.js` are gone. The
+  system runs on the real `aniskolar` database and `aniskolar-files`.
+- The full feature list is in **FEATURES.md**.
 - Features are essentially complete: student portal (profile, Explore /
   Compare, applications for SFAG, Entrance, EBPSP, POLCA and Alumni,
   renewals, duty hours, messages), AdSO console (applications, renewals,
@@ -23,7 +27,7 @@ cloned the old addresses.
 - Waiting on others: Heraldo Filipino details (AdSO), POLCA's rules,
   COSA accounts, DLSU-D IT for sending email as the Scholarship mailbox.
 
-Contents: After pulling · Configuration · Demo data · Rules worth knowing ·
+Contents: After pulling · Configuration · Rules worth knowing ·
 Renewals · Duty hours · Messages · Email (Outlook) · Profile · Scholarship
 status announcements · Scholarship requirements · Office facts · File
 storage · Programs list · FSE report · Still needed · Open ideas.
@@ -47,12 +51,12 @@ storage · Programs list · FSE report · Still needed · Open ideas.
 | Setting | What it does |
 |---|---|
 | `MONGODB_URI` | Atlas connection string (database `aniskolar`). |
-| `MONGODB_DB` | Optional: another database, e.g. `aniskolar_demo` (see "Demo data"). |
+| `MONGODB_DB` | Optional: another database on the same cluster (e.g. for testing); empty = `aniskolar`. |
 | `PORT` | Backend port (default 5000). |
 | `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Clerk (sign-in). |
 | `FRONTEND_ORIGINS` | Allowed frontend origins (CORS), comma-separated. |
 | `AZURE_STORAGE_CONNECTION_STRING` | Azure Blob Storage for uploaded files; empty = MongoDB GridFS. |
-| `AZURE_STORAGE_CONTAINER` | `aniskolar-files` (real) or `aniskolar-demo` (demo). |
+| `AZURE_STORAGE_CONTAINER` | `aniskolar-files`. |
 | `ACS_EMAIL_CONNECTION_STRING` | Azure Communication Services (`aniskolar-comms` → Keys); empty = no emails. |
 | `ACS_EMAIL_SENDER` | The sender, `DoNotReply@…azurecomm.net` (later `noreply@aniskolar.com`). |
 | `ADSO_NOTIFY_EMAIL` | Who is emailed when a student sends a message. |
@@ -60,6 +64,7 @@ storage · Programs list · FSE report · Still needed · Open ideas.
 | `EMAIL_SIGNATURE` | Optional: signature lines separated by `\|`, e.g. `Name, MS\|Scholarship Associate`. |
 | `APP_URL` | The frontend address used in email links. |
 | `ANNOUNCEMENT_EMAIL_BATCHES_PER_MINUTE` | Announcement BCC batches of 50 per minute (1 while on the free sender). |
+| `SFAG_OPEN_ALL_YEAR` | `true` lets the SFAG be opened outside June–July (demos/testing). **Remove before going live.** |
 | `EMAIL_SENDS_PER_MINUTE` | Personal emails (reminders, summaries) sent per minute from the outbox; default 1. |
 | `FB_PAGE_ID`, `FB_PAGE_ACCESS_TOKEN`, `FB_GRAPH_VERSION` | Facebook Page cross-posting (`services/facebook.js`). |
 
@@ -67,26 +72,6 @@ Azure (Azure for Students, resource group `aniskolar`):
 `aniskolarfiles` (storage, Southeast Asia), `aniskolar-email` (Email
 Communication Service with a free Azure-managed domain) connected to
 `aniskolar-comms` (Communication Service), both Asia Pacific.
-
-## Demo data
-`node scripts/seed-demo.js` (backend) wipes and fills the **aniskolar_demo**
-database (never the real one — the name must contain "demo") with sample
-students, applications in every status (SFAG, Entrance, EBPSP, POLCA,
-Alumni — POLCA and Alumni reviewed by their own offices, approved ones
-forwarded to the AdSO; one student holding two internal scholarships),
-an SFAG renewal period with renewals in every status (POLCA and Alumni
-have none; CEAT's 2 POLCA slots are full, Alumni's 2 campus-wide slots are
-full, and some older POLCA / Alumni scholars are marked Graduated), duty logs, offices, credited events
-and claims, and announcements (published, pinned with an image,
-scheduled, draft). Sample files go to the Azure container
-`aniskolar-demo`. Sample students have `@aniskolar-demo.invalid` emails,
-which `utils/mailer.js` never sends to. The real students' records are copied in, so your own
-accounts work (each gets an approved SFAG with duty hours). To use it,
-add `MONGODB_DB=aniskolar_demo` and `AZURE_STORAGE_CONTAINER=aniskolar-demo`
-to the backend `.env` and restart; remove both to go back. The demo also has
-messages (one waiting with a PDF) and six duty offices with slots set,
-with a few scholars still without an office, for Random assign. If you test announcement emails on the demo, use
-"Specific students" — your groupmates' real accounts are in it too.
 
 ## Rules worth knowing
 - **Scholarship cycle:** classes start in August, but applications open
@@ -328,10 +313,8 @@ their own accounts). One head per office.
 - **Messages:** one conversation per office with the AdSO (`Message.office`);
   shows in the AdSO's Messages next to students (and "New message" → a
   duty office); emails both ways.
-- Demo: three offices have sample heads (`.invalid` emails), duties before
-  Oct 5 confirmed, one flagged, an open request and an office message. To
-  see the portal yourself, put your own school email as a head in Duty
-  hours → Offices (on the demo database) and sign in again.
+- To see the portal yourself, put your own school email as a head in Duty
+  hours → Offices and sign in again.
 
 ## Download all files (.zip)
 Added 2026-10-19 (backend `routes/documentZips.js`, `archiver` package;
@@ -393,9 +376,6 @@ happens.
   reminder twice; the outbox sends `EMAIL_SENDS_PER_MINUTE` a minute and
   retries a refused email 5 times, 10 minutes apart. Failed ones are listed
   on the page with "Try them again".
-- Demo caution: the demo has real team addresses (e.g. the demo students
-  linked to your own accounts, and any head emails you typed in Offices).
-  Preview before "Run now" there.
 
 ## Messages (student ↔ AdSO)
 - One conversation per student with the AdSO (`models/Message.js`,
@@ -409,6 +389,13 @@ happens.
   open them. A message can say which of the student's applications it's
   about. Read receipts ("Seen"); pages refresh every 20 s.
 
+- **Email alerts go through the outbox** (2026-10-19): "new message"
+  alerts (and office request emails) are queued in the same outbox as the
+  Automation reminders but sent first, at most `EMAIL_SENDS_PER_MINUTE` a
+  minute, and a refused one (e.g. the free sender's 10-an-hour limit) is
+  retried after 15, 30, 45 and 60 minutes instead of being lost. Still one
+  alert per burst (none while that side's earlier message is unread).
+  Failed ones show on the Automation page.
 - **Explicit words** (2026-10-19): a message with explicit words (English
   and Filipino / Taglish, incl. disguises like "f.u.c.k", "sh1t",
   "fuuuck") isn't sent, from anyone. The message box warns while typing and
@@ -421,8 +408,7 @@ happens.
 Sent through Azure Communication Services Email (`utils/mailer.js` — the
 only file to change when switching providers). Students' and the AdSO's
 @dlsud.edu.ph mailboxes are Outlook, so emails land there (Focused inbox
-in testing). Addresses ending in `.invalid` (demo students) are never
-emailed.
+in testing). Addresses ending in `.invalid` are never emailed.
 - Message alerts: the student's school email when the AdSO writes,
   `ADSO_NOTIFY_EMAIL` when a student writes; one email per burst while
   earlier messages are unread. Off (just logged) until the backend `.env`
@@ -697,8 +683,8 @@ Follow-ups:
   open); then Procfile/engines, Vercel config, production env vars (every
   row in "Configuration", with `APP_URL` = the real address), Clerk
   production instance + DNS, Microsoft OAuth app, Facebook Page.
-- Before going live: switch off the demo (`MONGODB_DB`,
-  `AZURE_STORAGE_CONTAINER=aniskolar-files`), and set
+- Before going live: remove `SFAG_OPEN_ALL_YEAR` (on for the Oct 2026
+  demo) and set
   `ANNOUNCEMENT_EMAIL_BATCHES_PER_MINUTE` and `EMAIL_SENDS_PER_MINUTE` to
   what the sender allows; turn on the Automation jobs the office wants.
 

@@ -277,6 +277,7 @@ interface DraftData {
   siblings: SfagSibling[];
   assetsExpenses: SfagAssetsExpenses;
   agreement: SfagAgreement;
+  requestedGrant?: number | null;
   firstName: string;
   middleName: string;
   lastName: string;
@@ -320,7 +321,7 @@ export default function ApplyScholarship(props: ApplyScholarshipProps) {
 
 type StdSectionKey =
   | 'profile'
-  | 'personal' | 'contact' | 'parents' | 'siblings' | 'assets' | 'agreement'
+  | 'grant' | 'personal' | 'contact' | 'parents' | 'siblings' | 'assets' | 'agreement'
   | 'documents' | 'review';
 
 const PART_LABELS: Record<string, string> = {
@@ -330,6 +331,7 @@ const PART_LABELS: Record<string, string> = {
 };
 
 const SFAG_SECTIONS: (WizardSection & { key: StdSectionKey })[] = [
+  { key: 'grant', label: 'Grant', part: 'form' },
   { key: 'personal', label: 'Personal Info', part: 'form' },
   { key: 'contact', label: 'Contact & School', part: 'form' },
   { key: 'parents', label: 'Parents & Guardian', part: 'form' },
@@ -453,6 +455,11 @@ function StandardApplyScholarship({
   const [assetsExpenses, setAssetsExpenses] = useState<SfagAssetsExpenses>(
     existingApplication?.sfagDetails?.assetsExpenses ?? savedDraft?.assetsExpenses ?? emptyAssetsExpenses()
   );
+  // The tuition discount the student applies for; the AdSO approves it or
+  // grants another.
+  const [requestedGrant, setRequestedGrant] = useState<number | null>(
+    existingApplication?.sfagDetails?.requestedGrant ?? savedDraft?.requestedGrant ?? null
+  );
   const [agreement, setAgreement] = useState<SfagAgreement>(
     existingApplication?.sfagDetails?.agreement ?? savedDraft?.agreement ?? { certifyConsulted: false, certifyAccuracy: false }
   );
@@ -539,6 +546,7 @@ function StandardApplyScholarship({
       siblings,
       assetsExpenses,
       agreement,
+      requestedGrant,
       firstName,
       middleName,
       lastName,
@@ -560,7 +568,7 @@ function StandardApplyScholarship({
     }
   }, [
     currentKey, visited, personalInfo, contactSchool, parentsGuardian, siblings,
-    assetsExpenses, agreement, firstName, middleName, lastName, email, phone, program,
+    assetsExpenses, agreement, requestedGrant, firstName, middleName, lastName, email, phone, program,
     yearLevel, gpa, uploads, scholarship.id, student.studentNumber, student.clerkId, isResubmit, isSuccess
   ]);
 
@@ -690,6 +698,7 @@ function StandardApplyScholarship({
   const validateSection = (key: StdSectionKey): Record<string, string> => {
     switch (key) {
       case 'profile': return validateStandardFields();
+      case 'grant': return requestedGrant ? {} : { requestedGrant: 'Choose the grant you’re applying for.' };
       case 'personal': return validateSfagStep(1);
       case 'contact': return validateSfagStep(2);
       case 'parents': return validateSfagStep(3);
@@ -771,7 +780,8 @@ function StandardApplyScholarship({
     parentsGuardian,
     siblings,
     assetsExpenses,
-    agreement
+    agreement,
+    requestedGrant
   });
 
   // Matches your real backend contract: POST /api/applications, multipart/form-data,
@@ -806,6 +816,7 @@ function StandardApplyScholarship({
       formData.append('siblings', JSON.stringify(sfagDetails.siblings));
       formData.append('assetsExpenses', JSON.stringify(sfagDetails.assetsExpenses));
       formData.append('agreement', JSON.stringify(sfagDetails.agreement));
+      if (sfagDetails.requestedGrant) formData.append('sfagPercentageRequested', String(sfagDetails.requestedGrant));
     } else {
       formData.append('standardInfo', JSON.stringify({ firstName, middleName, lastName, email, phone, studentNumber, program, yearLevel, gpa }));
     }
@@ -1196,6 +1207,22 @@ function StandardApplyScholarship({
     { key: 'amortizationAuto', label: 'Amortization (Auto)' }
   ];
 
+  const renderGrant = () => (
+    <div className="space-y-6">
+      <Block>
+        <SubHeading>Grant you’re applying for <Req /></SubHeading>
+        <p className="text-xs text-slate-500 mb-3">The tuition discount you’re asking for. The scholarship office reviews your finances and may grant a different one. It also sets your duty hours as a scholar.</p>
+        <ChoicePills
+          value={requestedGrant ? `${requestedGrant}%` : ''}
+          onChange={v => { setRequestedGrant(Number(v.replace('%', ''))); clearFieldError('requestedGrant'); }}
+          options={['100%', '75%', '50%', '25%']}
+          invalid={!!fieldError('requestedGrant')}
+        />
+        <FieldError message={fieldError('requestedGrant')} />
+      </Block>
+    </div>
+  );
+
   const renderAssets = () => (
     <div className="space-y-6">
       <Block>
@@ -1311,6 +1338,7 @@ function StandardApplyScholarship({
 
   const SECTION_RENDERERS: Record<StdSectionKey, () => React.ReactNode> = {
     profile: renderProfile,
+    grant: renderGrant,
     personal: renderPersonal,
     contact: renderContact,
     parents: renderParents,

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Building2, CalendarClock, Clock, Mail, Play, RefreshCw, Shuffle, Sunrise } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
-import { Alert, Badge, Button, Card, Checkbox, ErrorState, Field, Modal, PageHeader, Skeleton, Table, Td, TextInput, Th, Toast, Tr } from './AdminUI';
+import { ResultDialog, Alert, Badge, Button, Card, Checkbox, ErrorState, Field, Modal, PageHeader, Skeleton, Table, Td, TextInput, Th, Toast, Tr } from './AdminUI';
 
 // AdSO: what AniSkolar does on its own (backend utils/automation.js):
 // reminders, the morning summary and the start-of-semester office
@@ -69,6 +69,7 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
   const [error, setError] = useState('');
   const [saving, setSaving] = useState<string | null>(null);
   const [toast, setToast] = useState('');
+  const [result, setResult] = useState('');
   const [preview, setPreview] = useState<JobName | null>(null);
   const [outboxOpen, setOutboxOpen] = useState(false);
 
@@ -189,7 +190,7 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
           onRan={(view, result) => {
             setData(view);
             setPreview(null);
-            setToast(`${result.summary}${result.queued ? ` Queued ${result.queued} email${result.queued === 1 ? '' : 's'}.` : ''}`);
+            setResult(`${result.summary}${result.queued ? ` Queued ${result.queued} email${result.queued === 1 ? '' : 's'}.` : ''}`);
           }}
         />
       )}
@@ -197,10 +198,11 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
         <FailedEmailsDialog
           call={call}
           onClose={() => setOutboxOpen(false)}
-          onRetried={(view, n) => { setData(view); setOutboxOpen(false); setToast(`Sending ${n} email${n === 1 ? '' : 's'} again.`); }}
+          onRetried={(view, n) => { setData(view); setOutboxOpen(false); setResult(`Sending ${n} email${n === 1 ? '' : 's'} again.`); }}
         />
       )}
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
+      {result && <ResultDialog message={result} onClose={() => setResult('')} />}
     </div>
   );
 }

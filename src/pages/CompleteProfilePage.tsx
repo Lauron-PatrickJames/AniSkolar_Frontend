@@ -1,21 +1,25 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth, useClerk, useUser } from '@clerk/react';
-import { ArrowLeft, ArrowRight, Check, LogOut } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, LogOut, Pencil, ShieldCheck } from 'lucide-react';
 import { StudentProfile } from '../types';
 import logo from '../assets/logo.png';
-import { Alert, Button, Field, TextInput } from './admin/AdminUI';
+import { Alert, Button, Checkbox, Field, TextInput } from './admin/AdminUI';
 import { AcademicFields, ContactFields, FamilyFields, PersonalFields } from '../components/profile/ProfileFormSections';
 import {
   DraftErrors, DraftField, ProfileDraft, SECTION_FIELDS, draftToPayload, emptyDraft, validateDraft
 } from '../components/profile/profileForm';
 import { nameInitials, titleCaseName } from '../utils/names';
+import { collegeName, findProgram } from '../data/programs';
+import { formatLongDate } from '../utils/profile';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 // First sign-in: the student links their student number and fills in their
-// profile in three short steps. Only the first step is required; the rest
-// can be skipped and added later from Profile. Name and email come from the
-// university account and are shown, not asked for.
+// profile in three steps, then reviews it and agrees that it's accurate.
+// Everything is required except the telephone and the name suffix (and a
+// 1st year's GPA). Name and email come from the university account. After
+// this, identity details (name, birth details, nationality, civil status,
+// program) can only be changed by the AdSO; see Profile.
 
 interface CompleteProfilePageProps {
   onComplete: (student: StudentProfile) => void;
@@ -31,15 +35,21 @@ const STEPS: { title: string; description: string; fields: FieldKey[] }[] = [
   },
   {
     title: 'About you',
-    description: 'Used to fill in your scholarship applications for you. You can skip this and add it later.',
+    description: 'Used to fill in your scholarship applications for you, so enter it exactly as on your birth certificate.',
     fields: [...SECTION_FIELDS.personal, ...SECTION_FIELDS.contact],
   },
   {
     title: 'Parents and guardian',
-    description: 'Asked by most scholarship applications. You can skip this and add it later.',
+    description: 'Asked by every scholarship application.',
     fields: SECTION_FIELDS.family,
   },
+  {
+    title: 'Review and confirm',
+    description: 'Check your details before you finish. Some of them can’t be changed by you afterwards.',
+    fields: [],
+  },
 ];
+const REVIEW_STEP = STEPS.length - 1;
 
 const stepOf = (field: FieldKey) => STEPS.findIndex(s => s.fields.includes(field));
 
@@ -87,6 +97,9 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
   const [serverError, setServerError] = useState('');
   const [studentNumberTaken, setStudentNumberTaken] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // The review step's agreement.
+  const [agreed, setAgreed] = useState(false);
+  const [agreeError, setAgreeError] = useState(false);
 
   const formRef = useRef<HTMLFormElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -134,7 +147,7 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
   };
 
   const submit = async () => {
-    // Everything entered so far must be valid, even in skipped steps.
+    // Every step must be valid.
     const bad = firstStepWithErrors();
     if (bad >= 0) {
       setAttempted(prev => new Set(prev).add(bad));
@@ -149,7 +162,7 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
       const res = await fetch(`${API_BASE_URL}/api/students/complete-profile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ studentNumber: studentNumber.trim(), ...draftToPayload(draft) }),
+        body: JSON.stringify({ studentNumber: studentNumber.trim(), ...draftToPayload(draft), agreed }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -180,8 +193,9 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
       focusFirstError(step);
       return;
     }
-    if (step < STEPS.length - 1) goTo(step + 1);
-    else submit();
+    if (step < REVIEW_STEP) { goTo(step + 1); return; }
+    if (!agreed) { setAgreeError(true); return; }
+    submit();
   };
 
   const accountFirst = user?.firstName?.trim() ?? '';
@@ -224,7 +238,7 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
 
         <form ref={formRef} onSubmit={onSubmit} noValidate className="rounded-card bg-surface shadow-card ring-1 ring-line">
           <div className="border-b border-line px-5 pb-5 pt-4 sm:px-6">
-            <ol className="mb-4 grid grid-cols-3 gap-2" aria-label="Progress">
+            <ol className="mb-4 grid grid-cols-4 gap-2" aria-label="Progress">
               {STEPS.map((s, i) => {
                 const done = i < step;
                 const current = i === step;
@@ -293,29 +307,120 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
             )}
 
             {step === 2 && <FamilyFields draft={draft} update={update} errorFor={errorFor} touch={touch} />}
+
+            {step === REVIEW_STEP && (
+              <ReviewStep
+                studentNumber={studentNumber}
+                draft={draft}
+                accountName={accountName}
+                email={email}
+                onEdit={goTo}
+                agreed={agreed}
+                onAgree={v => { setAgreed(v); if (v) setAgreeError(false); }}
+                agreeError={agreeError}
+              />
+            )}
           </div>
 
           <div className="flex flex-col-reverse gap-2 border-t border-line bg-surface-muted px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:rounded-b-card sm:px-6">
             <div>
               {step > 0 && <Button icon={ArrowLeft} onClick={() => goTo(step - 1)} disabled={submitting} className="w-full sm:w-auto">Back</Button>}
             </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
-              {step > 0 && (
-                <Button variant="ghost" onClick={submit} disabled={submitting} className="w-full sm:w-auto">
-                  Skip for now
-                </Button>
-              )}
-              <Button type="submit" variant="primary" loading={submitting} iconRight={isLast ? undefined : ArrowRight} className="w-full sm:w-auto">
-                {isLast ? 'Finish and go to portal' : 'Continue'}
-              </Button>
-            </div>
+            <Button type="submit" variant="primary" loading={submitting} icon={isLast ? ShieldCheck : undefined} iconRight={isLast ? undefined : ArrowRight} className="w-full sm:w-auto">
+              {isLast ? 'Confirm and finish' : step === REVIEW_STEP - 1 ? 'Review my details' : 'Continue'}
+            </Button>
           </div>
         </form>
 
         <p className="text-center text-xs text-ink-subtle">
-          You can change any of this later from your Profile.
+          Your progress is kept if you refresh this page.
         </p>
       </main>
+    </div>
+  );
+}
+
+// The last step: everything entered, grouped, with "Edit" back to its step,
+// and the agreement that it's accurate and permanent.
+function ReviewStep({ studentNumber, draft, accountName, email, onEdit, agreed, onAgree, agreeError }: {
+  studentNumber: string;
+  draft: ProfileDraft;
+  accountName: string;
+  email: string;
+  onEdit: (step: number) => void;
+  agreed: boolean;
+  onAgree: (value: boolean) => void;
+  agreeError: boolean;
+}) {
+  const program = findProgram(draft.programCode);
+  const ph = draft.country === 'Philippines';
+  const fullName = [accountName, draft.nameSuffix].filter(Boolean).join(' ');
+  const parentLine = (name: string, contact: string, deceased: boolean) => (deceased ? `${name} (deceased)` : [name, contact].filter(Boolean).join(' · '));
+  const guardian = draft.guardianType === 'father' ? 'Same as father'
+    : draft.guardianType === 'mother' ? 'Same as mother'
+      : [draft.guardianName, draft.guardianRelationship, draft.guardianContactNo].filter(Boolean).join(' · ');
+  const groups: { title: string; step: number; rows: [string, string][] }[] = [
+    {
+      title: 'Your studies', step: 0, rows: [
+        ['Student number', studentNumber],
+        ['Program', program ? `${program.name} (${program.code})` : ''],
+        ['Department', program ? collegeName(program.college) : ''],
+        ['Year level and section', [draft.yearLevel, draft.section.toUpperCase()].filter(Boolean).join(' · ')],
+        ['Cumulative GPA', draft.gpa || 'None yet'],
+      ],
+    },
+    {
+      title: 'About you', step: 1, rows: [
+        ['Name', `${fullName}${draft.middleName ? ` (middle name: ${draft.middleName})` : ''}`],
+        ['Date and place of birth', [formatLongDate(draft.dateOfBirth), draft.placeOfBirth].filter(Boolean).join(' · ')],
+        ['Nationality and civil status', [draft.nationality, draft.civilStatus].filter(Boolean).join(' · ')],
+        ['Email', email],
+        ['Mobile', [draft.mobileNumber, draft.telephoneNumber].filter(Boolean).join(' · ')],
+        ['Home address', [draft.homeAddress, draft.cityMunicipality, [draft.province, draft.zipCode].filter(Boolean).join(' '), ph ? '' : draft.country].filter(Boolean).join(', ')],
+      ],
+    },
+    {
+      title: 'Parents and guardian', step: 2, rows: [
+        ['Father', parentLine(draft.fatherName, draft.fatherContactNo, draft.fatherDeceased)],
+        ['Mother', parentLine(draft.motherName, draft.motherContactNo, draft.motherDeceased)],
+        ['Guardian', guardian],
+      ],
+    },
+  ];
+  return (
+    <div className="space-y-5">
+      {groups.map(g => (
+        <section key={g.title} className="rounded-control ring-1 ring-line">
+          <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
+            <h3 className="text-sm font-semibold text-ink">{g.title}</h3>
+            <Button size="sm" variant="ghost" icon={Pencil} onClick={() => onEdit(g.step)}>Edit</Button>
+          </div>
+          <dl className="divide-y divide-line">
+            {g.rows.map(([label, value]) => (
+              <div key={label} className="grid grid-cols-1 gap-0.5 px-4 py-2 sm:grid-cols-[12rem_1fr] sm:gap-3">
+                <dt className="text-xs text-ink-subtle sm:text-sm">{label}</dt>
+                <dd className="text-sm text-ink">{value || '—'}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ))}
+
+      <section className={`space-y-3 rounded-control p-4 ring-1 ${agreeError ? 'bg-danger-bg ring-danger' : 'bg-surface-muted ring-line'}`}>
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-ink"><ShieldCheck className="size-4 text-accent" aria-hidden />Before you finish</h3>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-ink-muted">
+          <li>Your scholarship applications are filled in from these details, and the office checks them against your documents.</li>
+          <li><span className="font-medium text-ink">Your name, birth details, nationality, civil status and program are permanent once you finish.</span> To correct them later, send a request to the Admissions and Scholarship Office (Profile → Request a change).</li>
+          <li>You can still update your year level, section, GPA, contact details and family details from your Profile.</li>
+          <li>Giving false information can lead to your application being rejected or your scholarship being revoked.</li>
+        </ul>
+        <Checkbox
+          checked={agreed}
+          onChange={onAgree}
+          label="I confirm that these details are true, complete and mine, and I agree to the terms above."
+        />
+        {agreeError && <p role="alert" className="text-xs font-medium text-danger">Tick the box to confirm before you finish.</p>}
+      </section>
     </div>
   );
 }

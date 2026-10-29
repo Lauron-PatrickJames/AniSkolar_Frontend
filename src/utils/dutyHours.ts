@@ -111,12 +111,33 @@ export function isTimeRange(timeIn: string, timeOut: string): boolean {
 // PM, Friday 8:00 AM–5:00 PM, never across the 12:00–1:00 PM lunch break,
 // and at least 1.5 hours at a time. Returns the reason an entry breaks
 // these, or null. Mirrors dutyRuleError in the backend's utils/dutyHours.js.
-export const DUTY_RULES_TEXT = 'Mon–Thu 8:00 AM–6:00 PM, Fri 8:00 AM–5:00 PM, not across 12:00–1:00 PM, at least 1.5 hours per duty.';
+export const DUTY_RULES_TEXT = 'Mon–Thu 8:00 AM–6:00 PM, Fri 8:00 AM–5:00 PM, not across 12:00–1:00 PM, at least 1.5 hours per duty, in 30-minute steps.';
+
+// Every half hour from 8:00 AM to 6:00 PM ("08:00", "08:30", …, "18:00").
+export const HALF_HOURS: string[] = Array.from({ length: 21 }, (_, i) => {
+  const m = 8 * 60 + i * 30;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+});
+
+// The times a duty on `date` can start and end at (30-minute steps, within
+// the day's hours, not across lunch, at least 1.5 hours). End options
+// depend on the chosen start.
+export function dutyTimeOptions(date: string, timeIn: string): { starts: string[]; ends: string[] } {
+  const day = date ? utc(date).getUTCDay() : 1;
+  const close = day === 5 ? 17 * 60 : 18 * 60;
+  const ok = (a: number, b: number) => b - a >= 90 && b <= close && !(a < 13 * 60 && b > 12 * 60);
+  const all = HALF_HOURS.map(minutes);
+  const starts = all.filter(a => all.some(b => ok(a, b))).map(a => HALF_HOURS[all.indexOf(a)]);
+  const start = timeIn ? minutes(timeIn) : null;
+  const ends = start === null ? [] : all.filter(b => ok(start, b)).map(b => HALF_HOURS[all.indexOf(b)]);
+  return { starts, ends };
+}
 export function dutyRuleError({ date, timeIn, timeOut }: Pick<DutyEntry, 'date' | 'timeIn' | 'timeOut'>): string | null {
   const day = utc(date).getUTCDay();
   if (day === 0 || day === 6) return 'Duty is only on weekdays (Monday to Friday).';
   const start = minutes(timeIn);
   const end = minutes(timeOut);
+  if (start % 30 || end % 30) return 'Use times on the hour or half hour, like 8:00 or 8:30.';
   if (start < 8 * 60) return 'Duty starts at 8:00 AM at the earliest.';
   if (day === 5 && end > 17 * 60) return 'Duty ends by 5:00 PM on Fridays.';
   if (end > 18 * 60) return 'Duty ends by 6:00 PM, Monday to Thursday.';

@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { AlertCircle, Building2, CalendarDays, Clock, Loader2, Plus, Printer, RefreshCw, Trash2, Check } from 'lucide-react';
+import { AlertCircle, Building2, CalendarDays, Clock, Loader2, Plus, Printer, RefreshCw, Trash2, Check, Lock, Target } from 'lucide-react';
 import { StudentProfile } from '../../types';
 import {
-  ClaimStatus, CreditedEvent, DUTY_TERMS, DutyEntry, DutyLog, DutyRule, DutySummary, DutyTerm, EventClaim, entryHours, format12h, formatDutyDate, formatHours, yearGroupLabel, dutyRuleError, DUTY_RULES_TEXT,
+  ClaimStatus, CreditedEvent, DUTY_TERMS, DutyEntry, DutyLog, DutyRule, DutySummary, DutyTerm, EventClaim, entryHours, format12h, formatDutyDate, formatHours, yearGroupLabel, dutyRuleError, DUTY_RULES_TEXT, dutyTimeOptions,
   isTimeRange, sortEntries, summarize, termLabel, todayInManila, weekday, weeklyTotals
 } from '../../utils/dutyHours';
 import { StatsTableSkeleton } from '../../components/Skeletons';
@@ -11,8 +11,9 @@ import { StatsTableSkeleton } from '../../components/Skeletons';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 // Duty hours for SFAG scholars, replacing the office's "SFAG Duty
-// Calculator" sheet: the AdSO assigns the office; the scholar enters the
-// deadline, required hours and each duty (date, time in, time out), and
+// Calculator" sheet: the AdSO assigns the office and sets the term's
+// deadline; the scholar enters each duty (date, time in, time out, in
+// 30-minute steps), and
 // claims the credited events they attended; the day,
 // hours, totals and weekly breakdown are worked out here. Saved to
 // /api/duty-hours/mine so the AdSO can monitor it.
@@ -44,6 +45,8 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
   const [claimBusy, setClaimBusy] = useState<string | null>(null);
   // The office has a head in AniSkolar: only duties they confirm count.
   const [confirmationRequired, setConfirmationRequired] = useState(false);
+  // The office head has evaluated this term (scores aren't shown).
+  const [evaluated, setEvaluated] = useState(false);
 
   const load = useCallback(async (t: TermKey | null) => {
     setLoading(true);
@@ -58,6 +61,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       setKnownTerms(body.terms ?? []);
       setLog(body.log);
       setConfirmationRequired(!!body.summary?.confirmationRequired);
+      setEvaluated(!!body.evaluated);
       if (body.rule) setRule(body.rule);
       setEvents(body.events ?? []);
       setClaims(body.claims ?? []);
@@ -188,18 +192,36 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
         </p>
       )}
 
+      {summary.required !== null && summary.completed >= summary.required && (
+        <div role="status" className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:p-5">
+          <Check className="w-5 h-5 shrink-0 mt-0.5 text-brand-green" aria-hidden />
+          <div className="text-sm text-emerald-900 leading-relaxed">
+            <p className="font-bold">You’ve completed your duty hours for this semester.</p>
+            <p>
+              {evaluated
+                ? `${log.officeAssigned || 'Your office'} has evaluated you. It goes into your renewal for next semester.`
+                : `${log.officeAssigned ? `The head of ${log.officeAssigned}` : 'Your office'} has been asked to evaluate you; it goes into your renewal for next semester. There’s nothing else you need to do for duty hours this semester.`}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <DetailsCard log={log} rule={rule} onSave={save} saveState={saveState} />
         <SummaryCard summary={summary} />
       </div>
 
-      <AddDutyForm log={log} onSave={save} />
+      {/* Duty is rendered in the office the AdSO assigns, so logging opens
+          once there is one (the server refuses new duties before that). */}
+      {log.officeAssigned ? <AddDutyForm log={log} onSave={save} /> : <AwaitingOfficeCard />}
 
-      <RegularDutyTable log={log} onSave={save} confirmationRequired={confirmationRequired} />
+      {(log.officeAssigned || log.entries.length > 0) && (
+        <RegularDutyTable log={log} onSave={save} confirmationRequired={confirmationRequired} />
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${log.entries.length > 0 ? 'lg:grid-cols-2' : ''}`}>
         <EventsCard events={events} claims={claims} busyId={claimBusy} onClaim={id => claimEvent(id, false)} onWithdraw={id => claimEvent(id, true)} />
-        <WeeklyCard entries={log.entries} />
+        {log.entries.length > 0 && <WeeklyCard entries={log.entries} />}
       </div>
     </div>
   );
@@ -212,18 +234,16 @@ function DetailsCard({ log, rule, onSave, saveState }: {
 }) {
   // Set by the AdSO for the scholar's grant percentage: shown, not edited.
   const hoursFromAdso = rule.requiredHours !== null;
-  const [deadline, setDeadline] = useState(log.deadline ?? '');
   const [required, setRequired] = useState(log.requiredHours !== undefined ? String(log.requiredHours) : '');
   useEffect(() => {
-    setDeadline(log.deadline ?? '');
     setRequired(log.requiredHours !== undefined ? String(log.requiredHours) : '');
-  }, [log.academicYear, log.term, log.deadline, log.requiredHours]);
+  }, [log.academicYear, log.term, log.requiredHours]);
 
   const commit = () => {
     const req = required.trim() === '' ? undefined : Number(required);
     if (req !== undefined && (!Number.isFinite(req) || req < 0)) return;
-    if (deadline === (log.deadline ?? '') && (hoursFromAdso || req === log.requiredHours)) return;
-    onSave({ ...log, deadline: deadline || undefined, requiredHours: hoursFromAdso ? log.requiredHours : req });
+    if (hoursFromAdso || req === log.requiredHours) return;
+    onSave({ ...log, requiredHours: req });
   };
 
   return (
@@ -245,10 +265,14 @@ function DetailsCard({ log, rule, onSave, saveState }: {
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
-        <label className="block">
+        <div>
           <span className={labelClass}>Deadline</span>
-          <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} onBlur={commit} className={`mt-1.5 ${inputClass}`} />
-        </label>
+          <p className="mt-1.5 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-900">
+            <Lock className="w-3.5 h-3.5 shrink-0 text-slate-400" aria-hidden />
+            {log.deadline ? formatDutyDate(log.deadline, true) : <span className="font-normal text-slate-500">Not set yet</span>}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">Set by the scholarship office for everyone.</p>
+        </div>
         {hoursFromAdso ? (
           <div>
             <span className={labelClass}>Required hours</span>
@@ -289,11 +313,11 @@ function SummaryCard({ summary }: { summary: DutySummary }) {
       ].filter(Boolean).join(' · ') || undefined,
     },
     { label: 'Hours remaining', value: summary.remaining === null ? '—' : formatHours(Math.max(0, summary.remaining)), hint: summary.remaining !== null && summary.remaining < 0 ? `${formatHours(-summary.remaining)} over the requirement` : summary.required === null ? 'Enter the required hours' : undefined },
-    { label: 'Weekly hours needed', value: formatHours(summary.weeklyNeeded), hint: summary.weeklyNeeded === null ? (summary.required === null ? undefined : 'Enter the deadline') : 'to finish by the deadline' },
+    { label: 'Weekly hours needed', value: formatHours(summary.weeklyNeeded), hint: summary.weeklyNeeded === null ? (summary.required === null ? undefined : 'Shown once the office sets the deadline') : 'to finish by the deadline' },
   ];
   return (
     <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-5">
-      <h3 className="font-display font-bold text-base text-slate-900">Duty hours</h3>
+      <h3 className="flex items-center gap-2 font-display font-bold text-base text-slate-900"><Target className="w-4 h-4 text-brand-green" aria-hidden />Your progress</h3>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {stats.map(s => (
           <div key={s.label}>
@@ -319,6 +343,18 @@ function SummaryCard({ summary }: { summary: DutySummary }) {
 
 // --- Regular duty ------------------------------------------------------------------
 
+function AwaitingOfficeCard() {
+  return (
+    <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-6 sm:p-8 text-center space-y-2">
+      <Building2 className="w-8 h-8 text-slate-300 mx-auto" aria-hidden />
+      <h3 className="font-display font-bold text-base text-slate-900">Waiting for your office assignment</h3>
+      <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+        You can log duties once the scholarship office assigns where you'll render them. You'll see the office under Details. Credited events below can be claimed anytime.
+      </p>
+    </div>
+  );
+}
+
 function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => void }) {
   const [date, setDate] = useState(todayInManila());
   const [timeIn, setTimeIn] = useState('');
@@ -327,6 +363,8 @@ function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => 
 
   const valid = date && isTimeRange(timeIn, timeOut);
   const hours = valid ? entryHours({ timeIn, timeOut }) : null;
+  const { starts, ends } = dutyTimeOptions(date, timeIn);
+  const weekend = date ? ['Sat', 'Sun'].includes(weekday(date)) : false;
 
   const add = (e: React.FormEvent) => {
     e.preventDefault();
@@ -353,11 +391,27 @@ function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => 
         </label>
         <label className="block">
           <span className={labelClass}>Time in</span>
-          <input type="time" value={timeIn} onChange={e => setTimeIn(e.target.value)} className={`mt-1.5 ${inputClass}`} />
+          <select
+            value={timeIn}
+            disabled={weekend}
+            onChange={e => { setTimeIn(e.target.value); if (timeOut && !dutyTimeOptions(date, e.target.value).ends.includes(timeOut)) setTimeOut(''); }}
+            className={`mt-1.5 ${inputClass} disabled:bg-slate-50 disabled:text-slate-400`}
+          >
+            <option value="" disabled>Select</option>
+            {starts.map(t => <option key={t} value={t}>{format12h(t)}</option>)}
+          </select>
         </label>
         <label className="block">
           <span className={labelClass}>Time out</span>
-          <input type="time" value={timeOut} onChange={e => setTimeOut(e.target.value)} className={`mt-1.5 ${inputClass}`} />
+          <select
+            value={timeOut}
+            disabled={!timeIn || weekend}
+            onChange={e => setTimeOut(e.target.value)}
+            className={`mt-1.5 ${inputClass} disabled:bg-slate-50 disabled:text-slate-400`}
+          >
+            <option value="" disabled>{timeIn ? 'Select' : 'Pick time in first'}</option>
+            {ends.map(t => <option key={t} value={t}>{format12h(t)} ({formatHours(entryHours({ timeIn, timeOut: t }))} h)</option>)}
+          </select>
         </label>
         <button type="submit" className="inline-flex items-center justify-center gap-1.5 font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-3 rounded-xl transition-colors">
           <Plus className="w-4 h-4" /> Add duty
@@ -366,9 +420,10 @@ function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => 
       <p className="text-xs text-slate-500 flex items-center gap-1.5">
         <Clock className="w-3.5 h-3.5 text-slate-400" aria-hidden />
         {date ? `${weekday(date)}, ${formatDutyDate(date, true)}` : 'Choose a date'}
+        {weekend && <span className="font-semibold text-amber-700"> · No duty on weekends</span>}
         {hours !== null && <> · <span className="font-bold text-slate-700">{formatHours(hours)} hours</span></>}
       </p>
-      <p className="text-[11px] text-slate-500">Duty hours: {DUTY_RULES_TEXT}</p>
+      <p className="rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-500"><span className="font-semibold text-slate-700">Duty rules:</span> {DUTY_RULES_TEXT} Only times that fit these rules are listed.</p>
       {error && <p role="alert" className="text-xs font-semibold text-rose-600">{error}</p>}
     </form>
   );

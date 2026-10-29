@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
 import { GraduationCap, MapPin, User, Users } from 'lucide-react';
-import { ProfileChanges, SaveResult, StudentProfile, VerificationGroup } from '../../types';
+import { CorrectionGroup, ProfileChanges, SaveResult, StudentProfile, VerificationGroup } from '../../types';
 import { Alert, Button, Field, Modal, Textarea } from '../../pages/admin/AdminUI';
 import { AcademicFields, ContactFields, FamilyFields, LockedValue, PersonalFields } from './ProfileFormSections';
 import {
@@ -15,7 +15,9 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 // Edit profile: one dialog with a tab per section and a single "Save
 // changes" for all of them. Opening from a section's Edit button selects
 // that tab (and `focusField` focuses a field, e.g. from an "Add" link).
-// Verified academic details are read-only with "Request correction".
+// Verified academic details are read-only with "Request correction", and so
+// are the identity details set at sign-up (name, birth details, nationality,
+// civil status, program): only the AdSO changes those, on request.
 
 export const SECTIONS: { key: DraftSection; label: string; icon: React.ElementType }[] = [
   { key: 'academic', label: 'Academic', icon: GraduationCap },
@@ -25,16 +27,23 @@ export const SECTIONS: { key: DraftSection; label: string; icon: React.ElementTy
 ];
 
 // Draft fields per verification group (locked when verified).
-const GROUP_FIELDS: Record<VerificationGroup, DraftField[]> = {
+const GROUP_FIELDS: Record<CorrectionGroup, DraftField[]> = {
   program: ['programCode'],
   enrollment: ['yearLevel', 'section'],
   gpa: ['gpa'],
+  personal: ['middleName', 'nameSuffix', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'],
 };
+// Personal details the student can no longer change once they're all set
+// (older accounts can still fill in what's missing).
+const IDENTITY_REQUIRED: (keyof StudentProfile)[] = ['middleName', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'];
 
 const sectionOf = (field: DraftField) => (Object.keys(SECTION_FIELDS) as DraftSection[]).find(s => SECTION_FIELDS[s].includes(field));
 
-export default function EditProfileDialog({ student, initialSection = 'academic', focusField, onClose, onSave, onStudentUpdated }: {
+export default function EditProfileDialog({ student, initialSection = 'academic', focusField, onClose, onSave, onStudentUpdated, adminMode = false }: {
   student: StudentProfile;
+  // The AdSO editing a student's profile on their request: nothing is
+  // locked (identity and verified details included).
+  adminMode?: boolean;
   initialSection?: DraftSection;
   focusField?: DraftField;
   onClose: (saved: boolean) => void;
@@ -53,7 +62,13 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
   const panelRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const lockedGroups = (Object.keys(GROUP_FIELDS) as VerificationGroup[]).filter(g => verificationOf(student, g));
+  const personalLocked = !adminMode && IDENTITY_REQUIRED.every(f => String(student[f] ?? '').trim());
+  const programLocked = !adminMode && !!student.programCode;
+  const lockedGroups: CorrectionGroup[] = adminMode ? [] : [
+    ...(['enrollment', 'gpa'] as VerificationGroup[]).filter(g => verificationOf(student, g)),
+    ...(programLocked || verificationOf(student, 'program') ? ['program' as const] : []),
+    ...(personalLocked ? ['personal' as const] : []),
+  ];
   const lockedFields = new Set(lockedGroups.flatMap(g => GROUP_FIELDS[g]));
 
   const allErrors = validateDraft(draft, { requireAcademic: true });
@@ -116,13 +131,13 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
   // Verified groups: read-only, with a correction request.
   const details = programDetails(student);
   const locked: Partial<Record<VerificationGroup, React.ReactNode>> = {};
-  if (verificationOf(student, 'program')) {
+  if (!adminMode && (verificationOf(student, 'program') || programLocked)) {
     locked.program = <LockedGroup student={student} group="program" label="Program" value={<>{details.name}{details.college ? <span className="block text-ink-muted">{details.college}</span> : null}</>} onStudentUpdated={onStudentUpdated} />;
   }
-  if (verificationOf(student, 'enrollment')) {
+  if (!adminMode && verificationOf(student, 'enrollment')) {
     locked.enrollment = <LockedGroup student={student} group="enrollment" label="Year level and section" value={[student.yearLevel, student.section].filter(Boolean).join(' · ') || 'Not provided'} onStudentUpdated={onStudentUpdated} />;
   }
-  if (verificationOf(student, 'gpa')) {
+  if (!adminMode && verificationOf(student, 'gpa')) {
     locked.gpa = <LockedGroup student={student} group="gpa" label="Cumulative GPA" value={formatGpa(student.gpa) || 'Not provided'} onStudentUpdated={onStudentUpdated} />;
   }
 
@@ -131,7 +146,7 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
     <Modal
       sheet
       size="lg"
-      title="Edit profile"
+      title={adminMode ? `Edit ${titleCaseName(student.name)}'s profile` : 'Edit profile'}
       onClose={requestClose}
       dismissible={!saving}
       bodyClassName="flex min-h-0 flex-col p-0 sm:flex-row overflow-hidden!"
@@ -199,12 +214,32 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
         <h3 className="sr-only">{current.label}</h3>
         {serverError && <div className="mb-5"><Alert tone="danger" onDismiss={() => setServerError('')}>{serverError}</Alert></div>}
         {section === 'academic' && <AcademicFields draft={draft} update={update} errorFor={errorFor} touch={touch} locked={locked} />}
-        {section === 'personal' && (
+        {section === 'personal' && (personalLocked ? (
+          <LockedGroup
+            student={student}
+            group="personal"
+            label="Personal details"
+            value={(
+              <dl className="mt-1 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-[auto_1fr]">
+                {[
+                  ['Name', [student.firstName, student.middleName, student.lastName, student.nameSuffix].filter(Boolean).map(p => titleCaseName(String(p))).join(' ')],
+                  ['Date of birth', formatLongDate(student.dateOfBirth)],
+                  ['Place of birth', student.placeOfBirth],
+                  ['Nationality', student.nationality],
+                  ['Civil status', student.civilStatus],
+                ].map(([k, v]) => (
+                  <React.Fragment key={k}><dt className="text-ink-subtle">{k}</dt><dd className="text-ink">{v || '—'}</dd></React.Fragment>
+                ))}
+              </dl>
+            )}
+            onStudentUpdated={onStudentUpdated}
+          />
+        ) : (
           <PersonalFields
             draft={draft} update={update} errorFor={errorFor} touch={touch}
             accountName={{ firstName: titleCaseName(student.firstName ?? ''), lastName: titleCaseName(student.lastName ?? '') }}
           />
-        )}
+        ))}
         {section === 'contact' && <ContactFields draft={draft} update={update} errorFor={errorFor} touch={touch} email={student.email} />}
         {section === 'family' && <FamilyFields draft={draft} update={update} errorFor={errorFor} touch={touch} />}
       </div>
@@ -216,7 +251,7 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
 // correction (POST /api/students/me/correction-requests).
 function LockedGroup({ student, group, label, value, onStudentUpdated }: {
   student: StudentProfile;
-  group: VerificationGroup;
+  group: CorrectionGroup;
   label: string;
   value: React.ReactNode;
   onStudentUpdated: (student: StudentProfile) => void;
@@ -256,16 +291,18 @@ function LockedGroup({ student, group, label, value, onStudentUpdated }: {
       <LockedValue
         label={label}
         value={value}
-        note={`${verificationText(student, group)}. You can’t change it here.`}
-        action={!open && !writing && <Button size="sm" variant="ghost" onClick={() => setWriting(true)}>Request correction</Button>}
+        note={group !== 'personal' && verificationOf(student, group)
+          ? `${verificationText(student, group)}. You can’t change it here.`
+          : 'Confirmed when you signed up. Only the Admissions and Scholarship Office can change it.'}
+        action={!open && !writing && <Button size="sm" variant="ghost" onClick={() => setWriting(true)}>Request a change</Button>}
       />
       {open && (
-        <p className="text-xs text-ink-muted">Correction requested on {formatLongDate(open.createdAt)}. The office will update it if it’s confirmed.</p>
+        <p className="text-xs text-ink-muted">Change requested on {formatLongDate(open.createdAt)}. It was also sent to the office in Messages; they’ll update it once it’s confirmed.</p>
       )}
       {writing && (
         <div className="space-y-3 rounded-control p-3 ring-1 ring-line">
           <Field label="What should be corrected?" error={error} helper={!error ? 'The office checks this against university records.' : undefined}>
-            <Textarea rows={3} maxLength={1000} value={message} onChange={e => setMessage(e.target.value)} placeholder="e.g. I’m now in 3rd year, section BIT34." />
+            <Textarea rows={3} maxLength={1000} value={message} onChange={e => setMessage(e.target.value)} placeholder={group === 'personal' ? 'e.g. My middle name is spelled “Dela Cruz”, not “Delacruz”.' : group === 'program' ? 'e.g. I shifted to BS Accountancy this semester.' : 'e.g. I’m now in 3rd year, section BIT34.'} />
           </Field>
           <div className="flex justify-end gap-2">
             <Button size="sm" onClick={() => { setWriting(false); setError(''); }} disabled={sending}>Cancel</Button>

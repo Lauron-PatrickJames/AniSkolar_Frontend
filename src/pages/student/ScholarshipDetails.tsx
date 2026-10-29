@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Scholarship, Application, Announcement } from '../../types';
 import AnnouncementCard from '../../components/AnnouncementCard';
-import { ArrowLeft, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info, Megaphone } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info, Megaphone } from 'lucide-react';
 import { motion } from 'motion/react';
 import { OFFICE_SHORT_LABELS, acceptsOnlineApplications, officeOf } from '../../data/scholarships';
 
@@ -17,6 +17,8 @@ interface ScholarshipDetailsProps {
   blockedReason?: string | null;
   notice?: string | null;
   onResubmit?: (applicationId: string) => void;
+  // Opens My Applications (signed-in students).
+  onViewApplications?: () => void;
   id?: string;
 }
 
@@ -33,11 +35,11 @@ const STATUS_META: Record<AppStatus, {
   icon: React.ElementType;
 }> = {
   'Under Evaluation': {
-    label: 'Application Submitted',
-    description: 'Your application is in the queue and awaiting review by the AdSO.',
-    badgeClass: 'bg-slate-100 text-slate-500 border border-slate-200',
-    cardClass: 'bg-slate-50 border-slate-200',
-    iconWrapClass: 'bg-slate-100 text-slate-500',
+    label: 'Under Evaluation',
+    description: 'Your application was submitted and is waiting for review by the AdSO. We’ll notify you when there’s a decision.',
+    badgeClass: 'bg-sky-50 text-sky-700 border border-sky-200',
+    cardClass: 'bg-sky-50 border-sky-200',
+    iconWrapClass: 'bg-sky-100 text-sky-700',
     icon: Clock
   },
   'Approved': {
@@ -59,9 +61,9 @@ const STATUS_META: Record<AppStatus, {
   'Needs Revision': {
     label: 'Revision Needed',
     description: 'The AdSO has requested changes before this application can move forward.',
-    badgeClass: 'bg-sky-50 text-sky-700 border border-sky-200',
-    cardClass: 'bg-sky-50 border-sky-200',
-    iconWrapClass: 'bg-sky-100 text-sky-700',
+    badgeClass: 'bg-amber-50 text-amber-800 border border-amber-200',
+    cardClass: 'bg-amber-50 border-amber-200',
+    iconWrapClass: 'bg-amber-100 text-amber-700',
     icon: AlertTriangle
   }
 };
@@ -73,6 +75,7 @@ export default function ScholarshipDetails({
   onBack,
   onApply,
   onResubmit,
+  onViewApplications,
   blockedReason,
   notice,
   id
@@ -97,6 +100,22 @@ export default function ScholarshipDetails({
   const meta = { ...baseMeta, description: baseMeta.description.replace(/\b([Tt])he AdSO\b/, (_, t) => `${t}he ${officeShort}`) };
   const StatusIcon = meta.icon;
   const hasNote = !!existingApplication?.reviewNote && (status === 'Rejected' || status === 'Needs Revision');
+  // Reference, date and (SFAG) grant, under the status.
+  const grantApplied = existingApplication?.sfagDetails?.requestedGrant ?? existingApplication?.sfagPercentageRequested ?? null;
+  const grantGiven = status === 'Approved' ? existingApplication?.sfagPercentage ?? null : null;
+  const facts = existingApplication ? [
+    existingApplication.referenceCode && ['Reference', existingApplication.referenceCode],
+    existingApplication.submittedAt && ['Submitted', new Date(existingApplication.submittedAt).toString() === 'Invalid Date' ? existingApplication.submittedAt : new Date(existingApplication.submittedAt).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })],
+    grantGiven ? ['Grant', `${grantGiven}% tuition discount`] : grantApplied ? ['Grant applied for', `${grantApplied}%`] : null,
+  ].filter(Boolean) as [string, string][] : [];
+  // Process items written "Step N: …" are numbered steps (the number is
+  // drawn, so the prefix goes); any others are notes shown after them.
+  const STEP = /^Step\s+\d+\s*[:.]\s*/i;
+  const hasSteps = scholarship.process.some(p => STEP.test(p));
+  const steps = hasSteps ? scholarship.process.filter(p => STEP.test(p)).map(p => p.replace(STEP, '')) : scholarship.process;
+  const processNotes = hasSteps ? scholarship.process.filter(p => !STEP.test(p)) : [];
+  // "Applications open June 16 – July 3" reads as a period, not a deadline.
+  const period = scholarship.deadline?.replace(/^Applications open\s+/i, '') ?? '';
 
   return (
     <div id={id} className="space-y-6">
@@ -125,18 +144,28 @@ export default function ScholarshipDetails({
           <h2 className="font-display font-black text-2xl md:text-3xl text-slate-900 tracking-tight leading-snug">
             {scholarship.name}
           </h2>
-          <div className="flex items-center text-slate-500 text-xs gap-1.5">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <span className="font-semibold">{officeShort} Submission Deadline:</span>
-            <span className="text-slate-800 font-bold">{scholarship.deadline}</span>
-          </div>
+          {period && (
+            <div className="flex items-center text-slate-500 text-xs gap-1.5">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <span className="font-semibold">Application period:</span>
+              <span className="text-slate-800 font-bold">{period}</span>
+            </div>
+          )}
         </div>
 
-        {/* Apply Action — once applied, this becomes a disabled status button
-            (label reflects current review state); the status card below
-            carries the detail, note, and any resubmit action. */}
+        {/* Apply Action. Once applied, the status card below says where it
+            stands, and this links to My Applications instead. */}
         <div className="w-full md:w-auto shrink-0">
-          {isInfoOnly ? (
+          {isApplied ? (
+            onViewApplications && (
+              <button
+                onClick={onViewApplications}
+                className="w-full md:w-auto px-5 py-3 rounded-xl bg-white text-slate-700 border border-slate-200 font-display font-bold text-xs tracking-wide inline-flex items-center justify-center gap-2 hover:border-brand-green hover:text-brand-green transition-colors focus:outline-hidden"
+              >
+                View in My Applications <ArrowRight className="w-4 h-4" />
+              </button>
+            )
+          ) : isInfoOnly ? (
             <span className="w-full md:w-auto px-5 py-3 rounded-xl bg-slate-100 text-slate-500 border border-slate-200 font-display font-bold uppercase text-xs tracking-wider inline-flex items-center justify-center gap-2">
               <Info className="w-4 h-4" />
               No Online Application
@@ -144,15 +173,14 @@ export default function ScholarshipDetails({
           ) : (
             <button
               onClick={() => onApply(scholarship.id)}
-              disabled={isApplied || blocked || scholarship.status === 'Closed'}
+              disabled={blocked || scholarship.status === 'Closed'}
               className={`w-full md:w-auto font-display font-bold uppercase text-xs tracking-wider px-8 py-3.5 rounded-xl transition-all shadow-sm focus:outline-hidden text-center inline-flex items-center justify-center gap-2 ${
-                isApplied || blocked
+                blocked || scholarship.status === 'Closed'
                   ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                   : 'bg-brand-green text-white hover:bg-brand-green-dark hover:shadow-md'
               }`}
             >
-              {isApplied && <StatusIcon className="w-4 h-4" />}
-              {isApplied ? meta.label : blocked ? 'Not Available To You' : 'Apply For This Scholarship'}
+              {blocked ? 'Not Available To You' : scholarship.status === 'Closed' ? 'Applications Closed' : 'Apply For This Scholarship'}
             </button>
           )}
         </div>
@@ -208,6 +236,16 @@ export default function ScholarshipDetails({
               <p className="text-xs text-slate-600 leading-relaxed">
                 {meta.description}
               </p>
+              {facts.length > 0 && (
+                <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                  {facts.map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-slate-500">{label}</dt>
+                      <dd className={`font-bold text-slate-800 ${label === 'Reference' ? 'font-mono' : ''}`}>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
 
               {hasNote && (
                 <div className="mt-3 p-3 rounded-lg bg-white/70 border border-white text-xs text-slate-600 leading-relaxed">
@@ -219,7 +257,7 @@ export default function ScholarshipDetails({
               {status === 'Needs Revision' && onResubmit && existingApplication && (
                 <button
                   onClick={() => onResubmit(existingApplication.id)}
-                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-sky-700 text-white hover:bg-sky-800 transition-colors shadow-sm focus:outline-hidden"
+                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-amber-600 text-white hover:bg-amber-700 transition-colors shadow-sm focus:outline-hidden"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   Resubmit Documents
@@ -276,26 +314,63 @@ export default function ScholarshipDetails({
             </ul>
           </div>
 
-          {/* Application Evaluation Steps */}
+          {/* Document Requirements Checklist */}
+          {(hasDocuments || scholarship.submissionNote) && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
+            <h3 className="font-display font-extrabold text-lg text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
+              <FileCheck className="w-5 h-5 text-brand-green" />
+              <span>Required Documents</span>
+            </h3>
+            <p className="text-xs text-slate-500 mb-2">Upload each one as a JPG file, up to 10 MB.</p>
+            <ul className="divide-y divide-slate-100">
+              {(scholarship.documentSlots
+                ? scholarship.documentSlots.filter(slot => slot.placement !== 'form').map(slot => ({
+                  key: slot.key,
+                  label: slot.label,
+                  extra: [slot.source === 'form' && 'filled out online', slot.multiple && 'multiple files', slot.optional && 'if any'].filter(Boolean).join(' · '),
+                }))
+                : scholarship.requirements.map((req, idx) => ({ key: String(idx), label: req, extra: '' }))
+              ).map(doc => (
+                <li key={doc.key} className="flex items-start gap-3 py-3 text-sm text-slate-700">
+                  <FileCheck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">
+                    {doc.label}
+                    {doc.extra && <span className="text-slate-400"> ({doc.extra})</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {scholarship.submissionNote && (
+              <p className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100 text-[11px] font-semibold text-amber-800 flex items-start gap-1.5">
+                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>{scholarship.submissionNote}</span>
+              </p>
+            )}
+          </div>
+          )}
+
+          {/* How it works: the numbered steps, then any notes. */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
             <h3 className="font-display font-extrabold text-lg text-slate-900 border-b border-slate-100 pb-3 mb-6 flex items-center space-x-2">
               <ListChecks className="w-5 h-5 text-brand-green" />
-              <span>Step-by-Step Evaluation Process</span>
+              <span>How It Works</span>
             </h3>
-            <div className="space-y-6">
-              {scholarship.process.map((step, idx) => (
-                <div key={idx} className="flex gap-4">
-                  <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 text-slate-700 font-display font-bold text-xs flex items-center justify-center shrink-0">
+            <ol className="space-y-5">
+              {steps.map((step, idx) => (
+                <li key={idx} className="flex gap-4">
+                  <span className="w-7 h-7 rounded-full bg-brand-green/10 text-brand-green font-display font-bold text-xs flex items-center justify-center shrink-0">
                     {idx + 1}
-                  </div>
-                  <div className="text-sm">
-                    <p className="text-slate-700 leading-relaxed font-semibold">
-                      {step}
-                    </p>
-                  </div>
-                </div>
+                  </span>
+                  <p className="text-sm text-slate-700 leading-relaxed pt-1">{step}</p>
+                </li>
               ))}
-            </div>
+            </ol>
+            {processNotes.length > 0 && (
+              <div className="mt-6 p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-start gap-2 text-xs text-slate-600 leading-relaxed">
+                <Info className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+                <div className="space-y-1">{processNotes.map(n => <p key={n}>{n}</p>)}</div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -344,7 +419,7 @@ export default function ScholarshipDetails({
               {scholarship.eligibility.map((elig, idx) => (
                 <li key={idx} className="flex items-start text-xs sm:text-sm text-slate-600">
                   <div className="w-1.5 h-1.5 rounded-full bg-brand-green shrink-0 mt-2 mr-2.5" />
-                  <span>{elig}</span>
+                  <LongText text={elig} />
                 </li>
               ))}
             </ul>
@@ -368,52 +443,6 @@ export default function ScholarshipDetails({
             </div>
           )}
 
-          {/* Document Requirements Checklist */}
-          {(hasDocuments || scholarship.submissionNote) && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-            <h3 className="font-display font-extrabold text-base text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
-              <FileCheck className="w-4.5 h-4.5 text-brand-green" />
-              <span>Required Documents</span>
-            </h3>
-            {scholarship.documentSlots ? (
-              <ul className="space-y-3">
-                {scholarship.documentSlots.filter(slot => slot.placement !== 'form').map(slot => (
-                  <li key={slot.key} className="flex gap-2.5 text-xs text-slate-600">
-                    <span className={`px-1 h-5 rounded-md border font-bold text-[9px] flex items-center justify-center shrink-0 ${
-                      slot.source === 'form' ? 'bg-emerald-50 border-emerald-100 text-brand-green' : 'bg-slate-50 border-slate-200 text-slate-500'
-                    }`}>
-                      {slot.source === 'form' ? 'FORM' : 'JPG'}
-                    </span>
-                    <span className="leading-tight">
-                      {slot.label}
-                      {slot.source === 'form' && <span className="text-slate-400"> — filled out online</span>}
-                      {slot.multiple && <span className="text-slate-400"> (multiple files)</span>}
-                      {slot.optional && <span className="text-slate-400"> (if any)</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <ul className="space-y-3">
-                {scholarship.requirements.map((req, idx) => (
-                  <li key={idx} className="flex gap-2.5 text-xs text-slate-600">
-                    <span className="w-5 h-5 rounded-md bg-slate-50 border border-slate-200 text-slate-500 font-bold text-[10px] flex items-center justify-center shrink-0">
-                      PDF
-                    </span>
-                    <span className="leading-tight">{req}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {scholarship.submissionNote && (
-              <p className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100 text-[11px] font-semibold text-amber-800 flex items-start gap-1.5">
-                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span>{scholarship.submissionNote}</span>
-              </p>
-            )}
-          </div>
-          )}
-
           {/* LSO Integrity Notice */}
           <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-2.5">
             <ShieldAlert className="w-4.5 h-4.5 text-amber-700 shrink-0 mt-0.5" />
@@ -424,5 +453,20 @@ export default function ScholarshipDetails({
         </div>
       </div>
     </div>
+  );
+}
+
+// A long item (like a list of priority courses) shows its first 3 lines,
+// with "Show more" for the rest.
+function LongText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  if (text.length <= 160) return <span>{text}</span>;
+  return (
+    <span className="flex min-w-0 flex-col items-start">
+      <span className={open ? '' : 'line-clamp-3'}>{text}</span>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(o => !o)} className="mt-1 text-xs font-bold text-brand-green hover:underline focus:outline-hidden">
+        {open ? 'Show less' : 'Show more'}
+      </button>
+    </span>
   );
 }

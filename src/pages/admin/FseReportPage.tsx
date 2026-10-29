@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calculator, Download, FileSpreadsheet, Trash2, Upload } from 'lucide-react';
 import { API_BASE_URL, academicYearOf, authHeaders, formatDate, formatDateTime } from './adminData';
-import {
+import { ResultDialog,
   Alert, Badge, Button, Card, Checkbox, ConfirmDialog, DropdownMenu, EmptyState, ErrorState, Field, Modal, PageHeader,
   SearchInput, Select, Table, TableSkeleton, Td, TextInput, Th, Toast, Tr
 } from './AdminUI';
@@ -186,7 +186,7 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
         />
       )}
 
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      {toast && <ResultDialog message={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }

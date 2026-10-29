@@ -174,9 +174,19 @@ export function isSfagScholar(applications: { scholarshipId: string; status: str
 }
 
 export interface HeldScholarship { scholarshipId: string; scholarshipName: string }
+export interface HeldDetail {
+  scholarshipId: string;
+  applicationId: string | null;
+  referenceCode: string | null;
+  approvedAt: string | null;
+  grantPercentage: number | null;
+}
+
 export interface Holdings {
   held: HeldScholarship[];
   exclusive: HeldScholarship | null;
+  // Per held scholarship, the approved application behind it.
+  details?: HeldDetail[];
   // Scholarships whose slots for the student's college are full (POLCA).
   slotsFull?: { scholarshipId: string; message: string }[];
 }

@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
+import MyScholarship from './pages/student/MyScholarship';
+import MyApplications from './pages/student/MyApplications';
 import { AppSkeleton, FormSkeleton } from './components/Skeletons';
 import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, SaveResult } from './types';
 import { acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships, registerCustomScholarships } from './data/scholarships';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
 import { Holdings, applyBlock, holdingNotice, isSfagScholar, setSfagOpenAllYear } from './utils/eligibility';
+import { DutyNotice } from './utils/notifications';
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout';
@@ -42,7 +45,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 
 // Pages only scholars (an approved application) can open; Duty Hours is
 // for SFAG scholars only.
-const SCHOLAR_ONLY_PAGES = ['renewals', 'duty-hours'];
+const SCHOLAR_ONLY_PAGES = ['renewals', 'duty-hours', 'my-scholarship'];
 
 interface PersistedSession {
   currentPage: string;
@@ -129,6 +132,8 @@ function toFrontendApplication(doc: any): Application {
   const base = {
     ...doc,
     id: doc.id ?? doc._id,
+    // The API's documents have createdAt; the pages read submittedAt.
+    submittedAt: doc.submittedAt ?? doc.createdAt,
   };
 
   if (doc.applicationFormType === 'sfag') {
@@ -139,6 +144,7 @@ function toFrontendApplication(doc: any): Application {
       siblings: doc.siblings ?? [],
       assetsExpenses: doc.assetsExpenses,
       agreement: doc.agreement,
+      requestedGrant: doc.sfagPercentageRequested ?? null,
     };
   }
 
@@ -181,6 +187,8 @@ export default function App() {
   // Scholarships the student holds now (GET /api/students/me/holdings): an
   // SFAG grantee can't apply for others.
   const [holdings, setHoldings] = useState<Holdings | null>(null);
+  // Bumped to re-fetch holdings (e.g. after choosing between two scholarships).
+  const [holdingsVersion, setHoldingsVersion] = useState(0);
   // Published announcements from the API (GET /api/announcements/feed);
   // empty until they load (or if the feed can't be reached).
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -712,13 +720,43 @@ export default function App() {
         });
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled) setHoldings({ held: data.held ?? [], exclusive: data.exclusive ?? null, slotsFull: data.slotsFull ?? [] });
+        if (!cancelled) setHoldings({ held: data.held ?? [], exclusive: data.exclusive ?? null, slotsFull: data.slotsFull ?? [], details: data.details ?? [] });
       } catch {
         // Leave it: the server still refuses a conflicting application.
       }
     })();
     return () => { cancelled = true; };
-  }, [isSignedIn, role, student.studentNumber, approvedKey, getToken]);
+  }, [isSignedIn, role, student.studentNumber, approvedKey, getToken, holdingsVersion]);
+
+  // SFAG scholars: this semester's duty hours, for the bell's "hours
+  // completed" / "evaluated" notices. Checked on load and when the page
+  // changes (cheap; the duty page itself loads the full log).
+  const [dutyNotice, setDutyNotice] = useState<DutyNotice | null>(null);
+  useEffect(() => {
+    if (!isSignedIn || role !== 'student' || !isSfag) { setDutyNotice(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`${API_BASE_URL}/api/duty-hours/mine`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+        if (!res.ok) return;
+        const body = await res.json();
+        const s = body.summary;
+        const t = body.log;
+        if (cancelled || !t) return;
+        setDutyNotice({
+          termKey: `${t.academicYear}|${t.term}`,
+          termLabel: `${t.term}, A.Y. ${t.academicYear}–${t.academicYear + 1}`,
+          office: t.officeAssigned || null,
+          complete: !!(s?.required && s.completed >= s.required),
+          evaluated: !!body.evaluated,
+        });
+      } catch {
+        // No notice; the duty page still shows it.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isSignedIn, role, isSfag, getToken, currentPage]);
 
   // Fetching the full application record before opening the resubmit form
   // (see handleResubmitApplication) — brief, but avoids a flash of the
@@ -825,11 +863,13 @@ export default function App() {
       const pageTitleMap: Record<string, string> = {
         dashboard: 'Student Portal Dashboard',
         explore: 'Scholarship Opportunities',
+        'my-scholarship': 'My Scholarship',
+        applications: 'My Applications',
         'gpa-calculator': 'GPA Calculator',
         renewals: 'Scholarship Renewal',
         'duty-hours': 'Duty Hours',
         messages: 'Messages',
-        'scholarship-details': 'Scholarship Specifications',
+        'scholarship-details': 'Scholarship Details',
         'apply-scholarship': 'Scholarship Digital Application',
         announcements: 'Office Announcements',
         profile: 'Profile'
@@ -848,6 +888,8 @@ export default function App() {
           onViewScholarship={handleViewScholarship}
           student={student}
           applications={applications}
+          heldScholarships={holdings?.held ?? []}
+          dutyNotice={dutyNotice}
           onLogout={handleLogout}
           pageTitle={title}
         >
@@ -862,6 +904,27 @@ export default function App() {
                     holdings={holdings}
                     onViewDetails={handleViewScholarship}
                     onApply={handleApplyScholarship}
+                    onNavigate={handleNavigate}
+                  />
+                );
+              case 'my-scholarship':
+                return (
+                  <MyScholarship
+                    holdings={holdings}
+                    scholarships={scholarships}
+                    applications={applications}
+                    onNavigate={handleNavigate}
+                    onViewScholarship={handleViewScholarship}
+                    onChosen={() => { setHoldingsVersion(v => v + 1); refreshApplications(); }}
+                  />
+                );
+              case 'applications':
+                return (
+                  <MyApplications
+                    applications={applications}
+                    onViewScholarship={handleViewScholarship}
+                    onResubmit={handleResubmitApplication}
+                    onNavigate={handleNavigate}
                   />
                 );
               case 'gpa-calculator':
@@ -889,6 +952,7 @@ export default function App() {
                     onBack={() => goBackTo('explore')}
                     onApply={handleApplyScholarship}
                     onResubmit={handleResubmitApplication}
+                    onViewApplications={() => handleNavigate('applications')}
                     blockedReason={applyBlock(activeScholarship.id, holdings)}
                     notice={holdingNotice(activeScholarship.id, holdings)}
                   />

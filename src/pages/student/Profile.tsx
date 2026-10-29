@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BadgeCheck, GraduationCap, Info, MapPin, Pencil, User, Users } from 'lucide-react';
 import { ProfileChanges, SaveResult, StudentProfile, VerificationGroup } from '../../types';
-import { Badge, Button, Toast } from '../admin/AdminUI';
+import { ResultDialog, Badge, Button, Toast } from '../admin/AdminUI';
 import EditProfileDialog from '../../components/profile/EditProfileDialog';
 import { DraftField, DraftSection } from '../../components/profile/profileForm';
 import { displayName, nameInitials, titleCaseName } from '../../utils/names';
@@ -117,7 +117,7 @@ export default function Profile({ student, onUpdateProfile, onStudentUpdated, id
           onClose={saved => { setEditing(null); if (saved) setToast('Profile saved.'); }}
         />
       )}
-      {toast && <Toast message={toast} onClose={() => setToast(null)} duration={4000} />}
+      {toast && <ResultDialog message={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }

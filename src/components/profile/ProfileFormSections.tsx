@@ -4,7 +4,7 @@ import { Checkbox, Combobox, ComboboxOption, DatePicker, Field, Select, TextInpu
 import { PROGRAMS, YEAR_LEVELS, collegeName, findProgram } from '../../data/programs';
 import { CITIES_BY_PROVINCE, PROVINCES } from '../../data/phLocations';
 import { formatPhone, normalizePhMobile } from '../../utils/profile';
-import { CIVIL_STATUS_OPTIONS, DraftField, PHILIPPINES, ProfileDraft } from './profileForm';
+import { CIVIL_STATUS_OPTIONS, DraftField, NAME_SUFFIXES, PHILIPPINES, ProfileDraft } from './profileForm';
 
 // The profile's form sections, shared by the first-time setup page and the
 // Profile edit dialog. Each field sits in a [data-field] wrapper so a form
@@ -77,7 +77,7 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
             </Field>
           </Slot>
           <Slot name="section">
-            <Field label="Section" optional error={errorFor('section')}>
+            <Field label="Section" error={errorFor('section')}>
               <TextInput value={draft.section} onChange={e => update({ section: e.target.value })} onBlur={() => touch('section')} placeholder="e.g. BIT44" maxLength={20} autoCapitalize="characters" />
             </Field>
           </Slot>
@@ -85,7 +85,7 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
       )}
       {locked.gpa ?? (
         <Slot name="gpa" className="sm:max-w-[calc(50%-0.625rem)]">
-          <Field label="Cumulative GPA" optional error={errorFor('gpa')} helper={!errorFor('gpa') ? '0.00 to 4.00. Incoming freshmen can leave this blank.' : undefined}>
+          <Field label="Cumulative GPA" optional={draft.yearLevel === '1st Year'} error={errorFor('gpa')} helper={!errorFor('gpa') ? (draft.yearLevel === '1st Year' ? '0.00 to 4.00. Incoming freshmen without a college GPA yet can leave this blank.' : '0.00 to 4.00, as on your latest grades.') : undefined}>
             <TextInput
               value={draft.gpa}
               inputMode="decimal"
@@ -144,31 +144,41 @@ export function PersonalFields({ draft, update, errorFor, touch, accountName }: 
           <p className="mt-1.5 text-xs text-ink-subtle">From your university account.</p>
         </div>
       )}
-      <Slot name="middleName">
-        <Field label="Middle name" optional error={errorFor('middleName')} helper="Leave blank if you don’t have one.">
-          <TextInput value={draft.middleName} onChange={e => update({ middleName: e.target.value })} onBlur={() => touch('middleName')} maxLength={60} autoComplete="additional-name" />
-        </Field>
-      </Slot>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-[1fr_10rem]">
+        <Slot name="middleName">
+          <Field label="Middle name" error={errorFor('middleName')} helper={!errorFor('middleName') ? 'Your full middle name, not just the initial.' : undefined}>
+            <TextInput value={draft.middleName} onChange={e => update({ middleName: e.target.value })} onBlur={() => touch('middleName')} maxLength={60} autoComplete="additional-name" />
+          </Field>
+        </Slot>
+        <Slot name="nameSuffix">
+          <Field label="Suffix" optional error={errorFor('nameSuffix')}>
+            <Select value={draft.nameSuffix} onChange={v => update({ nameSuffix: v })}>
+              <option value="">None</option>
+              {NAME_SUFFIXES.map(s => <option key={s} value={s}>{s}</option>)}
+            </Select>
+          </Field>
+        </Slot>
+      </div>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <Slot name="dateOfBirth">
-          <Field label="Date of birth" optional error={errorFor('dateOfBirth')}>
+          <Field label="Date of birth" error={errorFor('dateOfBirth')}>
             <DatePicker value={draft.dateOfBirth} onChange={v => update({ dateOfBirth: v })} onBlur={() => touch('dateOfBirth')} min="1925-01-01" max={maxDob} defaultMonth={`${today.getFullYear() - 18}-01-01`} placeholder="Select your birthday" />
           </Field>
         </Slot>
         <Slot name="placeOfBirth">
-          <Field label="Place of birth" optional error={errorFor('placeOfBirth')}>
+          <Field label="Place of birth" error={errorFor('placeOfBirth')}>
             <TextInput value={draft.placeOfBirth} onChange={e => update({ placeOfBirth: e.target.value })} onBlur={() => touch('placeOfBirth')} placeholder="e.g. Dasmariñas, Cavite" maxLength={120} />
           </Field>
         </Slot>
         <Slot name="nationality">
-          <Field label="Nationality" optional error={errorFor('nationality')}>
+          <Field label="Nationality" error={errorFor('nationality')}>
             <TextInput value={draft.nationality} onChange={e => update({ nationality: e.target.value })} onBlur={() => touch('nationality')} maxLength={60} />
           </Field>
         </Slot>
         <Slot name="civilStatus">
-          <Field label="Civil status" optional error={errorFor('civilStatus')}>
-            <Select value={draft.civilStatus} onChange={v => update({ civilStatus: v })}>
-              <option value="">Select</option>
+          <Field label="Civil status" error={errorFor('civilStatus')}>
+            <Select value={draft.civilStatus} onChange={v => { update({ civilStatus: v }); touch('civilStatus'); }}>
+              <option value="" disabled>Select</option>
               {CIVIL_STATUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
             </Select>
           </Field>
@@ -192,7 +202,7 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
       )}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <Slot name="mobileNumber">
-          <Field label="Mobile number" optional error={errorFor('mobileNumber')} helper={!errorFor('mobileNumber') ? 'The office uses this to reach you about your application.' : undefined}>
+          <Field label="Mobile number" error={errorFor('mobileNumber')} helper={!errorFor('mobileNumber') ? 'The office uses this to reach you about your application.' : undefined}>
             <TextInput
               type="tel"
               inputMode="tel"
@@ -214,7 +224,7 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
       <fieldset className="space-y-5">
         <legend className="mb-3 text-sm font-semibold text-ink">Home address</legend>
         <Slot name="homeAddress">
-          <Field label="Street address" optional error={errorFor('homeAddress')} helper="House or unit number, street, subdivision and barangay.">
+          <Field label="Street address" error={errorFor('homeAddress')} helper="House or unit number, street, subdivision and barangay.">
             <TextInput value={draft.homeAddress} onChange={e => update({ homeAddress: e.target.value })} onBlur={() => touch('homeAddress')} autoComplete="street-address" maxLength={200} />
           </Field>
         </Slot>
@@ -240,7 +250,7 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
             </Slot>
           )}
           <Slot name="province">
-            <Field label={ph ? 'Province' : 'State or province'} optional error={errorFor('province')}>
+            <Field label={ph ? 'Province' : 'State or province'} error={errorFor('province')}>
               {ph ? (
                 <Combobox
                   value={draft.province}
@@ -255,7 +265,7 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
             </Field>
           </Slot>
           <Slot name="cityMunicipality">
-            <Field label="City or municipality" optional error={errorFor('cityMunicipality')} helper={ph && !draft.province ? 'Choose the province first.' : undefined}>
+            <Field label="City or municipality" error={errorFor('cityMunicipality')} helper={ph && !draft.province ? 'Choose the province first.' : undefined}>
               {ph ? (
                 <Combobox
                   value={draft.cityMunicipality}
@@ -271,7 +281,7 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
             </Field>
           </Slot>
           <Slot name="zipCode">
-            <Field label={ph ? 'ZIP code' : 'Postal code'} optional error={errorFor('zipCode')}>
+            <Field label={ph ? 'ZIP code' : 'Postal code'} error={errorFor('zipCode')}>
               <TextInput
                 value={draft.zipCode}
                 inputMode={ph ? 'numeric' : 'text'}
@@ -295,21 +305,32 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
   const parent = (who: 'father' | 'mother') => {
     const nameKey = `${who}Name` as const;
     const contactKey = `${who}ContactNo` as const;
+    const deceasedKey = `${who}Deceased` as const;
     const title = who === 'father' ? 'Father' : 'Mother';
+    const deceased = draft[deceasedKey];
     return (
       <fieldset className="space-y-4">
-        <legend className="mb-3 text-sm font-semibold text-ink">{title}</legend>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <legend className="text-sm font-semibold text-ink">{title}</legend>
+          <Checkbox
+            checked={deceased}
+            onChange={v => update({ [deceasedKey]: v, ...(v && draft.guardianType === who ? { guardianType: '' } : {}) })}
+            label="Deceased"
+          />
+        </div>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <Slot name={nameKey}>
-            <Field label="Full name" optional error={errorFor(nameKey)}>
-              <TextInput value={draft[nameKey]} onChange={e => update({ [nameKey]: e.target.value })} onBlur={() => touch(nameKey)} maxLength={120} />
+            <Field label="Full name" error={errorFor(nameKey)}>
+              <TextInput value={draft[nameKey]} onChange={e => update({ [nameKey]: e.target.value })} onBlur={() => touch(nameKey)} maxLength={120} placeholder="First, middle and last name" />
             </Field>
           </Slot>
-          <Slot name={contactKey}>
-            <Field label="Contact number" optional error={errorFor(contactKey)}>
-              <TextInput type="tel" inputMode="tel" value={draft[contactKey]} onChange={e => update({ [contactKey]: e.target.value })} onBlur={e => { update({ [contactKey]: tidyPhone(e.currentTarget.value) }); touch(contactKey); }} />
-            </Field>
-          </Slot>
+          {!deceased && (
+            <Slot name={contactKey}>
+              <Field label="Contact number" error={errorFor(contactKey)}>
+                <TextInput type="tel" inputMode="tel" value={draft[contactKey]} onChange={e => update({ [contactKey]: e.target.value })} onBlur={e => { update({ [contactKey]: tidyPhone(e.currentTarget.value) }); touch(contactKey); }} placeholder="0917 123 4567" />
+              </Field>
+            </Slot>
+          )}
         </div>
       </fieldset>
     );
@@ -343,10 +364,11 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
         <legend className="mb-1 text-sm font-semibold text-ink">Guardian</legend>
         <p className="text-xs text-ink-subtle">Who the office contacts if they can’t reach you.</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {choice('father', 'Same as father', draft.fatherName.trim() || undefined)}
-          {choice('mother', 'Same as mother', draft.motherName.trim() || undefined)}
+          {!draft.fatherDeceased && choice('father', 'Same as father', draft.fatherName.trim() || undefined)}
+          {!draft.motherDeceased && choice('mother', 'Same as mother', draft.motherName.trim() || undefined)}
           {choice('other', 'Someone else')}
         </div>
+        {errorFor('guardianType') && <p className="text-xs font-medium text-danger">{errorFor('guardianType')}</p>}
         {draft.guardianType === 'other' && (
           <div className="space-y-5 pt-2">
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -361,7 +383,7 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
                 </Field>
               </Slot>
               <Slot name="guardianContactNo">
-                <Field label="Contact number" optional error={errorFor('guardianContactNo')}>
+                <Field label="Contact number" error={errorFor('guardianContactNo')}>
                   <TextInput type="tel" inputMode="tel" value={draft.guardianContactNo} onChange={e => update({ guardianContactNo: e.target.value })} onBlur={e => { update({ guardianContactNo: tidyPhone(e.currentTarget.value) }); touch('guardianContactNo'); }} />
                 </Field>
               </Slot>
@@ -373,7 +395,7 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
             />
             {!draft.guardianAddressSameAsHome && (
               <Slot name="guardianAddress">
-                <Field label="Guardian’s address" optional error={errorFor('guardianAddress')}>
+                <Field label="Guardian’s address" error={errorFor('guardianAddress')}>
                   <TextInput value={draft.guardianAddress} onChange={e => update({ guardianAddress: e.target.value })} onBlur={() => touch('guardianAddress')} maxLength={200} />
                 </Field>
               </Slot>

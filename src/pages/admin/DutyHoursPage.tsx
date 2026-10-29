@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Building2, CalendarCheck, Check, CheckCircle2, Clock, Plus, Search, Download, Hourglass, Inbox, Pencil, Shuffle, SlidersHorizontal, Users } from 'lucide-react';
+import { AlertTriangle, Building2, CalendarCheck, CalendarClock, Check, CheckCircle2, Clock, Plus, Search, Download, Hourglass, Inbox, Pencil, Shuffle, SlidersHorizontal, Users } from 'lucide-react';
 import {
   ClaimStatus, CreditedEvent, DutyLog, DutySummary, DutyTerm, EVENT_ORGANIZERS, EventOrganizer, GRANT_PERCENTAGES, YEAR_GROUPS, YearGroup, entryHours, format12h, formatDutyDate, formatHours, sortEntries, termLabel,
   todayInManila, weekday, weeklyTotals
 } from '../../utils/dutyHours';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
-import {
-  Alert, Avatar, Badge, Button, Card, DetailField, EmptyState, ErrorState, Field, KpiCard, KpiGrid, MobileList, Modal, PageHeader,
+import { ResultDialog,
+  Alert, Avatar, Badge, Button, Card, DatePicker, DetailField, EmptyState, ErrorState, Field, KpiCard, KpiGrid, MobileList, Modal, PageHeader,
   SearchInput, Select, Table, TableSkeleton, Td, TextInput, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
 
@@ -66,6 +66,9 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
   const [assigning, setAssigning] = useState<ScholarRow[] | null>(null);
   const [toast, setToast] = useState('');
   const [hoursOpen, setHoursOpen] = useState(false);
+  // The term's duty deadline (set here; scholars see it read-only).
+  const [deadline, setDeadline] = useState<string | null>(null);
+  const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [randomOpen, setRandomOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
   const [officesOpen, setOfficesOpen] = useState(false);
@@ -93,6 +96,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
       if (!res.ok) throw new Error(body.error || 'Failed to load duty hours.');
       setRows(body.scholars ?? []);
       setOffices(body.offices ?? []);
+      setDeadline(body.deadline ?? null);
       setTerm(body.term);
       setCurrent(body.current);
     } catch (err) {
@@ -205,9 +209,18 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
       />
 
       {term && (
-        <Select value={termKey(term)} onChange={v => { const [y, t] = v.split('|'); load({ academicYear: Number(y), term: t as DutyTerm }); }} label="Term" className="w-full sm:w-80">
-          {termOptions.map(t => <option key={termKey(t)} value={termKey(t)}>{termLabel(t)}</option>)}
-        </Select>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Select value={termKey(term)} onChange={v => { const [y, t] = v.split('|'); load({ academicYear: Number(y), term: t as DutyTerm }); }} label="Term" className="w-full sm:w-80">
+            {termOptions.map(t => <option key={termKey(t)} value={termKey(t)}>{termLabel(t)}</option>)}
+          </Select>
+          <div className={`flex items-center gap-3 rounded-control px-3 py-1.5 ring-1 ${deadline ? 'ring-line' : 'bg-warning-bg ring-warning-fg/30'}`}>
+            <CalendarClock className={`size-4 shrink-0 ${deadline ? 'text-ink-subtle' : 'text-warning-fg'}`} aria-hidden />
+            <span className="text-sm text-ink">
+              Deadline: <span className="font-semibold">{deadline ? formatDutyDate(deadline, true) : 'not set'}</span>
+            </span>
+            <Button size="sm" variant="ghost" onClick={() => setDeadlineOpen(true)}>{deadline ? 'Change' : 'Set deadline'}</Button>
+          </div>
+        </div>
       )}
 
       <KpiGrid columns={4}>
@@ -376,6 +389,16 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
         />
       )}
 
+      {deadlineOpen && term && (
+        <DeadlineDialog
+          term={term}
+          deadline={deadline}
+          getToken={getToken}
+          onClose={() => setDeadlineOpen(false)}
+          onSaved={d => { setDeadlineOpen(false); setDeadline(d); setToast(d ? `Deadline set to ${formatDutyDate(d, true)} for every scholar.` : 'Deadline removed.'); load(term); }}
+        />
+      )}
+
       {hoursOpen && (
         <HoursSettingsDialog
           getToken={getToken}
@@ -384,7 +407,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
         />
       )}
 
-      {toast && <Toast message={toast} onClose={() => setToast('')} />}
+      {toast && <ResultDialog message={toast} onClose={() => setToast('')} />}
     </div>
   );
 }
@@ -1332,6 +1355,58 @@ function DutyLogModal({ logId, row, getToken, onClose, onChangeOffice }: {
           </div>
         </div>
       )}
+    </Modal>
+  );
+}
+
+// The term's duty deadline: one date for every SFAG scholar (they can't
+// change it); reminders and "hours a week" count down to it.
+function DeadlineDialog({ term, deadline, getToken, onClose, onSaved }: {
+  term: TermKey;
+  deadline: string | null;
+  getToken: () => Promise<string | null>;
+  onClose: () => void;
+  onSaved: (deadline: string | null) => void;
+}) {
+  const [value, setValue] = useState(deadline ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const save = async (next: string) => {
+    setBusy(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/deadline`, {
+        method: 'PUT',
+        headers: await authHeaders(getToken, true),
+        body: JSON.stringify({ ...term, deadline: next }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Failed to save the deadline.');
+      onSaved(body.deadline ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save the deadline.');
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="Duty hours deadline"
+      description={`${termLabel(term)} · applies to every SFAG scholar. Scholars see it but can't change it.`}
+      onClose={onClose}
+      dismissible={!busy}
+      footer={(
+        <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>{deadline && <Button variant="ghost" onClick={() => save('')} disabled={busy}>Remove deadline</Button>}</div>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button onClick={onClose} disabled={busy}>Cancel</Button>
+            <Button variant="primary" onClick={() => (value ? save(value) : setError('Choose the date.'))} loading={busy}>Save deadline</Button>
+          </div>
+        </div>
+      )}
+    >
+      <Field label="Last day to complete duty hours" error={error || undefined} helper={!error ? 'Usually the last day of classes. Reminders and each scholar’s “hours a week” count down to it.' : undefined}>
+        <DatePicker value={value} onChange={setValue} placeholder="Select the deadline" />
+      </Field>
     </Modal>
   );
 }

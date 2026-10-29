@@ -139,12 +139,13 @@ export interface AdminApplication {
   // SFAG only: the tuition discount granted (100 / 75 / 50 / 25), set by
   // the AdSO once approved; it decides the scholar's duty hours.
   sfagPercentage?: number | null;
+  sfagPercentageRequested?: number | null;
   sfagPercentageSetBy?: string;
   sfagPercentageSetAt?: string;
   // Scholarships without renewals (POLCA): when the office marked the
   // approved scholar as graduated or stopped, freeing their slot.
   endedAt?: string | null;
-  endReason?: 'Graduated' | 'Stopped' | null;
+  endReason?: 'Graduated' | 'Stopped' | 'Declined' | null;
   endedBy?: string;
   // Set once a POLCA / Alumni office sends the application to the AdSO.
   forwardedAt?: string | null;

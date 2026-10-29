@@ -9,6 +9,23 @@ export interface NotificationItem {
   // navigate straight to the relevant scholarship when clicked. Absent for
   // notifications that aren't tied to a specific scholarship (e.g. welcome).
   scholarshipId?: string;
+  // For the preview pop-up: a short title, the application's status and
+  // the office's message to the student (if any).
+  title: string;
+  status?: string;
+  note?: string;
+  // A student page to open instead of a scholarship (e.g. 'duty-hours').
+  page?: string;
+}
+
+// This semester's duty hours, for the "hours done / evaluated" notices
+// (SFAG scholars; App.tsx loads it from GET /api/duty-hours/mine).
+export interface DutyNotice {
+  termKey: string;      // e.g. "2026|1st Semester"
+  termLabel: string;    // e.g. "1st Semester, A.Y. 2026–2027"
+  office: string | null;
+  complete: boolean;
+  evaluated: boolean;
 }
 
 const READ_PREFIX = 'aniskolar_notif_read_';
@@ -39,12 +56,14 @@ function statusMessage(scholarshipName: string, status: string): string {
       return `Great news! Your application for ${scholarshipName} has been approved.`;
     case 'Rejected':
       return `Your application for ${scholarshipName} was not approved this cycle.`;
+    case 'Needs Revision':
+      return `Your application for ${scholarshipName} needs changes. Check what the office asked for and resubmit.`;
     default:
       return `Your application for ${scholarshipName}: ${status}.`;
   }
 }
 
-export function buildNotifications(student: StudentProfile, applications: Application[]): NotificationItem[] {
+export function buildNotifications(student: StudentProfile, applications: Application[], duty?: DutyNotice | null): NotificationItem[] {
   const cleared = getIds(CLEARED_PREFIX, student.studentNumber);
   const read = getIds(READ_PREFIX, student.studentNumber);
   const items: NotificationItem[] = [];
@@ -53,6 +72,7 @@ export function buildNotifications(student: StudentProfile, applications: Applic
   if (applications.length === 0 && !cleared.has('welcome')) {
     items.push({
       id: 'welcome',
+      title: 'Welcome to AniSkolar',
       text: `Welcome to AniSkolar, ${student.name.split(' ')[0] || 'there'}! Explore available scholarships to get started.`,
       time: 'Just now',
       isRead: read.has('welcome')
@@ -69,12 +89,32 @@ export function buildNotifications(student: StudentProfile, applications: Applic
     if (cleared.has(id)) return;
     items.push({
       id,
+      title: app.scholarshipName,
       text: statusMessage(app.scholarshipName, app.status),
       time: app.submittedAt,
       isRead: read.has(id),
-      scholarshipId: app.scholarshipId
+      scholarshipId: app.scholarshipId,
+      status: app.status,
+      note: app.reviewNote?.trim() || undefined,
     });
   });
+
+  // Duty hours complete: the office head evaluates next; then evaluated.
+  if (duty?.complete) {
+    const id = `duty-${duty.evaluated ? 'evaluated' : 'done'}-${duty.termKey}`;
+    if (!cleared.has(id)) {
+      items.unshift({
+        id,
+        page: 'duty-hours',
+        title: duty.evaluated ? 'Your office evaluated you' : 'Duty hours completed',
+        text: duty.evaluated
+          ? `${duty.office ?? 'Your office'} has evaluated your duty for the ${duty.termLabel}. It goes into your renewal for next semester.`
+          : `You've completed your duty hours for the ${duty.termLabel}. ${duty.office ? `The head of ${duty.office}` : 'Your office'} has been asked to evaluate you; it goes into your renewal. Nothing else to do for duty hours this semester.`,
+        time: duty.termLabel,
+        isRead: read.has(id),
+      });
+    }
+  }
 
   return items;
 }

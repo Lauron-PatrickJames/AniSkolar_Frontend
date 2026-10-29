@@ -175,8 +175,12 @@ Communication Service with a free Azure-managed domain) connected to
 
 ## Renewals (admin: Review → Renewals; student: Renewal)
 - The AdSO opens a renewal period per scholarship + term (1st / 2nd
-  semester): deadline, minimum GPA (0.00–4.00, higher is better), documents
-  to upload, and whether the department head's evaluation is required.
+  semester): deadline, minimum GPA (0.00–4.00, higher is better), and
+  whether the department head's evaluation is required. Renewal is grades
+  only (2026-10-29): GPA, any failing grade, and the TCG
+  (`RENEWAL_DOCUMENTS` in models/RenewalPeriod.js, mirrored as
+  `DEFAULT_RENEWAL_REQUIREMENTS` in src/utils/renewals.ts). Periods no
+  longer choose documents; an older period's own list is ignored.
   Closing a period stops new submissions; scholars asked to revise can
   still resubmit. Office admins see their own scholarships' periods but
   can't open or edit them.
@@ -250,13 +254,24 @@ Communication Service with a free Azure-managed domain) connected to
   5th year counts with 3rd year and up. When the percentage, year level
   and hours are all set, those hours apply and the scholar can't change
   them; otherwise (e.g. no year level on the profile — the admin list says
-  "year level not set") the scholar enters their own, as on the sheet. The
-  deadline is still entered by the scholar.
+  "year level not set") the scholar enters their own, as on the sheet.
+- Deadline: one per term, set by the AdSO on the Duty hours page ("Set
+  deadline"; `PUT /api/duty-hours/admin/deadline`, stored in
+  `DutySetting.deadlines` and copied onto every log of that term, including
+  logs created later). Scholars see it read-only; the server ignores a
+  deadline sent with their saves (2026-10-21).
+- No duties before an office is assigned (2026-10-21): until the AdSO
+  assigns the scholar's office, the page shows "Waiting for your office
+  assignment" instead of Add a duty, and `PUT /api/duty-hours/mine`
+  refuses new duties (409). Event claims still work.
 - When duty may be logged (AdSO, Oct 2026; `dutyRuleError` in the
   backend's utils/dutyHours.js and src/utils/dutyHours.ts — keep in sync):
   Mon–Thu 8:00 AM–6:00 PM, Fri 8:00 AM–5:00 PM, no weekends, never across
   12:00–1:00 PM (log the morning and afternoon separately), at least 1.5
-  hours per duty. Breaking one blocks saving with the reason.
+  hours per duty, times on the hour or half hour (8:00, 8:30; the student
+  page offers only those). Breaking one blocks saving with the reason.
+  Duties saved before the 30-minute rule (2026-10-21) still save unchanged
+  (`parseLog(body, { keep })`).
 - Credited events (Duty hours → "Events"; `models/DutyEvent.js`,
   `DutyLog.eventClaims`): events set up by the scholarship office or COSA
   (the scholars' org; it asks Ms. Nor first) that the office credits for
@@ -300,13 +315,29 @@ their own accounts). One head per office.
   `utils/dutyHours`); offices without a head count everything, as before.
   A scholar's save keeps confirmations (and ids) on duties whose date and
   times didn't change; an edited duty waits again.
-- **Evaluations:** for open renewal periods that need one, the scholars who
-  did duty in their office in the term the renewal looks back on; the head
-  rates the 1–5 items online (`DutyLog.evaluation`, copied into the
-  renewal — now or when the scholar submits; source `office`). Editable
-  until the AdSO decides the renewal. Opening such a period emails the
-  heads (one BCC email); Renewals → ⋯ → "Email office heads to evaluate"
-  sends a reminder. The AdSO can still type a paper evaluation in.
+- **Evaluations** (reworked 2026-10-21, `utils/evaluations.js`): a scholar
+  can be evaluated once their hours for the term are complete (confirmed
+  duties + approved event credit ≥ required). States: still rendering
+  hours (`in_progress`) → ready → evaluated (`done`). The moment a
+  confirmation (or an approved event claim) completes the hours, the head
+  is emailed once ("please evaluate", outbox key `eval-ready:<logId>`,
+  priority 1) and the portal shows the scholar under "Ready to evaluate";
+  the scholar is emailed too ("you've completed your duty hours", key
+  `hours-done:<logId>`), gets a bell notification, and their Duty Hours
+  page says the head was asked to evaluate them (then "evaluated"; the
+  student API returns only `evaluated`, never the scores);
+  the Monday office-head reminder counts the ready ones. The portal covers
+  the current and previous term (`GET /api/office/evaluations` →
+  `{ terms }`; `PUT /api/office/evaluations/:sn` with `{ academicYear,
+  term, scores, remarks }`, 409 while in progress). The evaluation is
+  saved on the term's `DutyLog.evaluation` and copied into the renewal
+  for the next term (now, or when the scholar submits; source `office`).
+  Editable until the AdSO decides that renewal. Renewals → ⋯ → "Email
+  office heads to evaluate" still works. The AdSO can still type a paper
+  evaluation in.
+- The portal opens with three counts (duties to check, ready to evaluate,
+  unread messages) that jump to their tab; the Scholars tab shows each
+  scholar's hours bar and an Evaluate button once ready.
 - **Requests:** a specific scholar, more / fewer scholars, or other
   (`models/OfficeRequest.js`); the AdSO is emailed and answers in Duty
   hours → **Requests** (done / declined + reply the head sees).
@@ -315,6 +346,58 @@ their own accounts). One head per office.
   duty office); emails both ways.
 - To see the portal yourself, put your own school email as a head in Duty
   hours → Offices and sign in again.
+
+## Panel feedback changes (2026-10-21)
+From the panel's review. Tested with a temporary end-to-end script (39
+checks) plus the older office, duty, messages, POLCA and Alumni scripts.
+- **Sign-up** (`CompleteProfilePage.tsx`, `POST /api/students/complete-profile`):
+  4 steps, the last is "Review and confirm"; no "Skip for now". Everything
+  is required except telephone, the name suffix (`nameSuffix`: Jr., Sr.,
+  II–V) and a 1st year's GPA; a parent can be marked deceased
+  (`fatherDeceased` / `motherDeceased`, contact not needed, can't be the
+  guardian). The server checks the same (`missingRequired`) and needs
+  `agreed: true`; `profileConfirmedAt` records it.
+- **Locked after sign-up** (`LOCKED_FIELDS` in routes/students.js): middle
+  name, suffix, birth date and place, nationality, civil status, program.
+  Blank ones can still be filled. Changes go through a change request
+  (group `personal`, or the verified groups as before); every request is
+  also posted to the AdSO in Messages. The AdSO edits any field from
+  Scholars → a scholar → "Edit profile" (`GET/PATCH
+  /api/students/:studentNumber/profile`, AdSO only); saving marks the open
+  requests resolved. First and last names come from Clerk as before.
+- **Scholar side:** My Scholarship (`src/pages/student/MyScholarship.tsx`)
+  replaces Explore Grants in the sidebar once the student holds a
+  scholarship; a Scholar badge in the sidebar and top bar names it.
+  `GET /api/students/me/holdings` returns `details` (grant %, approval
+  date, reference). Two approved scholarships: the student keeps one
+  (`POST /api/students/me/holdings/choose { keepScholarshipId }`); the
+  others end with `endReason: 'Declined'`, `endedBy: 'student'`, which
+  frees the slot (ended applications no longer count as held anywhere:
+  `findHeldScholarships`, `findHolders`, `findCurrentHolders`), and the
+  AdSO gets a message. My Applications (`MyApplications.tsx`) lists all
+  applications with a status filter.
+- **Notifications:** clicking one opens a preview (status + the office's
+  note) with "View application" / "Explore scholarships".
+- **Explore compare:** "only show what's different" removed; benefits,
+  application period and handling office at the top.
+- **Applications (AdSO):** internal notes removed from the review page;
+  the office filter and sort removed from the list (it still lists
+  longest-waiting first); search covers the scholarship name. SFAG: the
+  student picks the grant applied for on the form ("Grant"
+  step; `sfagPercentageRequested`, required on submit and checked before
+  files are stored). Approving as the AdSO sets the granted
+  `sfagPercentage` in the decision panel, pre-filled with the requested
+  one; `PATCH /api/applications/:id/status` uses the requested one when
+  none is sent, and 400s only if neither exists (older applications). The
+  Grant percentage card still edits it after approval. "Download this file" and "Download all (.zip)"
+  sit together.
+- **Scholars (AdSO):** "Export to Excel" opens a preview (columns + first 8
+  rows); the segment, approval and sort controls are gone.
+- **Scholarships:** "Add scholarship" also takes the description, benefits
+  (one per line) and application period students see.
+- **POLCA / Alumni:** no Statistics page (AdSO only).
+- **Duty hours and office portal:** see those sections (AdSO deadline,
+  30-minute steps, evaluation after hours are complete).
 
 ## Download all files (.zip)
 Added 2026-10-19 (backend `routes/documentZips.js`, `archiver` package;
@@ -388,6 +471,20 @@ happens.
   `GET /api/messages/files/:fileId` lets only that student or the AdSO
   open them. A message can say which of the student's applications it's
   about. Read receipts ("Seen"); pages refresh every 20 s.
+- **Inbox actions** (AdSO, 2026-10-21; `models/MessageThread.js`, one per
+  conversation): ⋯ on a conversation (or in its header) → Pin to top,
+  Mark as unread / read, Archive / Move to inbox, Delete; the list has
+  Inbox / Unread / Archived. `PATCH …/threads/:studentNumber/state` (or
+  `…/offices/:office/state`) with `{ pinned?, archived?, unread? }`;
+  `DELETE …/threads/:studentNumber` (or `…/offices/:office`). All of it is
+  the AdSO's own view: "mark as unread" doesn't touch `readAt`, so the
+  student's "Seen" stays; it's cleared when the AdSO opens the
+  conversation, and counts in the Messages badge. Archived conversations
+  return to the inbox when the other side writes again (not on the AdSO's
+  own reply). Delete hides the messages so far from the AdSO only
+  (`clearedAt`); the student or office keeps theirs, attachments
+  included, and a new message starts the conversation again with only
+  what's new. Nothing is ever removed from the database.
 
 - **Email alerts go through the outbox** (2026-10-19): "new message"
   alerts (and office request emails) are queued in the same outbox as the
@@ -732,13 +829,14 @@ Recommended next, most useful first:
 2. Auto-close periods: renewal / application periods close at their
    deadline; holders who never submitted become "Not renewed – no
    submission" (undoable); the closing announcement goes out.
-3. Duty deadline per term set by the AdSO (scholars type their own today),
-   so duty reminders and "hours a week" are right for everyone.
+3. (Done 2026-10-21: duty deadline per term set by the AdSO.)
 4. AdSO "To do" page: applications, renewals, claims, office requests and
    messages in one list, by deadline.
 5. Auto-end scholarships: 4th-year scholars' scholarships end as
    "Graduated" after their last semester (frees POLCA / Alumni slots).
-6. Profile verification screen for the AdSO (the endpoints exist).
+6. Profile verification screen for the AdSO (the endpoints exist; the
+   AdSO can already edit a profile from Scholars → a scholar → Edit
+   profile).
 7. GPA cross-check: flag renewals whose typed GPA looks off against past
    semesters or the profile.
 8. Office head monthly summary of their scholars (hours, flagged duties,

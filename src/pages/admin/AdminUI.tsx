@@ -1277,12 +1277,17 @@ export function TableSkeleton({ rows = 6, label = 'Loading' }: { rows?: number; 
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])';
 
-const MODAL_SIZES = { sm: 'sm:max-w-md', md: 'sm:max-w-2xl', lg: 'sm:max-w-4xl' };
+const MODAL_SIZES = { sm: 'sm:max-w-md', md: 'sm:max-w-2xl', lg: 'sm:max-w-4xl', xl: 'sm:max-w-6xl' };
 
 // Accessible dialog: rendered in a portal, traps Tab focus, closes on
 // Escape or backdrop click (unless `dismissible` is false, e.g. while
 // saving), and returns focus to whatever opened it. Mount it only while
 // open: {open && <Modal …/>}.
+// Open dialogs, newest last. Only the top one answers the keyboard, so a
+// popup opened over another (e.g. a result over the duties dialog) closes
+// on Escape without closing the one under it.
+const openModals: string[] = [];
+
 export function Modal({ title, description, children, footer, onClose, size = 'md', dismissible = true, initialFocusRef, role = 'dialog', icon, bodyClassName = 'p-5', sheet = false }: {
   title: React.ReactNode;
   description?: React.ReactNode;
@@ -1309,6 +1314,7 @@ export function Modal({ title, description, children, footer, onClose, size = 'm
   dismissibleRef.current = dismissible;
 
   useEffect(() => {
+    openModals.push(titleId);
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
     const firstInBody = bodyRef.current?.querySelector<HTMLElement>(FOCUSABLE);
@@ -1318,6 +1324,7 @@ export function Modal({ title, description, children, footer, onClose, size = 'm
     document.body.style.overflow = 'hidden';
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (openModals[openModals.length - 1] !== titleId) return;
       if (e.key === 'Escape' && dismissibleRef.current) {
         e.stopPropagation();
         onCloseRef.current();
@@ -1339,6 +1346,7 @@ export function Modal({ title, description, children, footer, onClose, size = 'm
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
+      openModals.splice(openModals.indexOf(titleId), 1);
       document.body.style.overflow = prevOverflow;
       previouslyFocused?.focus?.();
     };
@@ -1876,6 +1884,41 @@ export function Toast({ message, action, onClose, duration = 8000 }: {
       </div>
     </div>,
     document.body
+  );
+}
+
+// The outcome of a confirmed action (approve, save, delete, assign…), as a
+// popup the user closes with OK, instead of a toast that fades away.
+// Toasts stay for things that aren't confirmations (archive with Undo,
+// "preparing the download", errors from a switch).
+export function ResultDialog({ message, title = 'Done', action, onClose }: {
+  message: React.ReactNode;
+  title?: string;
+  // A follow-up, e.g. "Next application".
+  action?: { label: string; onClick: () => void };
+  onClose: () => void;
+}) {
+  const okRef = useRef<HTMLButtonElement>(null);
+  return (
+    <Modal
+      size="sm"
+      title={title}
+      onClose={onClose}
+      initialFocusRef={okRef}
+      icon={
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-success-bg text-success-fg">
+          <CheckCircle2 className="size-5" aria-hidden />
+        </span>
+      }
+      footer={
+        <>
+          {action && <Button onClick={() => { onClose(); action.onClick(); }}>{action.label}</Button>}
+          <Button ref={okRef} variant="primary" onClick={onClose}>OK</Button>
+        </>
+      }
+    >
+      <p className="text-sm text-ink-muted">{message}</p>
+    </Modal>
   );
 }
 

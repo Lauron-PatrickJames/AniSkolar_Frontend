@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ChevronRight, Inbox } from 'lucide-react';
-import { OFFICE_LABELS, acceptsOnlineApplications, mockScholarships, officeDisplayName, officeOf } from '../../data/scholarships';
+import { acceptsOnlineApplications, mockScholarships, officeDisplayName, officeOf } from '../../data/scholarships';
 import {
   AdminApplication, STATUS_OPTIONS, applicantName, formatDateTime, isOfficeApp, titleCaseName
 } from './adminData';
@@ -9,7 +9,7 @@ import {
   SearchInput, Select, StatusBadge, Table, TableSkeleton, Tabs, Td, Th, Toolbar, Tooltip, Tr, Truncate, paginate
 } from './AdminUI';
 import {
-  DEFAULT_FILTERS, ListFilters, OfficeFilter, QueueSort, SORT_LABELS, StatusTab, WAITING_HIGHLIGHT_DAYS,
+  DEFAULT_FILTERS, ListFilters, StatusTab, WAITING_HIGHLIGHT_DAYS,
   filterApplications, waitingDays
 } from './applicationQueue';
 import { relativeTime } from './history';
@@ -123,23 +123,12 @@ export default function ApplicationsList({
                 value={filters.search}
                 onChange={search => setFilter({ search })}
                 label="Search applications"
-                placeholder="Search name, student no., reference or college…"
+                placeholder="Search name, student no., reference, scholarship or college…"
                 className="min-w-56 flex-1"
               />
               <Select value={filters.scholarship} onChange={scholarship => setFilter({ scholarship })} className="md:w-60" label="Filter by scholarship">
                 <option value="All">All scholarships</option>
                 {scholarshipOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-              </Select>
-              {isAdso && (
-                <Select value={filters.office} onChange={office => setFilter({ office: office as OfficeFilter })} className="md:w-48" label="Filter by office">
-                  <option value="All">All offices</option>
-                  {(Object.keys(OFFICE_LABELS) as OfficeFilter[]).map(code => (
-                    <option key={code} value={code}>{code === 'LSO' ? 'AdSO only' : `Via ${officeDisplayName(code)}`}</option>
-                  ))}
-                </Select>
-              )}
-              <Select value={filters.sort} onChange={sort => setFilter({ sort: sort as QueueSort })} className="md:w-44" label="Sort applications">
-                {(Object.keys(SORT_LABELS) as QueueSort[]).map(key => <option key={key} value={key}>{SORT_LABELS[key]}</option>)}
               </Select>
             </Toolbar>
           </>
@@ -153,7 +142,7 @@ export default function ApplicationsList({
           listFiltersActive ? (
             <EmptyState
               title="No applications match"
-              description="Try a different search, scholarship or office."
+              description="Try a different search or scholarship."
               action={<Button onClick={clearListFilters}>Clear filters</Button>}
             />
           ) : (

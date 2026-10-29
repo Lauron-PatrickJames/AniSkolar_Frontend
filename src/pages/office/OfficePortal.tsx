@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { Building2, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, Flag, Hourglass, LogOut, MessageSquare, Send, Undo2, Users } from 'lucide-react';
+import { Building2, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, Flag, Hourglass, LogOut, MessageSquare, Minus, Plus, Search, Send, Undo2, UserMinus, UserPlus, UserRound, Users, X } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
@@ -635,7 +635,7 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
         ))}
       </div>
       <div className="mt-4">
-        <Field label="Remarks" optional helper="Seen by the scholarship office.">
+        <Field label="Remarks" optional helper="The scholar and the scholarship office see this, along with your ratings.">
           <Textarea rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} maxLength={2000} disabled={busy} />
         </Field>
       </div>
@@ -648,14 +648,113 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
 
 // --- Requests ---------------------------------------------------------------------
 
-interface OfficeRequestRow { _id: string; kind: 'specific' | 'more' | 'fewer' | 'other'; scholar?: string; count?: number; note?: string; status: 'open' | 'done' | 'declined'; response?: string; createdAt: string; resolvedAt?: string }
-const KIND_LABELS: Record<OfficeRequestRow['kind'], string> = { specific: 'A specific scholar', more: 'More scholars', fewer: 'Fewer scholars', other: 'Something else' };
+interface OfficeRequestRow { _id: string; kind: 'specific' | 'more' | 'fewer' | 'other'; scholar?: string; studentNumber?: string; count?: number; note?: string; status: 'open' | 'done' | 'declined'; response?: string; createdAt: string; resolvedAt?: string }
+type RequestKind = OfficeRequestRow['kind'];
+const KIND_LABELS: Record<RequestKind, string> = { specific: 'A specific scholar', more: 'More scholars', fewer: 'Fewer scholars', other: 'Something else' };
+const KIND_OPTIONS: { kind: RequestKind; title: string; hint: string; icon: React.ElementType }[] = [
+  { kind: 'specific', title: 'A specific scholar', hint: 'Someone who worked with you, or any SFAG scholar', icon: UserRound },
+  { kind: 'more', title: 'More scholars', hint: 'Your office needs more help', icon: UserPlus },
+  { kind: 'fewer', title: 'Fewer scholars', hint: 'You have more than you need', icon: UserMinus },
+  { kind: 'other', title: 'Something else', hint: 'Anything about your scholars', icon: MessageSquare },
+];
+
+// The scholars a head can pick from (GET /api/office/scholar-directory).
+interface DirectoryScholar {
+  studentNumber: string; name: string; program: string; yearLevel: string; avatarUrl?: string;
+  status: 'here' | 'elsewhere' | 'unassigned' | 'inactive';
+  workedHere: TermKey | null;
+}
+const DIRECTORY_STATUS: Record<DirectoryScholar['status'], { label: string; tone: 'success' | 'info' | 'neutral' | 'warning' }> = {
+  here: { label: 'In your office', tone: 'success' },
+  unassigned: { label: 'Not assigned yet', tone: 'info' },
+  elsewhere: { label: 'In another office', tone: 'neutral' },
+  inactive: { label: 'Not an SFAG scholar this semester', tone: 'neutral' },
+};
+
+function ScholarPicker({ scholars, value, onChange, disabled }: {
+  scholars: DirectoryScholar[] | null; value: DirectoryScholar | null; onChange: (s: DirectoryScholar | null) => void; disabled?: boolean;
+}) {
+  const [q, setQ] = useState('');
+  if (value) {
+    return (
+      <div className="flex items-center gap-3 rounded-control px-3 py-2.5 ring-1 ring-accent/40 bg-accent-subtle">
+        <Avatar name={value.name || value.studentNumber} avatarUrl={value.avatarUrl} size="sm" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-ink">{titleCaseName(value.name) || value.studentNumber}</p>
+          <p className="truncate text-xs text-ink-muted">{[value.studentNumber, value.program, value.yearLevel].filter(Boolean).join(' · ')}</p>
+        </div>
+        <Button size="sm" variant="ghost" icon={X} onClick={() => onChange(null)} disabled={disabled}>Change</Button>
+      </div>
+    );
+  }
+  const needle = q.trim().toLowerCase();
+  const matches = (scholars ?? []).filter(s => !needle || s.name.toLowerCase().includes(needle) || s.studentNumber.includes(needle) || s.program.toLowerCase().includes(needle));
+  const mine = matches.filter(s => s.workedHere);
+  const others = matches.filter(s => !s.workedHere && s.status !== 'inactive');
+  const item = (s: DirectoryScholar) => {
+    const blocked = s.status === 'here' || s.status === 'inactive';
+    const st = DIRECTORY_STATUS[s.status];
+    return (
+      <li key={s.studentNumber}>
+        <button
+          type="button"
+          onClick={() => onChange(s)}
+          disabled={blocked || disabled}
+          className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+        >
+          <Avatar name={s.name || s.studentNumber} avatarUrl={s.avatarUrl} size="sm" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm text-ink">{titleCaseName(s.name) || s.studentNumber}</span>
+            <span className="block truncate text-xs text-ink-subtle">
+              {[s.program, s.yearLevel].filter(Boolean).join(' · ')}
+              {s.workedHere ? ` · with you ${termLabel(s.workedHere)}` : ''}
+            </span>
+          </span>
+          <Badge tone={st.tone}>{st.label}</Badge>
+        </button>
+      </li>
+    );
+  };
+  return (
+    <div className="overflow-hidden rounded-control ring-1 ring-line">
+      <div className="flex items-center gap-2 border-b border-line px-3">
+        <Search className="size-4 shrink-0 text-ink-subtle" aria-hidden />
+        <input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Search name, student no. or program"
+          aria-label="Search scholars"
+          disabled={disabled}
+          className="h-10 w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-subtle"
+        />
+      </div>
+      {!scholars ? <div className="p-3"><TableSkeleton rows={3} label="Loading scholars" /></div> : (
+        <div className="max-h-72 overflow-y-auto">
+          {mine.length > 0 && (
+            <>
+              <p className="bg-surface-muted px-3 py-1.5 text-xs font-medium text-ink-muted">Worked with you before</p>
+              <ul className="divide-y divide-line">{mine.map(item)}</ul>
+            </>
+          )}
+          {others.length > 0 && (
+            <>
+              <p className="bg-surface-muted px-3 py-1.5 text-xs font-medium text-ink-muted">All SFAG scholars this semester</p>
+              <ul className="divide-y divide-line">{others.map(item)}</ul>
+            </>
+          )}
+          {mine.length + others.length === 0 && <p className="px-3 py-6 text-center text-sm text-ink-muted">{needle ? 'No scholar matches that.' : 'No SFAG scholars this semester yet.'}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function RequestsTab({ getToken, onToast }: { getToken: GetToken; onToast: (m: string) => void }) {
   const [list, setList] = useState<OfficeRequestRow[] | null>(null);
-  const [kind, setKind] = useState<OfficeRequestRow['kind']>('specific');
-  const [scholar, setScholar] = useState('');
-  const [count, setCount] = useState('1');
+  const [kind, setKind] = useState<RequestKind>('specific');
+  const [directory, setDirectory] = useState<DirectoryScholar[] | null>(null);
+  const [picked, setPicked] = useState<DirectoryScholar | null>(null);
+  const [count, setCount] = useState(1);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -664,15 +763,22 @@ function RequestsTab({ getToken, onToast }: { getToken: GetToken; onToast: (m: s
     try { setList((await api<{ requests: OfficeRequestRow[] }>(getToken, '/api/office/requests')).requests); } catch (err) { setError(err instanceof Error ? err.message : 'Failed to load your requests.'); }
   }, [getToken]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    api<{ scholars: DirectoryScholar[] }>(getToken, '/api/office/scholar-directory')
+      .then(b => setDirectory(b.scholars))
+      .catch(() => setDirectory([]));
+  }, [getToken]);
 
+  const ready = kind === 'specific' ? !!picked : kind === 'other' ? !!note.trim() : count >= 1;
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ready) { setError(kind === 'specific' ? 'Choose the scholar.' : 'Write your request.'); return; }
     setBusy(true);
     setError('');
     try {
-      await api(getToken, '/api/office/requests', { method: 'POST', body: { kind, scholar, count: kind === 'more' || kind === 'fewer' ? Number(count) : undefined, note } });
-      setScholar(''); setNote(''); setCount('1');
-      onToast('Request sent to the scholarship office.');
+      await api(getToken, '/api/office/requests', { method: 'POST', body: { kind, studentNumber: picked?.studentNumber, count: kind === 'more' || kind === 'fewer' ? count : undefined, note } });
+      onToast(kind === 'specific' && picked ? `Asked for ${titleCaseName(picked.name) || picked.studentNumber}. The scholarship office will answer here.` : 'Request sent to the scholarship office. Their answer appears under Your requests.');
+      setPicked(null); setNote(''); setCount(1);
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send the request.');
@@ -681,39 +787,95 @@ function RequestsTab({ getToken, onToast }: { getToken: GetToken; onToast: (m: s
     }
   };
 
+  const open = (list ?? []).filter(r => r.status === 'open');
+  const answered = (list ?? []).filter(r => r.status !== 'open');
+  const requestRow = (r: OfficeRequestRow) => {
+    const Icon = KIND_OPTIONS.find(k => k.kind === r.kind)?.icon ?? Send;
+    return (
+      <li key={r._id} className="flex gap-3 px-4 py-3">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-neutral-bg text-ink-muted"><Icon className="size-4" aria-hidden /></span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-ink">
+              {r.kind === 'specific' && r.scholar ? r.scholar : r.kind === 'more' || r.kind === 'fewer' ? `${r.count ?? ''} ${r.kind} scholar${r.count === 1 ? '' : 's'}` : KIND_LABELS[r.kind]}
+            </span>
+            <Badge tone={r.status === 'done' ? 'success' : r.status === 'declined' ? 'danger' : 'warning'} dot>{r.status === 'open' ? 'Waiting for the office' : r.status === 'done' ? 'Done' : 'Declined'}</Badge>
+          </div>
+          {r.note && <p className="text-sm text-ink-muted">{r.note}</p>}
+          {r.response && <p className="rounded-control bg-surface-muted px-3 py-2 text-sm text-ink"><span className="font-medium">Scholarship office:</span> {r.response}</p>}
+          <p className="text-xs text-ink-subtle">Sent {formatDateTime(r.createdAt)}{r.resolvedAt ? ` · answered ${formatDateTime(r.resolvedAt)}` : ''}</p>
+        </div>
+      </li>
+    );
+  };
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
-      <Card title="New request" description="Ask the scholarship office for a specific scholar, or more or fewer scholars.">
-        <form onSubmit={send} className="space-y-3">
-          {error && <Alert tone="danger">{error}</Alert>}
-          <Field label="I'm requesting">
-            <Select value={kind} onChange={v => setKind(v as OfficeRequestRow['kind'])} disabled={busy}>
-              {Object.entries(KIND_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </Select>
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,26rem)_1fr]">
+      <Card title="New request" description="The scholarship office answers here, and is emailed when you send one.">
+        <form onSubmit={send} className="space-y-4">
+          {error && <Alert tone="danger" onDismiss={() => setError('')}>{error}</Alert>}
+          <fieldset className="space-y-2">
+            <legend className="mb-2 text-sm font-medium text-ink">What do you need?</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {KIND_OPTIONS.map(o => (
+                <button
+                  key={o.kind}
+                  type="button"
+                  aria-pressed={kind === o.kind}
+                  onClick={() => { setKind(o.kind); setError(''); }}
+                  disabled={busy}
+                  className={`flex flex-col items-start gap-1 rounded-control p-3 text-left ring-1 transition-colors ${kind === o.kind ? 'bg-accent-subtle ring-accent' : 'ring-line hover:bg-surface-muted'}`}
+                >
+                  <o.icon className={`size-4 ${kind === o.kind ? 'text-accent' : 'text-ink-muted'}`} aria-hidden />
+                  <span className="text-sm font-medium text-ink">{o.title}</span>
+                  <span className="text-xs leading-snug text-ink-subtle">{o.hint}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          {kind === 'specific' && (
+            <Field label="Scholar">
+              <ScholarPicker scholars={directory} value={picked} onChange={setPicked} disabled={busy} />
+            </Field>
+          )}
+          {(kind === 'more' || kind === 'fewer') && (
+            <Field label={kind === 'more' ? 'How many more' : 'How many fewer'}>
+              <div className="inline-flex items-center rounded-control ring-1 ring-line">
+                <button type="button" onClick={() => setCount(c => Math.max(1, c - 1))} disabled={busy || count <= 1} aria-label="One less" className="p-2.5 text-ink-muted hover:text-ink disabled:opacity-40"><Minus className="size-4" /></button>
+                <span className="w-10 text-center text-sm font-medium tabular-nums text-ink" aria-live="polite">{count}</span>
+                <button type="button" onClick={() => setCount(c => Math.min(20, c + 1))} disabled={busy || count >= 20} aria-label="One more" className="p-2.5 text-ink-muted hover:text-ink disabled:opacity-40"><Plus className="size-4" /></button>
+              </div>
+            </Field>
+          )}
+          <Field label={kind === 'other' ? 'Your request' : 'Why'} optional={kind !== 'other'}>
+            <Textarea
+              rows={3}
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              maxLength={1000}
+              disabled={busy}
+              placeholder={kind === 'specific' ? 'e.g. They helped us last semester and know our system.' : kind === 'more' ? 'e.g. Enrollment season is busy.' : kind === 'fewer' ? 'e.g. Less work this semester.' : 'Write what you need.'}
+            />
           </Field>
-          {kind === 'specific' && <Field label="Scholar"><TextInput value={scholar} onChange={e => setScholar(e.target.value)} maxLength={200} placeholder="Name or student number" disabled={busy} /></Field>}
-          {(kind === 'more' || kind === 'fewer') && <Field label="How many"><TextInput type="number" min={1} max={20} value={count} onChange={e => setCount(e.target.value)} disabled={busy} /></Field>}
-          <Field label="Details" optional={kind !== 'other'}><Textarea rows={3} value={note} onChange={e => setNote(e.target.value)} maxLength={1000} placeholder={kind === 'specific' ? 'e.g. They helped us last term.' : ''} disabled={busy} /></Field>
-          <Button type="submit" variant="primary" icon={Send} loading={busy}>Send request</Button>
+          <Button type="submit" variant="primary" icon={Send} loading={busy} disabled={!ready} className="w-full">
+            {kind === 'specific' && picked ? `Ask for ${titleCaseName(picked.name).split(' ')[0] || 'this scholar'}` : 'Send request'}
+          </Button>
         </form>
       </Card>
-      <Card title="Your requests" flush>
-        {!list ? <TableSkeleton rows={3} label="Loading requests" /> : list.length === 0 ? <EmptyState icon={Send} title="No requests yet" description="Requests you send appear here with the office's answer." /> : (
-          <ul className="divide-y divide-line">
-            {list.map(r => (
-              <li key={r._id} className="space-y-1 px-4 py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-ink">{KIND_LABELS[r.kind]}{r.kind === 'specific' && r.scholar ? `: ${r.scholar}` : ''}{r.count ? ` (${r.count})` : ''}</span>
-                  <Badge tone={r.status === 'done' ? 'success' : r.status === 'declined' ? 'danger' : 'warning'} dot>{r.status === 'open' ? 'Waiting' : r.status === 'done' ? 'Done' : 'Declined'}</Badge>
-                  <span className="ml-auto text-xs text-ink-subtle">{formatDateTime(r.createdAt)}</span>
-                </div>
-                {r.note && <p className="text-sm text-ink-muted">{r.note}</p>}
-                {r.response && <p className="rounded-control bg-surface-muted px-3 py-2 text-sm text-ink"><b>Scholarship office:</b> {r.response}</p>}
-              </li>
-            ))}
-          </ul>
+
+      <div className="space-y-4">
+        <Card title="Waiting for an answer" flush>
+          {!list ? <TableSkeleton rows={2} label="Loading requests" /> : open.length === 0
+            ? <p className="px-4 py-6 text-center text-sm text-ink-muted">Nothing waiting. Requests you send show here until the office answers.</p>
+            : <ul className="divide-y divide-line">{open.map(requestRow)}</ul>}
+        </Card>
+        {answered.length > 0 && (
+          <Card title="Answered" flush>
+            <ul className="divide-y divide-line">{answered.map(requestRow)}</ul>
+          </Card>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

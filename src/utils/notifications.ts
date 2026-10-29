@@ -108,7 +108,7 @@ export function buildNotifications(student: StudentProfile, applications: Applic
         page: 'duty-hours',
         title: duty.evaluated ? 'Your office evaluated you' : 'Duty hours completed',
         text: duty.evaluated
-          ? `${duty.office ?? 'Your office'} has evaluated your duty for the ${duty.termLabel}. It goes into your renewal for next semester.`
+          ? `${duty.office ?? 'Your office'} has evaluated your duty for the ${duty.termLabel}. Open Duty Hours to see your ratings and their remarks. It goes into your renewal for next semester.`
           : `You've completed your duty hours for the ${duty.termLabel}. ${duty.office ? `The head of ${duty.office}` : 'Your office'} has been asked to evaluate you; it goes into your renewal. Nothing else to do for duty hours this semester.`,
         time: duty.termLabel,
         isRead: read.has(id),

@@ -9,9 +9,17 @@ AniSkolar_Backend); update your `origin` with `git remote set-url` if you
 cloned the old addresses.
 
 ## Where things stand
-- Demo mode was removed on 2026-10-20: the `aniskolar_demo` database, the
-  `aniskolar-demo` file container and `scripts/seed-demo.js` are gone. The
-  system runs on the real `aniskolar` database and `aniskolar-files`.
+- Demo data is back as an option (2026-10-29): `node scripts/seed-demo.js`
+  (backend) fills a separate `aniskolar_demo` database and `aniskolar-demo`
+  file container with sample students, applications in every status, duty
+  hours (waiting, flagged, ready to evaluate, evaluated), renewals,
+  requests and messages. It only reads the real database: real students are
+  copied in so their accounts work, and real office heads stay on their
+  offices (`--head you@dlsud.edu.ph` makes that email the Registrar head).
+  To use it set `MONGODB_DB=aniskolar_demo` and
+  `AZURE_STORAGE_CONTAINER=aniskolar-demo` in the backend `.env` and
+  restart; set them back for the real `aniskolar` database and
+  `aniskolar-files`. Re-running wipes and refills the demo only.
 - The full feature list is in **FEATURES.md**.
 - Features are essentially complete: student portal (profile, Explore /
   Compare, applications for SFAG, Entrance, EBPSP, POLCA and Alumni,
@@ -332,8 +340,11 @@ their own accounts). One head per office.
   priority 1) and the portal shows the scholar under "Ready to evaluate";
   the scholar is emailed too ("you've completed your duty hours", key
   `hours-done:<logId>`), gets a bell notification, and their Duty Hours
-  page says the head was asked to evaluate them (then "evaluated"; the
-  student API returns only `evaluated`, never the scores);
+  page says the head was asked to evaluate them, then shows the
+  evaluation itself (2026-10-29: average and rating, each item, remarks,
+  evaluator and date; `src/components/EvaluationSummary.tsx`, also on the
+  renewal card for paper evaluations; the staff email that entered it is
+  never sent to students);
   the Monday office-head reminder counts the ready ones. The portal covers
   the current and previous term (`GET /api/office/evaluations` →
   `{ terms }`; `PUT /api/office/evaluations/:sn` with `{ academicYear,
@@ -348,7 +359,17 @@ their own accounts). One head per office.
   scholar's hours bar and an Evaluate button once ready.
 - **Requests:** a specific scholar, more / fewer scholars, or other
   (`models/OfficeRequest.js`); the AdSO is emailed and answers in Duty
-  hours → **Requests** (done / declined + reply the head sees).
+  hours → **Requests** (done / declined + reply the head sees). A specific
+  scholar is picked from a list (2026-10-29; `GET
+  /api/office/scholar-directory`): scholars who worked in that office
+  before first, then every SFAG scholar this semester, with name,
+  program, year and where they are this semester only (no grades or
+  contact details). Scholars already in the office, or not SFAG scholars
+  this semester, can't be picked, and an open request for the same
+  scholar can't be repeated. The request stores the `studentNumber`, so
+  the AdSO's **Assign to [office]** button assigns them for that term and
+  closes the request in one step (`POST
+  /api/duty-hours/admin/requests/:id/assign`).
 - **Messages:** one conversation per office with the AdSO (`Message.office`);
   shows in the AdSO's Messages next to students (and "New message" → a
   duty office); emails both ways.
@@ -860,7 +881,6 @@ Smaller / waiting on others:
   (`EVALUATION_ITEMS` in the backend's `utils/renewals.js` and the
   frontend's `src/utils/renewals.ts`); add the other 4 once the AdSO shares
   the form. The label for a rating of 1 is assumed ("Poor").
-- Show the head's evaluation and remarks to scholars once Dr. May agrees.
 - Let admins edit the message to the applicant without changing the
   decision, recorded as its own "Message updated" history entry.
 - A server-side stats endpoint (`/api/applications/stats?from&to`) once

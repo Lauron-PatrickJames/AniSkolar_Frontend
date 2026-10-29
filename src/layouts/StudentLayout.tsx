@@ -62,6 +62,7 @@ export default function StudentLayout({
         isSfagScholar={isSfagScholar(applications)}
         heldScholarships={heldScholarships}
         unreadMessages={unreadMessages}
+        needsRevision={applications.filter(app => app.status === 'Needs Revision').length}
       />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen relative">
@@ -96,7 +97,7 @@ export default function StudentLayout({
 
 // Unread messages from the AdSO: checked on every page change, every
 // minute, and right after the Messages page marks them read.
-function useUnreadMessages(currentPage: string): number {
+export function useUnreadMessages(currentPage: string): number {
   const { getToken } = useAuth();
   const [unread, setUnread] = useState(0);
   const check = useCallback(async () => {

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import EvaluationSummary from '../../components/EvaluationSummary';
 import { useAuth } from '@clerk/react';
 import { openDocument } from '../../utils/documents';
 import {
@@ -233,6 +234,8 @@ function RenewalCard({ renewal, onRevise }: { renewal: Renewal; onRevise?: () =>
           </div>
         </div>
       )}
+
+      {renewal.evaluation?.average ? <EvaluationSummary evaluation={renewal.evaluation} title="Your office's evaluation (part of this renewal)" /> : null}
 
       <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
         <div>

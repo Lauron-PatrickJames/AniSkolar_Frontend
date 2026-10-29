@@ -34,6 +34,8 @@ export interface RenewalPeriod {
   updatedBy?: string;
   // Admin list only: renewals per status.
   counts?: Partial<Record<RenewalStatus, number>>;
+  // Scholar's open periods: renewing waits for their office's evaluation.
+  evaluationWait?: { office: string; hoursComplete: boolean; message: string } | null;
 }
 
 export interface RenewalDocument {

@@ -141,6 +141,12 @@ export default function Renewals() {
                       <p className="text-xs text-slate-500 mt-0.5">{periodLabel(period)}</p>
                     </div>
                     <PeriodFacts period={period} />
+                    {period.evaluationWait && (
+                      <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 leading-relaxed">
+                        <Clock className="w-4 h-4 shrink-0 mt-px text-amber-600" aria-hidden />
+                        <p><span className="font-bold">Waiting for your office’s evaluation.</span> {period.evaluationWait.message}</p>
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={() => openForm({ period })}
@@ -398,13 +404,16 @@ function RenewalForm({ period, existing, onCancel, onSaved }: {
         <legend className="sr-only">Continuing</legend>
         <p className="text-sm font-bold text-slate-800">Are you continuing with this scholarship next semester?</p>
         <div className="flex flex-col sm:flex-row gap-3">
-          <button type="button" aria-pressed={continuing === true} onClick={() => setContinuing(true)} className={choiceClass(continuing === true)}>
+          <button type="button" aria-pressed={continuing === true} onClick={() => setContinuing(true)} disabled={!!period.evaluationWait} className={`${choiceClass(continuing === true)} disabled:cursor-not-allowed disabled:opacity-50`}>
             Yes, I'm renewing
           </button>
           <button type="button" aria-pressed={continuing === false} onClick={() => setContinuing(false)} className={choiceClass(continuing === false)}>
             No, I'm not continuing
           </button>
         </div>
+        {period.evaluationWait && (
+          <p className="text-xs text-amber-800 leading-relaxed">{period.evaluationWait.message} You can still tell the office if you're not continuing.</p>
+        )}
       </fieldset>
 
       {continuing === true && (

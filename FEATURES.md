@@ -44,7 +44,7 @@ The system enforces a few of the office's rules:
 
 Once approved, Explore Grants in the sidebar is replaced by My Scholarship, and a Scholar badge shows which scholarship they hold. My Scholarship shows the grant percentage, approval date, reference number and what they need to keep it. If a student is approved for two scholarships, My Scholarship asks them to choose one. The other is marked "Declined by student", its slot opens, and the AdSO is told in Messages.
 
-Scholars renew their scholarship every semester by submitting their grades only: their GPA, whether they had a failing grade, and a JPG of their Certified True Copy of Grades (TCG). If they're not continuing because of OJT, graduation or something else, they say so on the same form.
+Scholars renew their scholarship every semester by submitting their grades only: their GPA, whether they had a failing grade, and a JPG of their Certified True Copy of Grades (TCG). SFAG scholars can renew only after their office head has evaluated last semester's duty. Until then the renewal says what it's waiting for, though they can still say they're not continuing. If they're not continuing because of OJT, graduation or something else, they say so on the same form.
 
 SFAG scholars also have a Duty Hours page:
 - They log each duty after rendering it. Duty is only allowed Monday to Thursday from 8 to 6 and Friday from 8 to 5, it can't overlap the 12 to 1 lunch break, each duty has to be at least 1.5 hours, and times are picked in 30-minute steps (8:00, 8:30 and so on). These rules are checked when they save.

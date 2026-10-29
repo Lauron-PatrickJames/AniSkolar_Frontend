@@ -181,6 +181,14 @@ Communication Service with a free Azure-managed domain) connected to
   (`RENEWAL_DOCUMENTS` in models/RenewalPeriod.js, mirrored as
   `DEFAULT_RENEWAL_REQUIREMENTS` in src/utils/renewals.ts). Periods no
   longer choose documents; an older period's own list is ignored.
+- Renewing waits for the office's evaluation (2026-10-29;
+  `evaluationWait` in routes/renewals.js): for a period with
+  `requiresEvaluation`, a scholar whose duty office last term has a head in
+  AniSkolar can't submit "continuing" (409 `evaluation_pending`) until that
+  term's `DutyLog.evaluation` exists. `GET /api/renewals/mine` returns
+  `evaluationWait { office, hoursComplete, message }` per open period for
+  the page. "Not continuing" is never blocked. No office or an office
+  without a head: not blocked (the AdSO enters a paper evaluation).
   Closing a period stops new submissions; scholars asked to revise can
   still resubmit. Office admins see their own scholarships' periods but
   can't open or edit them.

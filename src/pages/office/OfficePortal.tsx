@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { Building2, CheckCircle2, ClipboardCheck, Clock, Flag, Hourglass, LogOut, MessageSquare, Send, Users } from 'lucide-react';
+import { Building2, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, Flag, Hourglass, LogOut, MessageSquare, Send, Undo2, Users } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
@@ -276,11 +276,16 @@ interface EntryRow { _id: string; date: string; timeIn: string; timeOut: string;
 function DutiesModal({ studentNumber, term, getToken, onClose, onChanged, onToast }: {
   studentNumber: string; term: TermKey; getToken: GetToken; onClose: () => void; onChanged: () => void; onToast: (m: string) => void;
 }) {
-  const [data, setData] = useState<{ student: { name?: string; programCode?: string; yearLevel?: string }; entries: EntryRow[]; summary: { regularHours: number; waitingHours?: number } } | null>(null);
+  type Progress = { completed: number; required: number | null };
+  type Summary = { regularHours: number; waitingHours?: number };
+  const [data, setData] = useState<{ student: { name?: string; programCode?: string; yearLevel?: string }; entries: EntryRow[]; summary: Summary; progress?: Progress } | null>(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [flagNote, setFlagNote] = useState<string | null>(null);
+  // Flagging: the duties being flagged and the note the scholar will see.
+  const [flagging, setFlagging] = useState<string[] | null>(null);
+  const [flagNote, setFlagNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showConfirmed, setShowConfirmed] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -292,18 +297,22 @@ function DutiesModal({ studentNumber, term, getToken, onClose, onChanged, onToas
   }, [getToken, studentNumber, term]);
   useEffect(() => { load(); }, [load]);
 
+  // One duty: done in place (the row changes). Several, or a flag: a popup
+  // says what happened.
   const act = async (ids: string[], status: 'confirmed' | 'flagged' | null, note = '') => {
     setBusy(true);
     setError('');
     try {
-      const body = await api<{ entries: EntryRow[]; summary: { regularHours: number; waitingHours?: number } }>(getToken, `/api/office/scholars/${studentNumber}/entries`, {
+      const body = await api<{ entries: EntryRow[]; summary: Summary; progress?: Progress }>(getToken, `/api/office/scholars/${studentNumber}/entries`, {
         method: 'PATCH', body: { ...term, entryIds: ids, status, note },
       });
-      setData(d => (d ? { ...d, entries: body.entries, summary: body.summary } : d));
+      setData(d => (d ? { ...d, entries: body.entries, summary: body.summary, progress: body.progress ?? d.progress } : d));
       setSelected(new Set());
-      setFlagNote(null);
+      setFlagging(null);
+      setFlagNote('');
       onChanged();
-      onToast(status === 'confirmed' ? `Confirmed ${ids.length} dut${ids.length === 1 ? 'y' : 'ies'}.` : status === 'flagged' ? 'Flagged. The scholar sees your note.' : 'Undone.');
+      if (status === 'flagged') onToast(`Flagged ${ids.length === 1 ? 'the duty' : `${ids.length} duties`}. The scholar sees your note and can fix it.`);
+      else if (status === 'confirmed' && ids.length > 1) onToast(`Confirmed ${ids.length} duties.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save.');
       load();
@@ -312,72 +321,174 @@ function DutiesModal({ studentNumber, term, getToken, onClose, onChanged, onToas
     }
   };
 
-  const waiting = data?.entries.filter(e => !e.status) ?? [];
-  const pick = [...selected];
+  const entries = data?.entries ?? [];
+  const waiting = entries.filter(e => !e.status);
+  const flagged = entries.filter(e => e.status === 'flagged');
+  const confirmed = entries.filter(e => e.status === 'confirmed');
+  const waitingHours = waiting.reduce((n, e) => n + e.hours, 0);
+  const pick = [...selected].filter(id => waiting.some(e => e._id === id));
+  const allPicked = waiting.length > 0 && pick.length === waiting.length;
+  const toggle = (id: string) => setSelected(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const progress = data?.progress;
+  const left = progress?.required ? Math.max(0, progress.required - progress.completed) : null;
+
+  const footer = flagging ? (
+    <>
+      <Button onClick={() => { setFlagging(null); setFlagNote(''); }} disabled={busy}>Cancel</Button>
+      <Button variant="danger" icon={Flag} loading={busy} disabled={!flagNote.trim()} onClick={() => act(flagging, 'flagged', flagNote)}>
+        Flag {flagging.length === 1 ? 'duty' : `${flagging.length} duties`}
+      </Button>
+    </>
+  ) : pick.length > 0 ? (
+    <>
+      <Button onClick={() => setSelected(new Set())} disabled={busy}>Clear selection</Button>
+      <Button icon={Flag} onClick={() => setFlagging(pick)} disabled={busy}>Flag {pick.length}</Button>
+      <Button variant="primary" icon={CheckCircle2} loading={busy} onClick={() => act(pick, 'confirmed')}>Confirm {pick.length}</Button>
+    </>
+  ) : waiting.length > 0 ? (
+    <>
+      <Button onClick={onClose} disabled={busy}>Close</Button>
+      <Button variant="primary" icon={CheckCircle2} loading={busy} onClick={() => act(waiting.map(e => e._id), 'confirmed')}>
+        Confirm all {waiting.length} waiting
+      </Button>
+    </>
+  ) : (
+    <Button variant="primary" onClick={onClose}>Done</Button>
+  );
+
+  // A duty row: date (shown once per day), time, hours, and its actions.
+  const row = (e: EntryRow, prev: EntryRow | undefined, actions: React.ReactNode, selectable: boolean) => (
+    <li key={e._id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 ${selected.has(e._id) ? 'bg-accent-subtle' : ''}`}>
+      {selectable ? (
+        <input
+          type="checkbox"
+          className="size-4 rounded accent-accent"
+          checked={selected.has(e._id)}
+          onChange={() => toggle(e._id)}
+          disabled={busy}
+          aria-label={`Select ${weekday(e.date)}, ${formatDutyDate(e.date)}, ${format12h(e.timeIn)}`}
+        />
+      ) : null}
+      <span className={`w-32 text-sm ${prev?.date === e.date ? 'text-transparent select-none' : 'font-medium text-ink'}`} aria-hidden={prev?.date === e.date}>
+        {weekday(e.date)}, {formatDutyDate(e.date)}
+      </span>
+      <span className="w-40 text-sm text-ink-muted">{format12h(e.timeIn)} – {format12h(e.timeOut)}</span>
+      <span className="w-12 text-right text-sm tabular-nums text-ink">{hrs(e.hours)} h</span>
+      <span className="ml-auto flex items-center gap-1">{actions}</span>
+      {e.status === 'flagged' && e.note && <p className="w-full pl-0 text-xs text-danger-fg sm:pl-[8.75rem]">Your note: {e.note}</p>}
+    </li>
+  );
+
   return (
     <Modal
       size="lg"
+      sheet
       title={data?.student?.name ? titleCaseName(data.student.name) : studentNumber}
-      description={`${termLabel(term)} · Confirm the duties you can vouch for; flag any that aren't right. Only confirmed duties count toward the scholar's hours.`}
+      description={`${termLabel(term)}${data?.student?.programCode ? ` · ${data.student.programCode}` : ''}${data?.student?.yearLevel ? ` · ${data.student.yearLevel}` : ''}`}
       onClose={onClose}
       dismissible={!busy}
-      footer={
-        flagNote !== null ? (
-          <>
-            <Button onClick={() => setFlagNote(null)} disabled={busy}>Cancel</Button>
-            <Button variant="danger" icon={Flag} loading={busy} disabled={!flagNote.trim()} onClick={() => act(pick, 'flagged', flagNote)}>Flag {pick.length}</Button>
-          </>
-        ) : (
-          <>
-            <Button icon={Flag} onClick={() => setFlagNote('')} disabled={busy || !pick.length}>Flag selected</Button>
-            <Button onClick={() => act(pick, 'confirmed')} disabled={busy || !pick.length}>Confirm selected</Button>
-            <Button variant="primary" icon={CheckCircle2} loading={busy} disabled={!waiting.length} onClick={() => act(waiting.map(e => e._id), 'confirmed')}>Confirm all waiting ({waiting.length})</Button>
-          </>
-        )
-      }
+      footer={footer}
     >
       {error && <Alert tone="danger">{error}</Alert>}
       {!data ? (!error && <TableSkeleton rows={5} label="Loading duties" />) : (
-        <div className="space-y-3">
-          <p className="text-sm text-ink-muted">
-            <b className="text-ink">{formatHours(data.summary.regularHours)} h confirmed</b>
-            {data.summary.waitingHours ? ` · ${formatHours(data.summary.waitingHours)} h waiting for you` : ''}
-          </p>
-          {flagNote !== null && (
-            <Field label={`What's wrong with the ${pick.length} selected dut${pick.length === 1 ? 'y' : 'ies'}?`}>
-              <TextInput value={flagNote} onChange={e => setFlagNote(e.target.value)} maxLength={500} placeholder="e.g. Not in the office that morning" autoFocus />
-            </Field>
+        <div className="space-y-5">
+          {/* Progress toward the requirement */}
+          <div className="rounded-card bg-surface-muted p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="text-sm text-ink">
+                <span className="text-2xl font-semibold tabular-nums">{hrs(progress?.completed ?? data.summary.regularHours)}</span>
+                {progress?.required ? <span className="text-ink-muted"> of {hrs(progress.required)} hours</span> : <span className="text-ink-muted"> hours confirmed</span>}
+              </p>
+              <p className="text-sm text-ink-muted">
+                {left === 0 ? 'Requirement complete' : left !== null ? `${hrs(left)} h to go` : ''}
+              </p>
+            </div>
+            {progress?.required ? (
+              <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-neutral-bg" aria-hidden>
+                <div className="h-full bg-success-solid" style={{ width: `${Math.min(100, (progress.completed / progress.required) * 100)}%` }} />
+                <div className="h-full bg-warning-solid/60" style={{ width: `${Math.min(100 - Math.min(100, (progress.completed / progress.required) * 100), (waitingHours / progress.required) * 100)}%` }} />
+              </div>
+            ) : null}
+            {waiting.length > 0 && (
+              <p className="mt-2 text-xs text-ink-muted">
+                <span className="inline-block size-2 rounded-full bg-warning-solid/60 align-middle" aria-hidden /> {hrs(waitingHours)} h waiting for you to confirm
+                {left !== null && left > 0 && waitingHours >= left ? ' · confirming them completes the requirement, and the scholar moves to Ready to evaluate' : ''}
+              </p>
+            )}
+          </div>
+
+          {entries.length === 0 && <EmptyState icon={Clock} title="No duties logged" description="The scholar hasn't logged any duty this term." />}
+
+          {/* Waiting: the part that needs the head */}
+          {waiting.length > 0 && (
+            <section className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-ink">Waiting for you <span className="text-ink-subtle">({waiting.length})</span></h3>
+                <label className="flex items-center gap-2 text-xs text-ink-muted">
+                  <input type="checkbox" className="size-4 rounded accent-accent" checked={allPicked} disabled={busy}
+                    onChange={() => setSelected(allPicked ? new Set() : new Set(waiting.map(e => e._id)))} />
+                  Select all
+                </label>
+              </div>
+              {flagging && (
+                <Field label={`What's wrong with ${flagging.length === 1 ? 'this duty' : `these ${flagging.length} duties`}? The scholar sees this.`}>
+                  <TextInput value={flagNote} onChange={e => setFlagNote(e.target.value)} maxLength={500} placeholder="e.g. Not in the office that morning" autoFocus />
+                </Field>
+              )}
+              <ul className="divide-y divide-line rounded-control ring-1 ring-warning-fg/20">
+                {waiting.map((e, k) => row(e, waiting[k - 1], (
+                  <>
+                    <Button size="sm" variant="ghost" icon={Flag} onClick={() => { setSelected(new Set([e._id])); setFlagging([e._id]); }} disabled={busy}>Flag</Button>
+                    <Button size="sm" icon={Check} onClick={() => act([e._id], 'confirmed')} disabled={busy}>Confirm</Button>
+                  </>
+                ), true))}
+              </ul>
+            </section>
           )}
-          {data.entries.length === 0 ? <EmptyState icon={Clock} title="No duties logged" description="The scholar hasn't logged any duty this term." /> : (
-            <ul className="divide-y divide-line rounded-control ring-1 ring-line">
-              {data.entries.map(e => (
-                <li key={e._id} className="flex flex-wrap items-center gap-3 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    className="size-4 rounded accent-accent"
-                    checked={selected.has(e._id)}
-                    onChange={() => setSelected(s => { const n = new Set(s); if (n.has(e._id)) n.delete(e._id); else n.add(e._id); return n; })}
-                    aria-label={`Select ${formatDutyDate(e.date)} ${format12h(e.timeIn)}`}
-                  />
-                  <span className="w-28 text-sm text-ink">{weekday(e.date)}, {formatDutyDate(e.date)}</span>
-                  <span className="w-40 text-sm text-ink-muted">{format12h(e.timeIn)} – {format12h(e.timeOut)}</span>
-                  <span className="w-14 text-right text-sm tabular-nums">{formatHours(e.hours)} h</span>
-                  <span className="ml-auto flex items-center gap-2">
-                    {e.status === 'confirmed' ? <Badge tone="success" dot>Confirmed</Badge>
-                      : e.status === 'flagged' ? <Badge tone="danger" dot>Flagged</Badge>
-                        : <Badge tone="warning" dot>Waiting</Badge>}
-                    {e.status && <Button size="sm" variant="ghost" onClick={() => act([e._id], null)} disabled={busy}>Undo</Button>}
-                  </span>
-                  {e.status === 'flagged' && e.note && <p className="w-full pl-7 text-xs text-danger-fg">{e.note}</p>}
-                </li>
-              ))}
-            </ul>
+
+          {/* Flagged: waiting for the scholar to fix */}
+          {flagged.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-ink">Flagged <span className="text-ink-subtle">({flagged.length}) · waiting for the scholar to fix</span></h3>
+              <ul className="divide-y divide-line rounded-control ring-1 ring-danger-fg/20">
+                {flagged.map((e, k) => row(e, flagged[k - 1], (
+                  <>
+                    <Badge tone="danger" dot>Flagged</Badge>
+                    <Button size="sm" variant="ghost" icon={Undo2} onClick={() => act([e._id], null)} disabled={busy}>Undo</Button>
+                  </>
+                ), false))}
+              </ul>
+            </section>
+          )}
+
+          {/* Confirmed: done, folded away */}
+          {confirmed.length > 0 && (
+            <section className="space-y-2">
+              <button type="button" onClick={() => setShowConfirmed(v => !v)} aria-expanded={showConfirmed}
+                className="flex w-full items-center justify-between gap-2 rounded-control text-left text-sm font-semibold text-ink hover:text-accent">
+                <span>Confirmed <span className="font-normal text-ink-subtle">({confirmed.length} · {hrs(confirmed.reduce((n, e) => n + e.hours, 0))} h)</span></span>
+                <ChevronDown className={`size-4 transition-transform ${showConfirmed ? 'rotate-180' : ''}`} aria-hidden />
+              </button>
+              {showConfirmed && (
+                <ul className="divide-y divide-line rounded-control ring-1 ring-line">
+                  {confirmed.map((e, k) => row(e, confirmed[k - 1], (
+                    <>
+                      <Badge tone="success" dot>Confirmed</Badge>
+                      <Button size="sm" variant="ghost" icon={Undo2} onClick={() => act([e._id], null)} disabled={busy}>Undo</Button>
+                    </>
+                  ), false))}
+                </ul>
+              )}
+            </section>
           )}
         </div>
       )}
     </Modal>
   );
 }
+
+// Hours without trailing zeros: 4, 4.5, 13.25.
+const hrs = (n: number) => String(Math.round(n * 100) / 100);
 
 // --- Evaluations ------------------------------------------------------------------
 // A scholar opens for evaluation once their duty hours are complete; the

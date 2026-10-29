@@ -61,6 +61,15 @@ export function SfagAnswers({ details }: { details: SfagApplicationDetails }) {
 
   return (
     <div className="space-y-7">
+      {/* Applications sent before the grant choice was added have none. */}
+      {details.requestedGrant ? (
+        <AnswerGroup title="Grant Applied For">
+          <AnswerGrid>
+            <AnswerField summary label="Tuition Discount" value={`${details.requestedGrant}%`} />
+          </AnswerGrid>
+        </AnswerGroup>
+      ) : null}
+
       <AnswerGroup title="Personal Information">
         <AnswerGrid>
           <AnswerField summary label="Last Name" value={p.lastName} />

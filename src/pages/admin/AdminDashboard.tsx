@@ -52,7 +52,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   // An office whose scholarships have no renewals (POLCA: scholars keep it
   // until they graduate) has no Renewals page either.
   const officeHasRenewals = !adminOffice || mockScholarships.some(s => officeOf(s) === adminOffice && !s.noRenewal && acceptsOnlineApplications(s));
-  const hiddenViews: MainView[] = isAdso ? [] : ['announcements', 'scholarships', 'automation', 'fse', 'dutyHours', 'messages', ...(officeHasRenewals ? [] : ['renewals' as MainView])];
+  // Partner offices (POLCA, Alumni) don't get Statistics either (panel, Oct 2026).
+  const hiddenViews: MainView[] = isAdso ? [] : ['analytics', 'announcements', 'scholarships', 'automation', 'fse', 'dutyHours', 'messages', ...(officeHasRenewals ? [] : ['renewals' as MainView])];
 
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -263,7 +264,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     page = <AutomationPage getToken={getToken} />;
   } else if (mainView === 'renewals' && !hiddenViews.includes('renewals')) {
     page = <RenewalsPage getToken={getToken} isAdso={isAdso} />;
-  } else if (mainView === 'analytics') {
+  } else if (mainView === 'analytics' && isAdso) {
     page = (
       <AdminAnalytics
         applications={applications}

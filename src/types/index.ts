@@ -280,6 +280,8 @@ export interface SfagApplicationDetails {
   siblings: SfagSibling[];
   assetsExpenses: SfagAssetsExpenses;
   agreement: SfagAgreement;
+  // The tuition discount applied for (stored as sfagPercentageRequested).
+  requestedGrant?: number | null;
 }
 
 // --- Grant-form applications (POLCA / Alumni) ----------------------------
@@ -564,6 +566,14 @@ export interface Application {
   status: 'Under Evaluation' | 'Approved' | 'Rejected' | 'Needs Revision';
   reviewNote?: string;
   submittedAt: string;
+  referenceCode?: string;
+  // An approved scholarship that ended: graduated, stopped, or declined by
+  // the student for another one.
+  endedAt?: string | null;
+  endReason?: 'Graduated' | 'Stopped' | 'Declined' | null;
+  // SFAG: the tuition discount applied for, and the one granted.
+  sfagPercentageRequested?: number | null;
+  sfagPercentage?: number | null;
   // Present only for applications submitted through the detailed SFAG
   // Grant form (applicationFormType === 'sfag'). Holds the full 5-tab
   // dataset in addition to the summary fields above.
@@ -593,9 +603,13 @@ export interface FieldVerification {
   office?: string;      // 'LSO' (AdSO), 'POLCA', 'ALUMNI'
 }
 
+// What a correction request is about: a verified academic group, or the
+// identity details students can't change after sign-up.
+export type CorrectionGroup = VerificationGroup | 'personal';
+
 export interface CorrectionRequest {
   _id?: string;
-  group: VerificationGroup;
+  group: CorrectionGroup;
   message: string;
   status: 'open' | 'resolved';
   createdAt: string;
@@ -618,6 +632,8 @@ export interface StudentProfile {
   firstName?: string;
   middleName?: string;
   lastName?: string;
+  // Jr., Sr., II, III, IV or V (optional).
+  nameSuffix?: string;
   course: string;
   college: string;
   yearLevel: string;
@@ -645,8 +661,10 @@ export interface StudentProfile {
   // Parents / Guardian Information
   fatherName?: string;
   fatherContactNo?: string;
+  fatherDeceased?: boolean;
   motherName?: string;
   motherContactNo?: string;
+  motherDeceased?: boolean;
   // Who the guardian is; 'father' / 'mother' mirror that parent into the
   // guardian fields on save (backend routes/students.js).
   guardianType?: GuardianType;
@@ -659,5 +677,7 @@ export interface StudentProfile {
   // Academic details are self-reported until an office verifies them,
   // per group; a verified group can't be edited by the student.
   verification?: Partial<Record<VerificationGroup, FieldVerification>>;
+  // Set when the student confirmed their details at sign-up.
+  profileConfirmedAt?: string;
   correctionRequests?: CorrectionRequest[];
 }

@@ -192,7 +192,7 @@ function PeriodFacts({ period }: { period: RenewalPeriod }) {
       )}
       {period.requirements.length > 0 && (
         <div className="text-slate-600">
-          <dt className="font-semibold">Upload</dt>
+          <dt className="font-semibold">Submit your grades</dt>
           <dd>
             <ul className="mt-1 space-y-0.5">
               {period.requirements.map(r => <li key={r} className="flex items-start gap-1.5"><FileText className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-px" aria-hidden />{r}</li>)}
@@ -436,7 +436,7 @@ function RenewalForm({ period, existing, onCancel, onSaved }: {
 
           {period.requirements.length > 0 && (
             <div className="space-y-3">
-              <p className="text-xs font-bold text-slate-700">Documents <span className="font-normal text-slate-400">· JPG/JPEG, up to 10MB each</span></p>
+              <p className="text-xs font-bold text-slate-700">Your grades <span className="font-normal text-slate-400">· JPG/JPEG, up to 10MB</span></p>
               {period.requirements.map(requirement => {
                 const picked = files[requirement];
                 const stored = onFile.get(requirement);

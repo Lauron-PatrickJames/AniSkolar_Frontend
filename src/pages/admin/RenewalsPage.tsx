@@ -11,7 +11,7 @@ import {
 } from '../../utils/renewals';
 import { downloadZip, openDocument } from '../../utils/documents';
 import { API_BASE_URL, authHeaders, formatDate, formatDateTime, officeName, titleCaseName } from './adminData';
-import {
+import { ResultDialog,
   Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, DetailField, DropdownMenu, EmptyState, ErrorState, Field, KpiCard, KpiGrid,
   MobileList, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table, TableSkeleton, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
@@ -120,6 +120,8 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
   const [dutyTerm, setDutyTerm] = useState<{ academicYear: number; term: string } | null>(null);
   const showDutyOffice = rows.some(r => r.dutyOffice);
   const [toast, setToast] = useState<string | null>(null);
+  // Not a confirmation: a passing note while a download is prepared.
+  const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -277,7 +279,7 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
                     key: 'files', label: 'Download all documents (.zip)', icon: FileText,
                     onSelect: () => {
                       setActionError('');
-                      setToast('Preparing the download…');
+                      setNotice('Preparing the download…');
                       downloadZip(`renewal-period/${period._id}`, getToken).catch(err => setActionError(err instanceof Error ? err.message : "Couldn't prepare the download."));
                     },
                   },
@@ -486,7 +488,8 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
         </ConfirmDialog>
       )}
 
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      {toast && <ResultDialog message={toast} onClose={() => setToast(null)} />}
+      {notice && <Toast message={notice} onClose={() => setNotice(null)} />}
     </div>
   );
 }
@@ -541,7 +544,6 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
   const [deadline, setDeadline] = useState(period?.deadline ?? '');
   const [minGpa, setMinGpa] = useState(period?.minGpa !== undefined && period?.minGpa !== null ? String(period.minGpa) : '');
   const [requiresEvaluation, setRequiresEvaluation] = useState(period?.requiresEvaluation ?? false);
-  const [requirements, setRequirements] = useState((period?.requirements ?? DEFAULT_RENEWAL_REQUIREMENTS).join('\n'));
   const [notes, setNotes] = useState(period?.notes ?? '');
   const [open, setOpenState] = useState(period?.open ?? true);
   const [saving, setSaving] = useState(false);
@@ -569,7 +571,6 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
         ...(isNew ? { scholarshipId, academicYear: Number(academicYear), term } : {}),
         deadline, notes, open, requiresEvaluation,
         minGpa: min === '' ? null : Number(min),
-        requirements: requirements.split('\n').map(r => r.trim()).filter(Boolean),
       };
       const res = await fetch(`${API_BASE_URL}/api/renewals/admin/periods${isNew ? '' : `/${period!._id}`}`, {
         method: isNew ? 'POST' : 'PATCH', headers: await authHeaders(getToken, true), body: JSON.stringify(body),
@@ -623,9 +624,9 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
             <TextInput type="number" inputMode="decimal" step="0.01" min={0} max={4} value={minGpa} onChange={e => setMinGpa(e.target.value)} placeholder="e.g. 2.50" disabled={saving} />
           </Field>
         </div>
-        <Field label="Documents to upload" helper="One per line. Scholars upload a JPG for each.">
-          <Textarea rows={3} value={requirements} onChange={e => setRequirements(e.target.value)} disabled={saving} />
-        </Field>
+        <Alert tone="info" title="Scholars submit their grades only">
+          Their GPA for last semester, whether they had a failing grade, and a JPG of their {DEFAULT_RENEWAL_REQUIREMENTS[0]}.
+        </Alert>
         <Field label="Note to scholars" optional>
           <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} disabled={saving} maxLength={1000} placeholder="e.g. Upload your TCG from the Online Student Records Portal." />
         </Field>

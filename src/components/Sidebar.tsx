@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Compass, Megaphone, UserCircle, LogOut, X, ChevronLeft, ChevronRight, Award, Calculator, RefreshCw, Clock, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Compass, Megaphone, UserCircle, LogOut, X, ChevronLeft, ChevronRight, Award, Calculator, RefreshCw, Clock, MessageSquare, FileText, ShieldCheck } from 'lucide-react';
 import { StudentProfile } from '../types';
 import logo from '/src/assets/logo.png';
 
@@ -14,6 +14,9 @@ interface SidebarProps {
   // also get Duty Hours.
   isScholar?: boolean;
   isSfagScholar?: boolean;
+  // Scholarships held now: scholars get My Scholarship instead of Explore
+  // Grants, and a badge with the scholarship's name.
+  heldScholarships?: { scholarshipId: string; scholarshipName: string }[];
   // Unread messages from the AdSO, shown on Messages.
   unreadMessages?: number;
   id?: string;
@@ -28,12 +31,16 @@ export default function Sidebar({
   onLogout,
   isScholar = false,
   isSfagScholar = false,
+  heldScholarships = [],
   unreadMessages = 0,
   id
 }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
-    { id: 'explore', name: 'Explore Grants', icon: Compass },
+    heldScholarships.length
+      ? { id: 'my-scholarship', name: 'My Scholarship', icon: Award }
+      : { id: 'explore', name: 'Explore Grants', icon: Compass },
+    { id: 'applications', name: 'My Applications', icon: FileText },
     ...(isScholar ? [{ id: 'renewals', name: 'Renewal', icon: RefreshCw }] : []),
     ...(isSfagScholar ? [{ id: 'duty-hours', name: 'Duty Hours', icon: Clock }] : []),
     { id: 'gpa-calculator', name: 'GPA Calculator', icon: Calculator },
@@ -85,11 +92,26 @@ export default function Sidebar({
           </button>
         </div>
 
+        {/* Scholar badge: which scholarship the student holds. */}
+        {heldScholarships.length > 0 && (
+          <button
+            type="button"
+            onClick={() => { onNavigate('my-scholarship'); onClose(); }}
+            className="mx-4 my-3 flex items-start gap-2.5 rounded-xl bg-emerald-50 p-3 text-left ring-1 ring-emerald-100 hover:bg-emerald-100/70 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green"
+          >
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" />
+            <span className="min-w-0">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-brand-green">{heldScholarships.length > 1 ? 'Choose your scholarship' : 'Scholar'}</span>
+              <span className="block text-xs font-semibold leading-snug text-slate-700">{heldScholarships.map(h => h.scholarshipName).join(' · ')}</span>
+            </span>
+          </button>
+        )}
+
         {/* Navigation Items */}
         <nav className="flex-1 py-0 space-y-1 overflow-y-auto">
           {menuItems.map(item => {
             const Icon = item.icon;
-            const isActive = currentPage === item.id || (item.id === 'explore' && currentPage === 'scholarship-details') || (item.id === 'explore' && currentPage === 'apply-scholarship');
+            const isActive = currentPage === item.id || ((item.id === 'explore' || item.id === 'my-scholarship') && (currentPage === 'scholarship-details' || currentPage === 'apply-scholarship'));
             return (
               <button
                 key={item.id}

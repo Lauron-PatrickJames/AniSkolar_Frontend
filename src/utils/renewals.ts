@@ -13,6 +13,8 @@ export const NOT_CONTINUING_REASONS = ['OJT / internship', 'Graduating', 'Transf
 export type NotContinuingReason = typeof NOT_CONTINUING_REASONS[number];
 
 // Suggested when the AdSO opens a period; it can change the list.
+// Renewal is grades only: the same document for every period (backend
+// RENEWAL_DOCUMENTS in models/RenewalPeriod.js).
 export const DEFAULT_RENEWAL_REQUIREMENTS = ['Certified True Copy of Grades (TCG)'];
 
 export interface RenewalPeriod {

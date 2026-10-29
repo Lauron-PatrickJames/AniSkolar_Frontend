@@ -14,11 +14,14 @@ interface ExploreGrantsProps {
   holdings?: Holdings | null;
   onViewDetails: (id: string) => void;
   onApply: (id: string) => void;
+  // Opens another student page ('applications', 'my-scholarship').
+  onNavigate?: (page: string) => void;
   id?: string;
 }
 
-// 'Applied' shows only the scholarships the student has applied to.
-type CategoryFilter = 'All' | 'Academic' | 'Financial' | 'Athletic' | 'Leadership' | 'Others' | 'Applied';
+// The student's applications have their own page (My Applications), so
+// Explore only filters by category.
+type CategoryFilter = 'All' | 'Academic' | 'Financial' | 'Athletic' | 'Leadership' | 'Others';
 
 export default function ExploreGrants({
   scholarships,
@@ -27,6 +30,7 @@ export default function ExploreGrants({
   holdings = null,
   onViewDetails,
   onApply,
+  onNavigate,
   id
 }: ExploreGrantsProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,7 +39,7 @@ export default function ExploreGrants({
   const [view, setView] = useState<'cards' | 'compare'>('cards');
 
   // Categories list
-  const categories: CategoryFilter[] = ['All', 'Academic', 'Financial', 'Athletic', 'Leadership', 'Others', ...(applications.length ? ['Applied' as const] : [])];
+  const categories: CategoryFilter[] = ['All', 'Academic', 'Financial', 'Athletic', 'Leadership', 'Others'];
 
   // The student's latest application per scholarship (the API lists them
   // newest first).
@@ -56,13 +60,12 @@ export default function ExploreGrants({
 
   const filteredScholarships = useMemo(() => {
     return eligibleScholarships.filter(scholarship => {
-      const matchesCategory = activeCategory === 'All'
-        || (activeCategory === 'Applied' ? applicationByScholarship.has(scholarship.id) : scholarship.category === activeCategory);
+      const matchesCategory = activeCategory === 'All' || scholarship.category === activeCategory;
       const matchesSearch = scholarship.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             scholarship.description.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [eligibleScholarships, activeCategory, searchQuery, applicationByScholarship]);
+  }, [eligibleScholarships, activeCategory, searchQuery]);
 
   return (
     <div id={id} className="space-y-6">
@@ -110,7 +113,7 @@ export default function ExploreGrants({
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
               }`}
             >
-              {category === 'Applied' ? `My Applications (${applicationByScholarship.size})` : category}
+              {category}
             </button>
           ))}
         </div>
@@ -122,7 +125,12 @@ export default function ExploreGrants({
           <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-xs text-amber-900">
             <span className="font-bold">You hold {needsToChoose(holdings)!.map(h => h.scholarshipName).join(' and ')}.</span>{' '}
-            Only one internally funded scholarship can be credited, so choose which to keep (usually the bigger grant) and tell the Admissions and Scholarship Office.
+            Only one internally funded scholarship can be held, so choose which one to keep (usually the bigger grant).{' '}
+            {onNavigate && (
+              <button type="button" onClick={() => onNavigate('my-scholarship')} className="font-bold underline hover:text-amber-700 focus:outline-hidden">
+                Choose in My Scholarship
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -133,9 +141,9 @@ export default function ExploreGrants({
           <BookmarkCheck className="w-5 h-5 text-brand-green shrink-0 mt-0.5" />
           <div className="text-xs text-brand-green-dark">
             <span className="font-bold">You have {applications.length} submitted application{applications.length === 1 ? '' : 's'}.</span> Each one shows its status on its card.{' '}
-            {activeCategory !== 'Applied' && (
-              <button type="button" onClick={() => setActiveCategory('Applied')} className="font-bold underline hover:text-brand-green focus:outline-hidden">
-                Show only my applications
+            {onNavigate && (
+              <button type="button" onClick={() => onNavigate('applications')} className="font-bold underline hover:text-brand-green focus:outline-hidden">
+                Go to My Applications
               </button>
             )}
           </div>

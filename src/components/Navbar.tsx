@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, User, LogOut, Settings, Shield, ChevronDown, Menu } from 'lucide-react';
+import { Bell, User, LogOut, Settings, Shield, ChevronDown, Menu, X, ArrowRight } from 'lucide-react';
 import { StudentProfile, Application } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { buildNotifications, markAllRead, markRead, clearAll, NotificationItem } from '../utils/notifications';
+import { buildNotifications, markAllRead, markRead, clearAll, NotificationItem, DutyNotice } from '../utils/notifications';
 import { displayName, nameInitials } from '../utils/names';
 
 interface NavbarProps {
@@ -18,6 +18,10 @@ interface NavbarProps {
   // Fired for notifications with no specific scholarship (e.g. the welcome
   // message) — sends the student to browse available grants instead.
   onNavigate: (page: string) => void;
+  // Scholarships held now, shown as a "Scholar" badge.
+  heldScholarships?: { scholarshipId: string; scholarshipName: string }[];
+  // This semester's duty hours (SFAG scholars), for the hours-done notice.
+  dutyNotice?: DutyNotice | null;
   id?: string;
 }
 
@@ -34,6 +38,8 @@ export default function Navbar({
   onToggleSidebar,
   onViewScholarship,
   onNavigate,
+  heldScholarships = [],
+  dutyNotice = null,
   id
 }: NavbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
@@ -43,15 +49,15 @@ export default function Navbar({
   // shows on hover where it's truncated.
   const fullName = displayName(student);
   const [notifications, setNotifications] = useState<NotificationItem[]>(() =>
-    buildNotifications(student, applications)
+    buildNotifications(student, applications, dutyNotice)
   );
 
   // Recompute whenever the student or their applications change (e.g. right
   // after a new submission, or an application status update from the office).
   useEffect(() => {
-    setNotifications(buildNotifications(student, applications));
+    setNotifications(buildNotifications(student, applications, dutyNotice));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [student.studentNumber, applications]);
+  }, [student.studentNumber, applications, dutyNotice?.termKey, dutyNotice?.complete, dutyNotice?.evaluated]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
   // Cap the displayed number so the badge doesn't stretch out of shape.
@@ -67,24 +73,30 @@ export default function Navbar({
     setNotifications([]);
   };
 
-  // Clicking a notification: mark just that one read, close the dropdown,
-  // then take the student to whatever it's about — the scholarship's
-  // details/status if it has one, otherwise the grants list (welcome msg).
+  // Clicking a notification: mark it read and open its preview pop-up
+  // (full message, the office's note); the pop-up's button then takes the
+  // student to the scholarship, or to Explore for the welcome message.
+  const [preview, setPreview] = useState<NotificationItem | null>(null);
   const handleNotificationClick = (item: NotificationItem) => {
     if (!item.isRead) {
       markRead(student.studentNumber, item.id);
       setNotifications(prev => prev.map(n => (n.id === item.id ? { ...n, isRead: true } : n)));
     }
     setShowNotifications(false);
-
-    if (item.scholarshipId) {
-      onViewScholarship(item.scholarshipId);
-    } else {
-      onNavigate('explore');
-    }
+    setPreview(item);
+  };
+  const openPreviewTarget = () => {
+    if (!preview) return;
+    const target = preview;
+    setPreview(null);
+    if (target.page) onNavigate(target.page);
+    else if (target.scholarshipId) onViewScholarship(target.scholarshipId);
+    else onNavigate('explore');
   };
 
   return (
+    <>
+    {preview && <NotificationPreview item={preview} onClose={() => setPreview(null)} onOpen={openPreviewTarget} />}
     <header id={id} className="h-16 glass-header px-3 sm:px-4 md:px-6 flex items-center justify-between sticky top-0 z-40">
       <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
         {/* Toggle Sidebar Button (Mobile) */}
@@ -237,7 +249,10 @@ export default function Navbar({
             )}
             <div className="hidden md:block min-w-0">
               <p className="text-xs font-bold text-slate-700 leading-none truncate max-w-40" title={fullName}>{fullName}</p>
-              <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">{student.studentNumber}</p>
+              <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">
+                {student.studentNumber}
+                {heldScholarships.length > 0 && <span className="ml-1.5 rounded-sm bg-emerald-50 px-1 py-px font-bold text-brand-green ring-1 ring-emerald-100">Scholar</span>}
+              </p>
             </div>
             <motion.div
               animate={{ rotate: showProfileMenu ? 180 : 0 }}
@@ -266,6 +281,9 @@ export default function Navbar({
                     <p className="text-[10px] font-bold text-brand-green mt-1.5 px-1.5 py-0.5 rounded-sm bg-brand-green/10 inline-block truncate max-w-full">
                       {student.course}
                     </p>
+                    {heldScholarships.length > 0 && (
+                      <p className="mt-1.5 text-[10px] font-semibold text-slate-600">Scholar · {heldScholarships.map(h => h.scholarshipName).join(', ')}</p>
+                    )}
                   </div>
 
                   <div className="py-1">
@@ -304,5 +322,62 @@ export default function Navbar({
         </div>
       </div>
     </header>
+    </>
+  );
+}
+const STATUS_STYLE: Record<string, string> = {
+  Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  Rejected: 'bg-rose-50 text-rose-700 ring-rose-200',
+  'Needs Revision': 'bg-amber-50 text-amber-800 ring-amber-200',
+  'Under Evaluation': 'bg-sky-50 text-sky-700 ring-sky-200',
+};
+
+// The pop-up a notification opens: the whole message, its status and the
+// office's note, with a button to go to what it's about.
+function NotificationPreview({ item, onClose, onOpen }: { item: NotificationItem; onClose: () => void; onOpen: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby="notif-preview-title">
+      <div className="absolute inset-0 bg-slate-900/40" onClick={onClose} aria-hidden />
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className="relative w-full max-w-md rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5">
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Notification · {item.time}</p>
+            <h2 id="notif-preview-title" className="font-display text-base font-bold text-slate-900">{item.title}</h2>
+            {item.status && (
+              <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${STATUS_STYLE[item.status] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>{item.status}</span>
+            )}
+          </div>
+          <button type="button" onClick={onClose} autoFocus className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="space-y-4 p-5">
+          <p className="text-sm leading-relaxed text-slate-700">{item.text}</p>
+          {item.note && (
+            <div className="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
+              <p className="mb-1 text-xs font-semibold text-slate-500">Message from the office</p>
+              <p className="whitespace-pre-line text-sm leading-relaxed text-slate-800">{item.note}</p>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 p-4 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green">Close</button>
+          <button type="button" onClick={onOpen} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand-green px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-green-dark focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2">
+            {item.page === 'duty-hours' ? 'Open Duty Hours' : item.scholarshipId ? 'View application' : 'Explore scholarships'}
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </motion.div>
+    </div>
   );
 }

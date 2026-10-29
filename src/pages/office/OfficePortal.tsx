@@ -1,20 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { Building2, CheckCircle2, ClipboardCheck, Clock, Flag, LogOut, MessageSquare, Send, Users } from 'lucide-react';
+import { Building2, CheckCircle2, ClipboardCheck, Clock, Flag, Hourglass, LogOut, MessageSquare, Send, Users } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
 import { DutyTerm, format12h, formatDutyDate, formatHours, termLabel, weekday } from '../../utils/dutyHours';
 import { EVALUATION_ITEMS, PASSING_AVERAGE, RATING_LABELS, ratingLabel } from '../../utils/renewals';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from '../admin/adminData';
-import {
-  Alert, Avatar, Badge, Button, Card, EmptyState, ErrorState, Field, Modal, PageHeader, SegmentedControl, Select, Table,
+import { ResultDialog,
+  Alert, Avatar, Badge, Button, Card, EmptyState, ErrorState, Field, KpiCard, KpiGrid, Modal, PageHeader, SegmentedControl, Select, Table,
   TableSkeleton, Tabs, Td, TextInput, Textarea, Th, Toast, Tr
 } from '../admin/AdminUI';
 
 // The office portal: for the head of a duty office (listed by the AdSO in
 // Duty hours → Offices), signed in with that school email. They confirm
-// their SFAG scholars' duties, evaluate them at renewal time, send the
+// their SFAG scholars' duties, evaluate each scholar once their hours are
+// complete (they're emailed when that happens), send the
 // AdSO requests and message the AdSO — instead of paper duty sheets,
 // evaluation forms and letters. Backend: routes/office.js and the office
 // routes in routes/messages.js.
@@ -51,12 +52,12 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
     try {
       const [scholars, evals, unread] = await Promise.all([
         api<{ scholars: { waitingCount: number }[] }>(getToken, '/api/office/scholars?all=1'),
-        api<{ due: { scholars: { evaluation: unknown; locked: boolean; notContinuing: boolean }[] }[] }>(getToken, '/api/office/evaluations'),
+        api<{ terms: { scholars: { state: EvalState; locked: boolean }[] }[] }>(getToken, '/api/office/evaluations'),
         api<{ unread: number }>(getToken, '/api/messages/office/mine/unread'),
       ]);
       setCounts({
         waiting: scholars.scholars.reduce((n, s) => n + s.waitingCount, 0),
-        evaluations: evals.due.reduce((n, d) => n + d.scholars.filter(s => !s.evaluation && !s.locked && !s.notContinuing).length, 0),
+        evaluations: evals.terms.reduce((n, t) => n + t.scholars.filter(s => s.state === 'ready' && !s.locked).length, 0),
         unread: unread.unread,
       });
     } catch {
@@ -92,8 +93,13 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
         <PageHeader
           title={head.office}
-          description={`Welcome${head.name ? `, ${head.name}` : ''}. Confirm your SFAG scholars' duties, evaluate them for renewal, and reach the scholarship office.`}
+          description={`Welcome${head.name ? `, ${head.name}` : ''}. Confirm your SFAG scholars' duties, evaluate them once they finish their hours, and reach the scholarship office.`}
         />
+        <KpiGrid columns={3}>
+          <KpiCard label="Duties to check" value={counts.waiting} icon={Clock} tone={counts.waiting ? 'warning' : 'neutral'} active={tab === 'scholars'} onClick={() => setTab('scholars')} hint="Logged by your scholars, waiting for you" />
+          <KpiCard label="Ready to evaluate" value={counts.evaluations} icon={ClipboardCheck} tone={counts.evaluations ? 'info' : 'neutral'} active={tab === 'evaluations'} onClick={() => setTab('evaluations')} hint="Finished their duty hours" />
+          <KpiCard label="Unread messages" value={counts.unread} icon={MessageSquare} tone={counts.unread ? 'info' : 'neutral'} active={tab === 'messages'} onClick={() => setTab('messages')} hint="From the scholarship office" />
+        </KpiGrid>
         <Tabs<Tab>
           label="Office portal sections"
           value={tab}
@@ -105,12 +111,12 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
             { key: 'messages', label: 'Messages', icon: MessageSquare, count: counts.unread || undefined },
           ]}
         />
-        {tab === 'scholars' && <ScholarsTab head={head} getToken={getToken} onChanged={refreshCounts} onToast={setToast} />}
+        {tab === 'scholars' && <ScholarsTab head={head} getToken={getToken} onChanged={refreshCounts} onToast={setToast} onEvaluate={() => setTab('evaluations')} />}
         {tab === 'evaluations' && <EvaluationsTab getToken={getToken} onChanged={refreshCounts} onToast={setToast} />}
         {tab === 'requests' && <RequestsTab getToken={getToken} onToast={setToast} />}
         {tab === 'messages' && <MessagesTab getToken={getToken} />}
       </main>
-      {toast && <Toast message={toast} onClose={() => setToast('')} />}
+      {toast && <ResultDialog message={toast} onClose={() => setToast('')} />}
     </div>
   );
 }
@@ -130,11 +136,35 @@ interface ScholarSummaryRow {
   waitingCount: number;
   flaggedCount: number;
   lastDutyDate: string | null;
+  completedHours: number;
+  requiredHours: number | null;
+  evaluationState: EvalState;
 }
+type EvalState = 'in_progress' | 'ready' | 'done';
 interface TermKey { academicYear: number; term: DutyTerm }
 const termKey = (t: TermKey) => `${t.academicYear}|${t.term}`;
 
-function ScholarsTab({ head, getToken, onChanged, onToast }: { head: OfficeHeadInfo; getToken: GetToken; onChanged: () => void; onToast: (m: string) => void }) {
+function HoursBar({ completed, required }: { completed: number; required: number | null }) {
+  const pct = required ? Math.min(100, (completed / required) * 100) : 0;
+  return (
+    <div className="min-w-28">
+      <p className="text-sm tabular-nums text-ink">{formatHours(completed)}{required ? <span className="text-ink-subtle"> / {formatHours(required)} h</span> : ' h'}</p>
+      {required ? (
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-neutral-bg" aria-hidden>
+          <div className={`h-full rounded-full ${pct >= 100 ? 'bg-success-solid' : 'bg-accent'}`} style={{ width: `${pct}%` }} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EvalBadge({ state }: { state: EvalState }) {
+  if (state === 'done') return <Badge tone="success" dot>Evaluated</Badge>;
+  if (state === 'ready') return <Badge tone="info" dot>Ready to evaluate</Badge>;
+  return <Badge tone="neutral" icon={Hourglass}>Rendering hours</Badge>;
+}
+
+function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head: OfficeHeadInfo; getToken: GetToken; onChanged: () => void; onToast: (m: string) => void; onEvaluate: () => void }) {
   // 'all' (default): every semester, grouped newest first; or one semester.
   const [filter, setFilter] = useState<'all' | string>('all');
   const [rows, setRows] = useState<ScholarSummaryRow[] | null>(null);
@@ -185,13 +215,14 @@ function ScholarsTab({ head, getToken, onChanged, onToast }: { head: OfficeHeadI
                   description={g.rows.length ? `${g.rows.length} scholar${g.rows.length === 1 ? '' : 's'}${waiting ? ` · ${waiting} dut${waiting === 1 ? 'y' : 'ies'} to check` : ' · all duties checked'}` : undefined}
                 >
                   {g.rows.length === 0 ? <EmptyState icon={Users} title="No scholars this semester" description="SFAG scholars assigned to your office by the scholarship office appear here." /> : (
-                    <Table label={`Your scholars, ${termLabel(g.term)}`} minWidth="44rem">
+                    <Table label={`Your scholars, ${termLabel(g.term)}`} minWidth="56rem">
                       <thead>
                         <tr>
                           <Th sticky={false}>Scholar</Th>
-                          <Th sticky={false} numeric className="w-32">Confirmed hrs</Th>
+                          <Th sticky={false} className="w-40">Hours</Th>
                           <Th sticky={false} className="w-44">To check</Th>
-                          <Th sticky={false} className="w-32">Last duty</Th>
+                          <Th sticky={false} className="w-44">Evaluation</Th>
+                          <Th sticky={false} className="w-28">Last duty</Th>
                         </tr>
                       </thead>
                       <tbody>
@@ -206,10 +237,15 @@ function ScholarsTab({ head, getToken, onChanged, onToast }: { head: OfficeHeadI
                                 </div>
                               </div>
                             </Td>
-                            <Td numeric>{formatHours(r.confirmedHours)}</Td>
+                            <Td><HoursBar completed={r.completedHours} required={r.requiredHours} /></Td>
                             <Td>
                               {r.waitingCount ? <Badge tone="warning">{r.waitingCount} dut{r.waitingCount === 1 ? 'y' : 'ies'} · {formatHours(r.waitingHours)} h</Badge> : <span className="text-ink-subtle">All checked</span>}
                               {r.flaggedCount > 0 && <Badge tone="danger" className="ml-1">{r.flaggedCount} flagged</Badge>}
+                            </Td>
+                            <Td>
+                              {r.evaluationState === 'ready'
+                                ? <Button size="sm" variant="primary" icon={ClipboardCheck} onClick={e => { e.stopPropagation(); onEvaluate(); }}>Evaluate</Button>
+                                : <EvalBadge state={r.evaluationState} />}
                             </Td>
                             <Td>{r.lastDutyDate ? formatDutyDate(r.lastDutyDate) : '—'}</Td>
                           </Tr>
@@ -344,25 +380,25 @@ function DutiesModal({ studentNumber, term, getToken, onClose, onChanged, onToas
 }
 
 // --- Evaluations ------------------------------------------------------------------
+// A scholar opens for evaluation once their duty hours are complete; the
+// head gets an email then. Grouped: ready, still rendering hours, done.
 
-interface DueScholar {
+interface EvalScholar {
   studentNumber: string; name: string; program: string; yearLevel: string; avatarUrl?: string;
+  state: EvalState; completed: number; required: number | null; waitingHours: number;
   evaluation: { scores: Record<string, number>; average: number; remarks: string | null; enteredAt: string } | null;
-  locked: boolean; notContinuing: boolean;
+  locked: boolean;
 }
-interface DuePeriod {
-  period: { _id: string; scholarshipName: string; academicYear: number; term: string; deadline: string | null; evaluatedTerm: TermKey };
-  scholars: DueScholar[];
-}
+interface EvalTerm { term: TermKey; scholars: EvalScholar[] }
 
 function EvaluationsTab({ getToken, onChanged, onToast }: { getToken: GetToken; onChanged: () => void; onToast: (m: string) => void }) {
-  const [due, setDue] = useState<DuePeriod[] | null>(null);
+  const [terms, setTerms] = useState<EvalTerm[] | null>(null);
   const [error, setError] = useState('');
-  const [open, setOpen] = useState<{ period: DuePeriod['period']; scholar: DueScholar } | null>(null);
+  const [open, setOpen] = useState<{ term: TermKey; scholar: EvalScholar } | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setDue((await api<{ due: DuePeriod[] }>(getToken, '/api/office/evaluations')).due);
+      setTerms((await api<{ terms: EvalTerm[] }>(getToken, '/api/office/evaluations')).terms);
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load the evaluations.');
@@ -370,54 +406,67 @@ function EvaluationsTab({ getToken, onChanged, onToast }: { getToken: GetToken; 
   }, [getToken]);
   useEffect(() => { load(); }, [load]);
 
-  if (error && !due) return <Card><ErrorState title="Couldn't load the evaluations" message={error} onRetry={load} /></Card>;
-  if (!due) return <Card flush><TableSkeleton rows={4} label="Loading evaluations" /></Card>;
-  if (!due.length) return <Card><EmptyState icon={ClipboardCheck} title="No evaluations due" description="When the scholarship office opens renewals, the scholars who rendered duty in your office appear here for you to rate." /></Card>;
+  if (error && !terms) return <Card><ErrorState title="Couldn't load the evaluations" message={error} onRetry={load} /></Card>;
+  if (!terms) return <Card flush><TableSkeleton rows={4} label="Loading evaluations" /></Card>;
+  const withScholars = terms.filter(t => t.scholars.length);
+  if (!withScholars.length) return <Card><EmptyState icon={ClipboardCheck} title="No scholars to evaluate yet" description="Your SFAG scholars appear here. Each one opens for evaluation as soon as they complete their duty hours, and you'll get an email." /></Card>;
+
+  const row = (term: TermKey, s: EvalScholar) => (
+    <li key={s.studentNumber} className="flex flex-wrap items-center gap-3 px-4 py-3">
+      <Avatar name={s.name || s.studentNumber} avatarUrl={s.avatarUrl} size="sm" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-ink">{s.name ? titleCaseName(s.name) : s.studentNumber}</p>
+        <p className="truncate text-xs text-ink-subtle">{[s.studentNumber, s.program, s.yearLevel].filter(Boolean).join(' · ')}</p>
+      </div>
+      <HoursBar completed={s.completed} required={s.required} />
+      {s.state === 'in_progress' && (
+        <span className="w-48 text-right text-xs text-ink-subtle">
+          {s.required ? `${formatHours(Math.max(0, s.required - s.completed))} h to go` : 'Required hours not set'}
+          {s.waitingHours ? ` · ${formatHours(s.waitingHours)} h waiting for your confirmation` : ''}
+        </span>
+      )}
+      {s.evaluation && <Badge tone={s.evaluation.average >= PASSING_AVERAGE ? 'success' : 'warning'} dot>{s.evaluation.average.toFixed(2)} · {ratingLabel(s.evaluation.average)}</Badge>}
+      {s.state !== 'in_progress' && (s.locked
+        ? <Badge tone="neutral">Renewal already decided</Badge>
+        : <Button size="sm" variant={s.evaluation ? 'ghost' : 'primary'} onClick={() => setOpen({ term, scholar: s })}>{s.evaluation ? 'Edit' : 'Evaluate'}</Button>)}
+    </li>
+  );
 
   return (
     <div className="space-y-4">
-      {due.map(d => (
-        <Card key={d.period._id} title={`${d.period.scholarshipName} renewal — ${d.period.term}, A.Y. ${d.period.academicYear}–${d.period.academicYear + 1}`}
-          description={`Rate their duty in your office during the ${termLabel(d.period.evaluatedTerm)}.${d.period.deadline ? ` Renewal deadline: ${d.period.deadline}.` : ''}`} flush>
-          <ul className="divide-y divide-line">
-            {d.scholars.map(s => (
-              <li key={s.studentNumber} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <Avatar name={s.name || s.studentNumber} avatarUrl={s.avatarUrl} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-ink">{s.name ? titleCaseName(s.name) : s.studentNumber}</p>
-                  <p className="truncate text-xs text-ink-subtle">{[s.studentNumber, s.program, s.yearLevel].filter(Boolean).join(' · ')}</p>
-                </div>
-                {s.evaluation && <Badge tone={s.evaluation.average >= PASSING_AVERAGE ? 'success' : 'warning'} dot>{s.evaluation.average.toFixed(2)} · {ratingLabel(s.evaluation.average)}</Badge>}
-                {s.notContinuing ? <Badge>Not continuing this term</Badge>
-                  : s.locked ? <Badge tone="neutral">Renewal already decided</Badge>
-                    : (
-                      <>
-                        {!s.evaluation && <Badge tone="warning" dot>Not yet rated</Badge>}
-                        <Button size="sm" variant={s.evaluation ? 'ghost' : 'primary'} onClick={() => setOpen({ period: d.period, scholar: s })}>
-                          {s.evaluation ? 'Edit' : 'Evaluate'}
-                        </Button>
-                      </>
-                    )}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ))}
+      {withScholars.map(t => {
+        const ready = t.scholars.filter(s => s.state === 'ready');
+        const progress = t.scholars.filter(s => s.state === 'in_progress');
+        const done = t.scholars.filter(s => s.state === 'done');
+        const group = (title: string, list: EvalScholar[], hint: string) => list.length > 0 && (
+          <div>
+            <p className="border-b border-line bg-surface-muted px-4 py-2 text-xs font-semibold text-ink-muted">{title} · {list.length}<span className="font-normal text-ink-subtle"> — {hint}</span></p>
+            <ul className="divide-y divide-line">{list.map(s => row(t.term, s))}</ul>
+          </div>
+        );
+        return (
+          <Card key={`${t.term.academicYear}|${t.term.term}`} flush title={termLabel(t.term)} description={`${ready.length} ready · ${progress.length} still rendering hours · ${done.length} evaluated`}>
+            {group('Ready to evaluate', ready, 'finished their hours')}
+            {group('Still rendering hours', progress, 'opens when they finish; you’ll get an email')}
+            {group('Evaluated', done, 'you can still edit until the renewal is decided')}
+          </Card>
+        );
+      })}
       {open && (
         <EvaluateModal
-          period={open.period}
+          term={open.term}
           scholar={open.scholar}
           getToken={getToken}
           onClose={() => setOpen(null)}
-          onSaved={() => { setOpen(null); load(); onChanged(); onToast('Evaluation saved. The scholarship office can see it.'); }}
+          onSaved={() => { setOpen(null); load(); onChanged(); onToast('Evaluation saved. It goes into the scholar’s renewal.'); }}
         />
       )}
     </div>
   );
 }
 
-function EvaluateModal({ period, scholar, getToken, onClose, onSaved }: {
-  period: DuePeriod['period']; scholar: DueScholar; getToken: GetToken; onClose: () => void; onSaved: () => void;
+function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
+  term: TermKey; scholar: EvalScholar; getToken: GetToken; onClose: () => void; onSaved: () => void;
 }) {
   const [scores, setScores] = useState<Record<string, number>>(scholar.evaluation?.scores ?? {});
   const [remarks, setRemarks] = useState(scholar.evaluation?.remarks ?? '');
@@ -431,7 +480,7 @@ function EvaluateModal({ period, scholar, getToken, onClose, onSaved }: {
     setBusy(true);
     setError('');
     try {
-      await api(getToken, `/api/office/evaluations/${scholar.studentNumber}`, { method: 'PUT', body: { periodId: period._id, scores, remarks } });
+      await api(getToken, `/api/office/evaluations/${scholar.studentNumber}`, { method: 'PUT', body: { ...term, scores, remarks } });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save the evaluation.');
@@ -442,17 +491,28 @@ function EvaluateModal({ period, scholar, getToken, onClose, onSaved }: {
   return (
     <Modal
       size="lg"
+      sheet
       title={`Evaluate ${scholar.name ? titleCaseName(scholar.name) : scholar.studentNumber}`}
-      description={`Their duty in your office during the ${termLabel(period.evaluatedTerm)}. ${Object.entries(RATING_LABELS).reverse().map(([n, l]) => `${n} ${l}`).join(', ')}.`}
+      description={`Their duty in your office during the ${termLabel(term)}. ${Object.entries(RATING_LABELS).reverse().map(([n, l]) => `${n} ${l}`).join(', ')}.`}
       onClose={onClose}
       dismissible={!busy}
-      footer={<><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="primary" loading={busy} onClick={save}>Submit evaluation</Button></>}
+      footer={(
+        <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-ink-muted">
+            {average === null ? `${rated} of ${EVALUATION_ITEMS.length} rated` : <>Average <b className="text-ink">{average.toFixed(2)}</b> · {ratingLabel(average)}</>}
+          </p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button onClick={onClose} disabled={busy}>Cancel</Button>
+            <Button variant="primary" loading={busy} onClick={save} disabled={average === null}>Submit evaluation</Button>
+          </div>
+        </div>
+      )}
     >
       {error && <Alert tone="danger">{error}</Alert>}
-      <div className="space-y-2">
-        {EVALUATION_ITEMS.map(item => (
-          <div key={item.key} className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-sm text-ink">{item.label}</span>
+      <div className="divide-y divide-line rounded-control ring-1 ring-line">
+        {EVALUATION_ITEMS.map((item, i) => (
+          <div key={item.key} className="flex flex-col gap-1.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm text-ink"><span className="mr-1.5 tabular-nums text-ink-subtle">{i + 1}.</span>{item.label}</span>
             <SegmentedControl<'5' | '4' | '3' | '2' | '1'>
               label={item.label}
               options={['5', '4', '3', '2', '1']}
@@ -463,12 +523,14 @@ function EvaluateModal({ period, scholar, getToken, onClose, onSaved }: {
           </div>
         ))}
       </div>
-      <Field label="Remarks" optional helper="Seen by the scholarship office.">
-        <Textarea rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} maxLength={2000} disabled={busy} />
-      </Field>
-      <p className="text-sm text-ink-muted">
-        {average === null ? `${rated} of ${EVALUATION_ITEMS.length} rated` : <>Average <b className="text-ink">{average.toFixed(2)}</b> · {ratingLabel(average)}{average < PASSING_AVERAGE ? ' — below 4, the scholarship office will interview the scholar.' : ''}</>}
-      </p>
+      <div className="mt-4">
+        <Field label="Remarks" optional helper="Seen by the scholarship office.">
+          <Textarea rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} maxLength={2000} disabled={busy} />
+        </Field>
+      </div>
+      {average !== null && average < PASSING_AVERAGE && (
+        <p className="mt-3 text-sm text-warning-fg">Below 4: the scholarship office will interview the scholar before deciding their renewal.</p>
+      )}
     </Modal>
   );
 }

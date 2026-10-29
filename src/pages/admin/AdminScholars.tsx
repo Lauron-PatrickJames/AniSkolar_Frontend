@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Download, FileText, MessageSquare, Printer, Users } from 'lucide-react';
+import { ChevronRight, Download, FileText, MessageSquare, Pencil, Printer, Users } from 'lucide-react';
+import EditProfileDialog from '../../components/profile/EditProfileDialog';
+import { StudentProfile } from '../../types';
 import { downloadZip } from '../../utils/documents';
 import {
-  AdminApplication, AppStatus, academicCycles, academicYearOf, applicantEmail, applicantName, applicantPhone,
+  API_BASE_URL, AdminApplication, AppStatus, academicCycles, academicYearOf, applicantEmail, applicantName, applicantPhone, authHeaders,
   applicantProgram, applicantYearLevel, formatDate, isReturningScholar, plural, shortAcademicYear, titleCaseName
 } from './adminData';
 import {
@@ -264,13 +266,19 @@ const POPUP_BLOCKED = 'Your browser blocked the print window. Allow pop-ups for 
 
 // --- Column picker ---------------------------------------------------------------
 
-function ColumnPickerModal({ kind, selected, onChange, onConfirm, onCancel }: {
+// Export preview: choose the columns and see the rows exactly as they'll
+// be exported (first rows), before downloading the Excel / CSV file or
+// printing.
+const PREVIEW_ROWS = 8;
+function ColumnPickerModal({ kind, selected, rows, onChange, onConfirm, onCancel }: {
   kind: ExportKind;
   selected: Set<string>;
+  rows: ScholarSummary[];
   onChange: (next: Set<string>) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const columns = EXPORT_COLUMNS.filter(c => selected.has(c.key));
   const action = kind === 'print' ? 'Print' : 'Export CSV';
   const toggle = (key: string, on: boolean) => {
     const next = new Set(selected);
@@ -279,33 +287,59 @@ function ColumnPickerModal({ kind, selected, onChange, onConfirm, onCancel }: {
   };
   return (
     <Modal
-      size="sm"
-      title="Choose columns"
-      description={`Pick what to include in the ${kind === 'print' ? 'printout' : 'CSV file'}.`}
+      size="xl"
+      title={kind === 'print' ? 'Print preview' : 'Export preview'}
+      description={`${rows.length} ${rows.length === 1 ? 'scholar' : 'scholars'} · choose the columns and check the rows before you ${kind === 'print' ? 'print' : 'download the file (opens in Excel)'}.`}
       onClose={onCancel}
       footer={
         <>
           <Button onClick={onCancel}>Cancel</Button>
-          <Button variant="primary" icon={kind === 'print' ? Printer : Download} disabled={selected.size === 0} onClick={onConfirm}>
-            {action} ({selected.size})
+          <Button variant="primary" icon={kind === 'print' ? Printer : Download} disabled={selected.size === 0 || rows.length === 0} onClick={onConfirm}>
+            {kind === 'print' ? 'Print' : 'Download for Excel'} ({rows.length} rows)
           </Button>
         </>
       }
     >
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs text-ink-subtle tabular-nums">{selected.size} of {EXPORT_COLUMNS.length} selected</p>
-        <div className="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={() => onChange(new Set(EXPORT_COLUMNS.map(c => c.key)))}>Select all</Button>
-          <Button size="sm" variant="ghost" onClick={() => onChange(new Set())}>Clear</Button>
+      <div className="grid gap-5 lg:grid-cols-[14rem_1fr]">
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs text-ink-subtle tabular-nums">{selected.size} of {EXPORT_COLUMNS.length} columns</p>
+            <div className="flex gap-1">
+              <Button size="sm" variant="ghost" onClick={() => onChange(new Set(EXPORT_COLUMNS.map(c => c.key)))}>All</Button>
+              <Button size="sm" variant="ghost" onClick={() => onChange(new Set())}>None</Button>
+            </div>
+          </div>
+          <fieldset className="space-y-2.5">
+            <legend className="sr-only">Columns</legend>
+            {EXPORT_COLUMNS.map(col => (
+              <Checkbox key={col.key} label={col.label} checked={selected.has(col.key)} onChange={on => toggle(col.key, on)} />
+            ))}
+          </fieldset>
+        </div>
+        <div className="min-w-0 space-y-2">
+          <p className="text-xs font-medium text-ink-muted">Preview{rows.length > PREVIEW_ROWS ? ` (first ${PREVIEW_ROWS} of ${rows.length})` : ''}</p>
+          {selected.size === 0 ? (
+            <p className="rounded-control bg-surface-muted p-6 text-center text-sm text-danger">Select at least one column.</p>
+          ) : rows.length === 0 ? (
+            <p className="rounded-control bg-surface-muted p-6 text-center text-sm text-ink-muted">No scholars to export with this search.</p>
+          ) : (
+            <div className="max-h-[50dvh] overflow-auto rounded-control ring-1 ring-line">
+              <table className="w-full border-separate border-spacing-0 text-xs">
+                <thead className="sticky top-0 bg-surface-muted">
+                  <tr>{columns.map(c => <th key={c.key} className={`whitespace-nowrap border-b border-line px-3 py-2 font-semibold text-ink ${c.numeric ? 'text-right' : 'text-left'}`}>{c.label}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, PREVIEW_ROWS).map(r => (
+                    <tr key={r.studentNumber} className="odd:bg-surface even:bg-surface-muted/40">
+                      {columns.map(c => <td key={c.key} className={`max-w-56 truncate border-b border-line px-3 py-1.5 text-ink-muted ${c.numeric ? 'text-right tabular-nums' : ''}`}>{String(c.getValue(r))}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
-      <fieldset className="space-y-3">
-        <legend className="sr-only">Columns</legend>
-        {EXPORT_COLUMNS.map(col => (
-          <Checkbox key={col.key} label={col.label} checked={selected.has(col.key)} onChange={on => toggle(col.key, on)} />
-        ))}
-      </fieldset>
-      {selected.size === 0 && <p className="mt-4 text-xs font-medium text-danger">Select at least one column.</p>}
     </Modal>
   );
 }
@@ -458,29 +492,6 @@ export default function AdminScholars({
         headerSlot={
           <Toolbar>
             <SearchInput value={search} onChange={setSearch} label="Search scholars" placeholder="Search name, student no., program or college…" className="min-w-56 flex-1" />
-            <SegmentedControl<ScholarSegment>
-              options={SEGMENTS}
-              value={segment}
-              onChange={v => v && setSegment(v)}
-              label="Show scholars"
-              className="md:w-auto"
-              renderLabel={(option, active) => (
-                <>
-                  {option}
-                  {!firstLoad && <> <span className={`tabular-nums ${active ? 'text-ink-muted' : 'text-ink-subtle'}`}>{counts[option]}</span></>}
-                </>
-              )}
-            />
-            <Select value={approvedFilter} onChange={v => setApprovedFilter(v as ApprovedFilter)} className="md:w-56" label="Filter by approval">
-              <option value="any">Any status</option>
-              <option value="yes">Has approved application</option>
-              <option value="no">No approved application</option>
-            </Select>
-            <Select value={sort} onChange={v => setSort(v as SortOption)} className="md:w-48" label="Sort scholars">
-              <option value="recent">Most recent activity</option>
-              <option value="most_applications">Most applications</option>
-              <option value="name">Name (A–Z)</option>
-            </Select>
           </Toolbar>
         }
       >
@@ -493,7 +504,7 @@ export default function AdminScholars({
             <EmptyState
               icon={Users}
               title="No scholars match"
-              description="Try a different search or filter."
+              description="Try a different search."
               action={<Button onClick={clearFilters}>Clear filters</Button>}
             />
           ) : (
@@ -561,6 +572,7 @@ export default function AdminScholars({
         <ColumnPickerModal
           kind={pickerFor}
           selected={selectedColumns}
+          rows={filtered}
           onChange={setSelectedColumns}
           onConfirm={runExport}
           onCancel={() => setPickerFor(null)}
@@ -624,6 +636,40 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
     }
   };
 
+  // AdSO: the student's full profile, for open change requests and editing
+  // the details students can't change themselves.
+  const canEdit = !!onMessageStudent;
+  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [profileNote, setProfileNote] = useState('');
+  useEffect(() => {
+    if (!canEdit) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/students/${encodeURIComponent(scholar.studentNumber)}/profile`, { headers: await authHeaders(getToken) });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setStudentProfile(body.student);
+      } catch { /* the button just stays hidden */ }
+    })();
+    return () => { cancelled = true; };
+  }, [canEdit, scholar.studentNumber, getToken]);
+  const openRequests = (studentProfile?.correctionRequests ?? []).filter(r => r.status === 'open');
+  const saveProfile = async (changes: Record<string, unknown>) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/students/${encodeURIComponent(scholar.studentNumber)}/profile`, {
+        method: 'PATCH', headers: await authHeaders(getToken, true), body: JSON.stringify(changes),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: body.error || 'Failed to save the profile.' };
+      setStudentProfile(body.student);
+      setProfileNote('Profile updated. Any open change requests were marked done.');
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Failed to save the profile.' };
+    }
+  };
+
   const profile: [string, React.ReactNode][] = [
     ['Email', scholar.email || '—'],
     ['Mobile', scholar.phone || '—'],
@@ -646,6 +692,7 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
         actions={
           <div className="flex items-center gap-2">
             {onMessageStudent && <Button size="sm" icon={MessageSquare} onClick={() => onMessageStudent(scholar.studentNumber)}>Message student</Button>}
+            {canEdit && studentProfile && <Button size="sm" icon={Pencil} onClick={() => setEditing(true)}>Edit profile</Button>}
             <DropdownMenu
               label="More actions"
               items={[
@@ -661,6 +708,28 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
         }
       />
 
+      {profileNote && <Alert tone="success" onDismiss={() => setProfileNote('')}>{profileNote}</Alert>}
+      {openRequests.length > 0 && (
+        <Alert
+          tone="warning"
+          title={`${openRequests.length === 1 ? 'A change request' : `${openRequests.length} change requests`} from the student`}
+          action={<Button size="sm" onClick={() => setEditing(true)}>Edit profile</Button>}
+        >
+          <ul className="mt-1 space-y-1">
+            {openRequests.map((r, i) => <li key={r._id ?? i}><span className="font-medium capitalize">{r.group}:</span> {r.message}</li>)}
+          </ul>
+        </Alert>
+      )}
+      {editing && studentProfile && (
+        <EditProfileDialog
+          student={studentProfile}
+          adminMode
+          initialSection={openRequests.some(r => r.group === 'personal') ? 'personal' : 'academic'}
+          onClose={() => setEditing(false)}
+          onSave={changes => saveProfile(changes as Record<string, unknown>)}
+          onStudentUpdated={setStudentProfile}
+        />
+      )}
       {exportError && <Alert tone="danger" onDismiss={() => onExportError('')}>{exportError}</Alert>}
 
       <dl className="grid grid-cols-1 gap-x-8 gap-y-3 border-y border-line py-4 sm:grid-cols-3">

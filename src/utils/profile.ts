@@ -1,4 +1,4 @@
-import { GuardianType, StudentProfile, VerificationGroup } from '../types';
+import { GuardianType, StudentProfile, VerificationGroup, CorrectionGroup } from '../types';
 import { collegeName, findProgram } from '../data/programs';
 
 // Display and validation helpers for the student profile. The backend
@@ -103,7 +103,7 @@ export function verificationText(s: StudentProfile, group: VerificationGroup): s
   return `Verified by ${OFFICE_NAMES[v.office ?? ''] ?? v.office ?? 'the office'} on ${formatLongDate(v.verifiedAt)}`;
 }
 
-export function openCorrectionRequest(s: StudentProfile, group: VerificationGroup) {
+export function openCorrectionRequest(s: StudentProfile, group: CorrectionGroup) {
   return (s.correctionRequests ?? []).find(r => r.group === group && r.status === 'open') ?? null;
 }
 

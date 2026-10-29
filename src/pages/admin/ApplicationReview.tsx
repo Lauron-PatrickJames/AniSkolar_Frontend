@@ -15,7 +15,7 @@ import {
   applicantProgram, applicantYearLevel, authHeaders, formatBytes, formatDate, formatDateTime,
   historyLabel, isOfficeApp, normalizeApplication, titleCaseName
 } from './adminData';
-import {
+import { ResultDialog,
   Alert, Avatar, Badge, Button, ButtonVariant, Card, ConfirmDialog, CopyButton, EmptyState, Field, IconButton,
   LinkButton, PageHeader, Quote, Select, Skeleton, StatusBadge, STATUS_META, Tabs, Textarea, Toast, Tooltip
 } from './AdminUI';
@@ -196,7 +196,6 @@ export default function ApplicationReview({
               setToast(sentToAdso ? 'Approved and sent to the AdSO.' : `${DECISIONS[status].done}.`);
             }}
           />
-          <InternalNotes app={app} getToken={getToken} onSaved={notes => onUpdated({ ...app, internalNotes: notes })} />
           {!adminOffice && app.scholarshipId === 's1' && app.status === 'Approved' && (
             <SfagGrantCard app={app} getToken={getToken} onSaved={updated => { onUpdated(updated); setToast('Saved the grant percentage.'); }} />
           )}
@@ -216,7 +215,7 @@ export default function ApplicationReview({
       </div>
 
       {toast && (
-        <Toast
+        <ResultDialog
           message={toast}
           onClose={() => setToast(null)}
           action={onNext ? { label: 'Next application', onClick: onNext } : undefined}
@@ -258,7 +257,8 @@ function FormTab({ app, scholarship, grantDetails }: {
         parentsGuardian: app.parentsGuardian,
         siblings: app.siblings ?? [],
         assetsExpenses: app.assetsExpenses,
-        agreement: app.agreement
+        agreement: app.agreement,
+        requestedGrant: app.sfagPercentageRequested ?? null
       } as unknown as SfagApplicationDetails} />
     );
   } else if (app.standardInfo) {
@@ -309,9 +309,12 @@ function DocumentsTab({ appId, docs, missing, getToken }: { appId: string; docs:
   return (
     <div className="space-y-5">
       {docs.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-ink-muted">{docs.length} {docs.length === 1 ? 'file' : 'files'}</p>
-          <Button size="sm" icon={Download} onClick={downloadAll} loading={zipping}>Download all (.zip)</Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-control bg-surface-muted px-3 py-2">
+          <p className="text-sm text-ink-muted">{docs.length} {docs.length === 1 ? 'file' : 'files'}{selected ? <> · <span className="text-ink">{selected.docType}</span> selected</> : null}</p>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Download">
+            {selected && <SelectedDownload doc={selected} getToken={getToken} />}
+            <Button size="sm" icon={Download} onClick={downloadAll} loading={zipping}>Download all (.zip)</Button>
+          </div>
         </div>
       )}
       {zipError && <Alert tone="danger" onDismiss={() => setZipError('')}>{zipError}</Alert>}
@@ -383,15 +386,18 @@ function DocumentPreview({ doc, getToken }: { doc: AdminDocument; getToken: () =
       </div>
       <figcaption className="flex flex-wrap items-center justify-between gap-2">
         <span className="min-w-0 truncate text-xs text-ink-subtle">{doc.filename}</span>
-        {url && (
-          <span className="flex gap-2">
-            <LinkButton href={url} target="_blank" rel="noreferrer" size="sm" icon={ExternalLink}>Open</LinkButton>
-            <LinkButton href={url} download={doc.filename} size="sm" icon={Download}>Download</LinkButton>
-          </span>
-        )}
+        {url && <LinkButton href={url} target="_blank" rel="noreferrer" size="sm" variant="ghost" icon={ExternalLink}>Open in a new tab</LinkButton>}
       </figcaption>
     </figure>
   );
+}
+
+// "Download" for the selected document, next to "Download all".
+function SelectedDownload({ doc, getToken }: { doc: AdminDocument; getToken: () => Promise<string | null> }) {
+  const { url } = useDocumentUrl(doc.fileId, getToken);
+  return url
+    ? <LinkButton href={url} download={doc.filename} size="sm" icon={Download}>Download this file</LinkButton>
+    : <Button size="sm" icon={Download} loading>Download this file</Button>;
 }
 
 // --- SFAG grant percentage ---------------------------------------------------------
@@ -553,6 +559,12 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
   // Scholarships the applicant already holds, when approving needs an
   // acknowledgement (only one internally funded scholarship is credited).
   const [otherHeld, setOtherHeld] = useState<string[] | null>(null);
+  // SFAG (AdSO): the grant percentage is chosen with the approval.
+  const asksGrant = !adminOffice && app.scholarshipId === 's1';
+  // Starts at what the student applied for; the AdSO can change it.
+  const requestedGrant = app.sfagPercentageRequested ?? null;
+  const [grant, setGrant] = useState(app.sfagPercentage ? String(app.sfagPercentage) : requestedGrant ? String(requestedGrant) : '');
+  const [grantError, setGrantError] = useState('');
   const last = latestDecision(app, name);
   // The AdSO looking at a partner office's decided application it hasn't
   // ruled on itself (the office's decision is shown above).
@@ -560,6 +572,11 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
 
   const start = (status: Decision) => {
     setError('');
+    if (status === 'Approved' && asksGrant && !grant) {
+      setGrantError('Choose the grant percentage before approving.');
+      return;
+    }
+    setGrantError('');
     const needsNote = DECISIONS[status].noteRequired || changing;
     if (needsNote && !message.trim()) {
       setNoteError(changing
@@ -579,7 +596,7 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
       const response = await fetch(`${API_BASE_URL}/api/applications/${app._id}/status`, {
         method: 'PATCH',
         headers: await authHeaders(getToken, true),
-        body: JSON.stringify({ status, reviewNote: message.trim() || undefined, ...(otherHeld ? { acknowledgeOtherScholarship: true } : {}) })
+        body: JSON.stringify({ status, reviewNote: message.trim() || undefined, ...(status === 'Approved' && asksGrant && grant ? { sfagPercentage: Number(grant) } : {}), ...(otherHeld ? { acknowledgeOtherScholarship: true } : {}) })
       });
       const body = await response.json().catch(() => ({}));
       if (response.status === 409 && body.code === 'holds_other_scholarship') {
@@ -605,6 +622,7 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
       ? 'The applicant sees the new status and your message in their portal.'
       : 'The applicant sees the new status in their portal.');
     if (status === 'Needs Revision') lines.push('They can update their documents and resubmit.');
+    if (status === 'Approved' && asksGrant && grant) lines.push(`Grant: ${grant}% tuition discount${requestedGrant && String(requestedGrant) !== grant ? ` (they applied for ${requestedGrant}%)` : ''}. It sets their duty hours.`);
     const unfilled = unfilledParts(message);
     if (unfilled.length) lines.push(`Your message still has ${unfilled.join(', ')} to fill in.`);
     if (adminOffice && status === 'Approved' && !app.forwardedAt) lines.push('It is sent to the AdSO automatically.');
@@ -673,6 +691,20 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
               />
             </Field>
             <UnfilledHint text={message} />
+            {asksGrant && (
+              <Field
+                label="Grant percentage"
+                error={grantError || undefined}
+                helper={!grantError ? (requestedGrant
+                  ? (grant === String(requestedGrant) ? `What the student applied for. Change it if you’re granting a different one.` : `The student applied for ${requestedGrant}%.`)
+                  : 'Needed to approve. It sets the scholar’s duty hours.') : undefined}
+              >
+                <Select value={grant} onChange={v => { setGrant(v); setGrantError(''); }} disabled={busy} label="Grant percentage">
+                  <option value="">Choose…</option>
+                  {[100, 75, 50, 25].map(p => <option key={p} value={String(p)}>{p}% tuition discount{p === requestedGrant ? ' (applied for)' : ''}</option>)}
+                </Select>
+              </Field>
+            )}
             {adminOffice && !app.forwardedAt && (
               <p className="text-xs text-ink-subtle">Approving also sends this application to the AdSO.</p>
             )}
@@ -735,7 +767,10 @@ function DecisionSummary({ app, last }: { app: AdminApplication; last: ReturnTyp
   const when = last?.at ?? app.reviewedAt;
   return (
     <div className="space-y-2">
-      <StatusBadge status={app.status} />
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={app.status} />
+        {app.status === 'Approved' && app.sfagPercentage ? <Badge tone="accent">{app.sfagPercentage}% grant</Badge> : null}
+      </div>
       <p className="text-xs text-ink-subtle">
         {last ? `by ${last.actor.label}` : 'Decision recorded'}
         {when && <> · <Tooltip content={formatDateTime(when)} asChild><time dateTime={when} tabIndex={0} className="rounded-badge">{relativeTime(when)}</time></Tooltip></>}
@@ -747,59 +782,3 @@ function DecisionSummary({ app, last }: { app: AdminApplication; last: ReturnTyp
   );
 }
 
-// --- Internal notes --------------------------------------------------------------------
-
-function InternalNotes({ app, getToken, onSaved }: {
-  app: AdminApplication;
-  getToken: () => Promise<string | null>;
-  onSaved: (notes: NonNullable<AdminApplication['internalNotes']>) => void;
-}) {
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const notes = [...(app.internalNotes ?? [])].reverse();
-
-  const save = async () => {
-    if (!text.trim() || busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/applications/${app._id}/internal-notes`, {
-        method: 'POST',
-        headers: await authHeaders(getToken, true),
-        body: JSON.stringify({ text: text.trim() })
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'Failed to save the note.');
-      onSaved(body.internalNotes ?? []);
-      setText('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save the note.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Card title="Internal notes" description="Staff only — never shown to the applicant.">
-      <div className="space-y-3">
-        {notes.length > 0 && (
-          <ul className="divide-y divide-line">
-            {notes.map((note, i) => (
-              <li key={`${note.at}-${i}`} className="py-2.5 first:pt-0">
-                <p className="text-sm text-ink whitespace-pre-line wrap-break-word">{note.text}</p>
-                <p className="mt-0.5 text-xs text-ink-subtle">
-                  {[note.office ? officeDisplayName(note.office) : null, note.byName || note.by].filter(Boolean).join(' · ')} · {relativeTime(note.at)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-        <Field label="Internal note (staff only)" error={error || undefined}>
-          <Textarea value={text} onChange={e => setText(e.target.value)} rows={2} maxLength={2000} disabled={busy} className="resize-y" placeholder="Visible to admins only…" />
-        </Field>
-        <Button size="sm" onClick={save} loading={busy} disabled={busy || !text.trim()}>Add note</Button>
-      </div>
-    </Card>
-  );
-}

@@ -1010,21 +1010,38 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
   const [mode, setMode] = useState<'online' | 'info'>('online');
   const [code, setCode] = useState('');
   const [codeTouched, setCodeTouched] = useState(false);
+  const [description, setDescription] = useState('');
+  const [benefits, setBenefits] = useState('');
+  const [deadline, setDeadline] = useState('');
+  const [availNote, setAvailNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const shownCode = codeTouched ? code : suggestCode(name);
+  const benefitList = benefits.split('\n').map(b => b.replace(/^\s*[-•*]\s*/, '').trim()).filter(Boolean);
 
   const submit = async () => {
     if (busy) return;
-    if (!name.trim()) { setError('Enter the scholarship name.'); return; }
-    if (!/^[A-Za-z]{2,8}$/.test(shownCode)) { setError('The reference code must be 2–8 letters.'); return; }
+    const e: Record<string, string> = {};
+    if (!name.trim()) e.name = 'Enter the scholarship name.';
+    if (!/^[A-Za-z]{2,8}$/.test(shownCode)) e.code = 'Use 2–8 letters, e.g. CSG.';
+    if (!description.trim()) e.description = 'Describe the scholarship for students.';
+    if (!benefitList.length) e.benefits = 'List at least one benefit.';
+    if (mode === 'online' && !deadline.trim()) e.deadline = 'Enter when applications are accepted.';
+    if (mode === 'info' && !availNote.trim()) e.availNote = 'Tell students how to get it outside AniSkolar.';
+    setErrors(e);
+    if (Object.keys(e).length) return;
     setBusy(true);
     setError('');
     try {
       const res = await fetch(`${API_BASE_URL}/api/scholarships`, {
         method: 'POST',
         headers: await authHeaders(getToken, true),
-        body: JSON.stringify({ name: name.trim(), office, category, applicationMode: mode, referenceCode: shownCode }),
+        body: JSON.stringify({
+          name: name.trim(), office, category, applicationMode: mode, referenceCode: shownCode,
+          description: description.trim(), benefits: benefitList, deadline: deadline.trim() || undefined,
+          ...(mode === 'info' ? { availNote: availNote.trim() } : {}),
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "Couldn't create the scholarship.");
@@ -1035,23 +1052,34 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
     }
   };
 
+  const section = (title: string, hint: string) => (
+    <div className="sm:col-span-2 border-t border-line pt-5 first:border-t-0 first:pt-0">
+      <h3 className="text-sm font-semibold text-ink">{title}</h3>
+      <p className="mt-0.5 text-xs text-ink-subtle">{hint}</p>
+    </div>
+  );
+
   return (
     <Modal
+      size="lg"
+      sheet
       title="New scholarship"
-      description="It starts closed. Next you'll tick its eligibility and documents, then open it."
+      description="It starts closed. After this you'll pick its eligibility rules and documents, then open it."
       onClose={onClose}
       dismissible={!busy}
       footer={
         <>
           <Button onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant="primary" icon={Plus} onClick={submit} loading={busy}>Create and edit</Button>
+          <Button variant="primary" icon={Plus} onClick={submit} loading={busy}>Create and continue</Button>
         </>
       }
     >
-      <form className="grid grid-cols-1 gap-5 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); submit(); }} noValidate>
+      <form className="grid grid-cols-1 gap-5 sm:grid-cols-2" onSubmit={ev => { ev.preventDefault(); submit(); }} noValidate>
         {error && <div className="sm:col-span-2"><Alert tone="danger">{error}</Alert></div>}
-        <Field label="Name" className="sm:col-span-2">
-          <TextInput value={name} onChange={e => setName(e.target.value)} maxLength={150} placeholder="e.g. Computer Studies Grant" autoFocus disabled={busy} />
+
+        {section('Basics', 'How the scholarship is named, who reviews it, and how students get it.')}
+        <Field label="Name" error={errors.name} className="sm:col-span-2">
+          <TextInput value={name} onChange={ev => setName(ev.target.value)} maxLength={150} placeholder="e.g. Computer Studies Grant" autoFocus disabled={busy} />
         </Field>
         <Field label="Reviewed by">
           <Select value={office} onChange={v => setOffice(v as ScholarshipOffice)} disabled={busy}>
@@ -1063,7 +1091,7 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </Select>
         </Field>
-        <Field label="How students get it" className="sm:col-span-2">
+        <Field label="How students get it" className="sm:col-span-2" helper={mode === 'online' ? 'Students apply in AniSkolar and upload their documents.' : 'Students only read about it here; they apply through the office.'}>
           <SegmentedControl<'online' | 'info'>
             options={['online', 'info']}
             value={mode}
@@ -1072,14 +1100,30 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
             renderLabel={o => (o === 'online' ? 'Online application' : 'Info only')}
           />
         </Field>
-        <Field label="Reference code" helper={`Application numbers start with it: ${shownCode || 'CODE'}-2026-0001.`}>
+        <Field label="Reference code" error={errors.code} helper={!errors.code ? `Application numbers start with it: ${shownCode || 'CODE'}-2026-0001.` : undefined}>
           <TextInput
             value={shownCode}
-            onChange={e => { setCodeTouched(true); setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, '')); }}
+            onChange={ev => { setCodeTouched(true); setCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g, '')); }}
             maxLength={8}
             disabled={busy}
           />
         </Field>
+
+        {section('What students see', 'Shown on the scholarship’s page and in Explore. You can edit all of it later.')}
+        <Field label="Description" error={errors.description} className="sm:col-span-2" labelAside={`${description.length}/4000`}>
+          <Textarea value={description} onChange={ev => setDescription(ev.target.value)} rows={4} maxLength={4000} disabled={busy} placeholder="Who it's for and what it supports, in a few sentences." className="resize-y" />
+        </Field>
+        <Field label="Benefits" error={errors.benefits} className="sm:col-span-2" helper={!errors.benefits ? 'One per line, e.g. “100% tuition discount”.' : undefined}>
+          <Textarea value={benefits} onChange={ev => setBenefits(ev.target.value)} rows={3} disabled={busy} placeholder={'100% tuition discount\nMonthly book allowance'} className="resize-y" />
+        </Field>
+        <Field label="Application period" error={errors.deadline} optional={mode === 'info'} className="sm:col-span-2" helper={!errors.deadline ? 'Typed as students should read it, e.g. “June 16 – July 3, 2027”.' : undefined}>
+          <TextInput value={deadline} onChange={ev => setDeadline(ev.target.value)} maxLength={200} disabled={busy} placeholder="e.g. June 16 – July 3, 2027" />
+        </Field>
+        {mode === 'info' && (
+          <Field label="How to get it" error={errors.availNote} className="sm:col-span-2" helper={!errors.availNote ? 'Where and how students apply outside AniSkolar.' : undefined}>
+            <Textarea value={availNote} onChange={ev => setAvailNote(ev.target.value)} rows={2} maxLength={500} disabled={busy} placeholder="e.g. Apply at the Sports Development Office, 2nd floor, during tryouts." className="resize-y" />
+          </Field>
+        )}
       </form>
     </Modal>
   );

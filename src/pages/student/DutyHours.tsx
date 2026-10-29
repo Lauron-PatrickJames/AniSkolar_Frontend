@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/react';
+import EvaluationSummary, { ScholarEvaluation } from '../../components/EvaluationSummary';
 import { AlertCircle, Building2, CalendarDays, Clock, Loader2, Plus, Printer, RefreshCw, Trash2, Check, Lock, Target } from 'lucide-react';
 import { StudentProfile } from '../../types';
 import {
@@ -45,8 +46,9 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
   const [claimBusy, setClaimBusy] = useState<string | null>(null);
   // The office has a head in AniSkolar: only duties they confirm count.
   const [confirmationRequired, setConfirmationRequired] = useState(false);
-  // The office head has evaluated this term (scores aren't shown).
+  // The office head's evaluation of this term, once done.
   const [evaluated, setEvaluated] = useState(false);
+  const [evaluation, setEvaluation] = useState<ScholarEvaluation | null>(null);
 
   const load = useCallback(async (t: TermKey | null) => {
     setLoading(true);
@@ -62,6 +64,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       setLog(body.log);
       setConfirmationRequired(!!body.summary?.confirmationRequired);
       setEvaluated(!!body.evaluated);
+      setEvaluation(body.evaluation ?? null);
       if (body.rule) setRule(body.rule);
       setEvents(body.events ?? []);
       setClaims(body.claims ?? []);
@@ -199,12 +202,14 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
             <p className="font-bold">You’ve completed your duty hours for this semester.</p>
             <p>
               {evaluated
-                ? `${log.officeAssigned || 'Your office'} has evaluated you. It goes into your renewal for next semester.`
+                ? `${log.officeAssigned || 'Your office'} has evaluated you; see it below. It goes into your renewal for next semester.`
                 : `${log.officeAssigned ? `The head of ${log.officeAssigned}` : 'Your office'} has been asked to evaluate you; it goes into your renewal for next semester. There’s nothing else you need to do for duty hours this semester.`}
             </p>
           </div>
         </div>
       )}
+
+      {evaluation && <EvaluationSummary evaluation={evaluation} defaultOpen />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <DetailsCard log={log} rule={rule} onSave={save} saveState={saveState} />

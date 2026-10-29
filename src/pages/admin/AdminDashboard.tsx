@@ -254,6 +254,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         selectedStudent={selectedScholar}
         onSelectStudent={studentNumber => (studentNumber ? setSelectedScholar(studentNumber) : backToList())}
         onOpenApplication={applicationId => { navigate('applications'); openApplication(applicationId, []); }}
+        onOpenScholar={studentNumber => { navigate('lifecycle'); setSelectedScholar(studentNumber); }}
       />
     );
   } else if (mainView === 'fse' && isAdso) {

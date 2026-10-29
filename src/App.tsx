@@ -986,6 +986,7 @@ export default function App() {
                     announcements={announcements}
                     applications={applications}
                     student={student}
+                    holdings={holdings}
                     onNavigate={handleNavigate}
                     onViewScholarship={handleViewScholarship}
                   />

@@ -1,19 +1,49 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '@clerk/react';
+import {
+  ArrowRight, Award, Bell, Calculator, Calendar, ChevronRight, Clock, Compass,
+  FileText, MessageSquare, RefreshCw, ShieldCheck, UserCheck
+} from 'lucide-react';
 import { Scholarship, Announcement, Application, StudentProfile } from '../../types';
-import DashboardCard from '../../components/DashboardCard';
-import AnnouncementCard from '../../components/AnnouncementCard';
-import { Award, Compass, FileText, AlertCircle, ArrowRight, UserCheck, Calendar, Bell, Calculator, RefreshCw } from 'lucide-react';
-import { getAvailableScholarships } from '../../utils/eligibility';
-import { motion } from 'motion/react';
+import { Holdings, getAvailableScholarships, isSfagScholar } from '../../utils/eligibility';
+import { DutySummary, formatDutyDate } from '../../utils/dutyHours';
+import { Renewal, RenewalPeriod, periodLabel } from '../../utils/renewals';
+import { titleCaseName } from '../../utils/names';
+import { useUnreadMessages } from '../../layouts/StudentLayout';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+// The student's home: where they stand (their scholarship, duty hours and
+// renewal, or their applications), then announcements beside quick
+// actions.
 
 interface DashboardProps {
   scholarships: Scholarship[];
   announcements: Announcement[];
   applications: Application[];
   student: StudentProfile;
+  // What the student holds now (GET /api/students/me/holdings).
+  holdings?: Holdings | null;
   onNavigate: (page: string) => void;
   onViewScholarship: (id: string) => void;
   id?: string;
+}
+
+interface DutyView { log: { officeAssigned?: string | null; term: string; academicYear: number; deadline?: string | null }; summary: DutySummary; evaluated?: boolean }
+interface RenewalsView { available: RenewalPeriod[]; renewals: (Renewal & { period?: RenewalPeriod | null })[] }
+
+const hrs = (n: number | null | undefined) => (n === null || n === undefined ? '—' : String(Math.round(n * 100) / 100));
+const STATUS_STYLE: Record<string, string> = {
+  'Under Evaluation': 'bg-sky-50 text-sky-700 ring-sky-200',
+  'Needs Revision': 'bg-amber-50 text-amber-800 ring-amber-200',
+  Approved: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  Rejected: 'bg-rose-50 text-rose-700 ring-rose-200',
+};
+const STATUS_LABEL: Record<string, string> = { 'Under Evaluation': 'Under evaluation', 'Needs Revision': 'Needs revision', Approved: 'Approved', Rejected: 'Not approved' };
+
+function greeting(): string {
+  const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', hour12: false }).format(new Date()));
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 }
 
 export default function Dashboard({
@@ -21,195 +51,242 @@ export default function Dashboard({
   announcements,
   applications,
   student,
+  holdings = null,
   onNavigate,
   onViewScholarship,
   id
 }: DashboardProps) {
-  const eligibleScholarships = getAvailableScholarships(scholarships, student);
-  // Renewal is for scholars only (an approved application).
-  const isScholar = applications.some(app => app.status === 'Approved');
+  const { getToken } = useAuth();
+  const unread = useUnreadMessages('dashboard');
+  const needsRevision = applications.filter(a => a.status === 'Needs Revision').length;
+  const held = holdings?.held ?? [];
+  const isScholar = applications.some(a => a.status === 'Approved');
+  const sfag = isSfagScholar(applications);
+  const [duty, setDuty] = useState<DutyView | null>(null);
+  const [renewals, setRenewals] = useState<RenewalsView | null>(null);
 
-  // Compute metrics dynamically from data
-  const totalScholarships = eligibleScholarships.length;
-  const activeApplications = applications.length;
-  const closingSoonCount = eligibleScholarships.filter(s => s.status === 'Closing Soon').length;
-  const totalAnnouncements = announcements.length;
+  // Duty hours (SFAG) and renewals (scholars), for the cards and to-dos.
+  useEffect(() => {
+    let cancelled = false;
+    const get = async <T,>(path: string): Promise<T | null> => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`${API_BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+        return res.ok ? await res.json() : null;
+      } catch {
+        return null;
+      }
+    };
+    if (sfag) get<DutyView>('/api/duty-hours/mine').then(d => { if (!cancelled) setDuty(d); });
+    if (isScholar) get<RenewalsView>('/api/renewals/mine').then(r => { if (!cancelled) setRenewals(r); });
+    return () => { cancelled = true; };
+  }, [sfag, isScholar, getToken]);
 
-  // Grab upcoming scholarship deadlines
-  const upcomingDeadlines = eligibleScholarships
-    .filter(s => s.status !== 'Closed')
-    .slice(0, 3);
+  const firstName = titleCaseName(student.firstName || student.name.split(' ')[0] || '');
+  const gpa = student.gpa !== undefined && student.gpa !== null && String(student.gpa).trim() !== '' && Number.isFinite(Number(student.gpa)) ? Number(student.gpa).toFixed(2) : null;
+  const openToMe = getAvailableScholarships(scholarships, student).filter(s => s.status !== 'Closed');
+  const appliedIds = new Set(applications.map(a => a.scholarshipId));
+
+  const latestRenewal = renewals?.renewals?.[0];
+  const sfagDetail = holdings?.details?.find(d => d.scholarshipId === 's1');
+  const dutyPct = duty?.summary.required ? Math.min(100, (duty.summary.completed / duty.summary.required) * 100) : null;
+  const dutyDone = duty?.summary.required ? duty.summary.completed >= duty.summary.required : false;
 
   return (
-    <div id={id} className="space-y-6 sm:space-y-8">
-      {/* Welcome Banner */}
-      <div className="hero-placeholder min-h-52 sm:h-50 sm:min-h-0 rounded-2xl flex flex-col justify-center px-5 py-6 sm:px-8 sm:py-0 md:px-10 text-white card-shadow shrink-0 relative overflow-hidden">
-        <div className="relative z-10 max-w-2xl space-y-2">
-          <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-extrabold tracking-tight leading-tight">
-            Welcome back, <span className="text-emerald-300">{student.name.split(' ')[0]}</span>!
-          </h2>
-          <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed font-normal">
-            Explore and manage your educational journey with AniSkolar's integrated scholarship portal. Check your eligibility status, active grants, and upcoming deadlines.
-          </p>
-          <div className="pt-2 flex flex-wrap items-center gap-2 sm:gap-3">
-            <span className="text-[10px] sm:text-[11px] font-semibold bg-white/10 px-2.5 sm:px-3 py-1 rounded-full text-white border border-white/10">
-              ID: {student.studentNumber}
-            </span>
-            <span className="text-[10px] sm:text-[11px] font-semibold bg-white/10 px-2.5 sm:px-3 py-1 rounded-full text-white border border-white/10">
-              GPA: {student.gpa}
-            </span>
-            <span className="text-[10px] sm:text-[11px] font-semibold bg-white/10 px-2.5 sm:px-3 py-1 rounded-full text-white border border-white/10 truncate max-w-[60vw] sm:max-w-none">
-              {student.course}
-            </span>
+    <div id={id} className="space-y-6">
+      {/* Greeting */}
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-green to-emerald-700 px-5 py-6 sm:px-8 text-white shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm text-emerald-100">{greeting()},</p>
+            <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight">{firstName || 'there'}</h2>
+            <p className="mt-1 text-xs sm:text-sm text-emerald-100/90 truncate">
+              {[student.course, student.yearLevel, student.studentNumber, gpa && `GPA ${gpa}`].filter(Boolean).join(' · ')}
+            </p>
           </div>
-        </div>
-      </div>
-
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-        <DashboardCard
-          title="Total Grants Available"
-          value={totalScholarships}
-          description="Active scholarship applications"
-          icon={Award}
-          onClick={() => onNavigate('explore')}
-        />
-        <DashboardCard
-          title="My Open Applications"
-          value={activeApplications}
-          description="In-progress evaluations"
-          icon={FileText}
-          color="border-brand-green/20 bg-emerald-50/25 hover:border-brand-green/30"
-          trend={activeApplications > 0 ? { text: 'Submitted', type: 'positive' } : undefined}
-          onClick={() => onNavigate('explore')}
-        />
-        <DashboardCard
-          title="Closing Soon"
-          value={closingSoonCount}
-          description="Urgent submission guidelines"
-          icon={AlertCircle}
-          onClick={() => onNavigate('explore')}
-        />
-        <DashboardCard
-          title="Announcements"
-          value={totalAnnouncements}
-          description="Latest AdSO releases"
-          icon={Bell}
-          onClick={() => onNavigate('announcements')}
-        />
-      </div>
-
-      {/* Main Dual Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-        {/* Left Column: Recent Announcements */}
-        <div className="lg:col-span-2 space-y-5 sm:space-y-6 min-w-0">
-          <div className="flex justify-between items-center gap-2">
-            <h3 className="font-display font-bold text-base sm:text-lg text-slate-900">Recent AdSO Announcements</h3>
-            <button
-              onClick={() => onNavigate('announcements')}
-              className="text-xs font-semibold text-brand-green hover:text-brand-green-dark flex items-center space-x-1 focus:outline-hidden shrink-0"
-            >
-              <span>View All</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+          {held.length === 1 ? (
+            <button type="button" onClick={() => onNavigate('my-scholarship')} className="inline-flex items-center gap-2 self-start rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold ring-1 ring-white/20 hover:bg-white/20 sm:self-auto">
+              <ShieldCheck className="h-4 w-4" aria-hidden />
+              {held[0].scholarshipName.match(/\(([^)]+)\)\s*$/)?.[1] ?? held[0].scholarshipName} scholar
+              {sfagDetail?.grantPercentage ? <span className="text-emerald-100">· {sfagDetail.grantPercentage}%</span> : null}
             </button>
-          </div>
-
-          <div className="space-y-4">
-            {announcements.slice(0, 2).map(ann => (
-              <AnnouncementCard key={ann.id} announcement={ann} />
-            ))}
-          </div>
+          ) : held.length === 0 ? (
+            <button type="button" onClick={() => onNavigate('explore')} className="inline-flex items-center gap-2 self-start rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-brand-green hover:bg-emerald-50 sm:self-auto">
+              <Compass className="h-4 w-4" aria-hidden /> Explore scholarships
+            </button>
+          ) : null}
         </div>
+      </section>
 
-        {/* Right Column: Deadlines & Quick Actions */}
-        <div className="space-y-5 sm:space-y-6 min-w-0">
-          {/* Upcoming Deadlines */}
-          <div>
-            <h3 className="font-display font-bold text-base sm:text-lg text-slate-900 mb-3 sm:mb-4">Upcoming Deadlines</h3>
-            <div className="bg-white rounded-xl border border-slate-200 shadow-xs divide-y divide-slate-100 overflow-hidden">
-              {upcomingDeadlines.length === 0 && (
-                <div className="p-5 text-center text-xs text-slate-400 font-medium">No upcoming deadlines right now.</div>
+      {/* Where they stand */}
+      {held.length > 0 || isScholar ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {/* Scholarship */}
+          <button type="button" onClick={() => onNavigate('my-scholarship')} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs hover:border-brand-green/40">
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400"><Award className="h-3.5 w-3.5" aria-hidden />My scholarship</p>
+            <p className="mt-3 font-display text-lg font-bold leading-snug text-slate-900">{held[0]?.scholarshipName ?? 'Scholarship'}</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {[sfagDetail?.grantPercentage && `${sfagDetail.grantPercentage}% tuition discount`, sfagDetail?.approvedAt && `since ${new Date(sfagDetail.approvedAt).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}`].filter(Boolean).join(' · ') || 'Approved'}
+            </p>
+            <p className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-brand-green">View details <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden /></p>
+          </button>
+
+          {/* Duty hours */}
+          {sfag && (
+            <button type="button" onClick={() => onNavigate('duty-hours')} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs hover:border-brand-green/40">
+              <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400"><Clock className="h-3.5 w-3.5" aria-hidden />Duty hours</p>
+              {!duty ? <div className="mt-3 h-14 animate-pulse rounded-lg bg-slate-100" /> : (
+                <>
+                  <p className="mt-3 text-sm text-slate-500">
+                    <span className="font-display text-2xl font-extrabold text-slate-900 tabular-nums">{hrs(duty.summary.completed)}</span>
+                    {duty.summary.required ? ` of ${hrs(duty.summary.required)} h` : ' h'}
+                  </p>
+                  {dutyPct !== null && (
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100" aria-hidden>
+                      <div className={`h-full rounded-full ${dutyDone ? 'bg-brand-green' : 'bg-emerald-400'}`} style={{ width: `${dutyPct}%` }} />
+                    </div>
+                  )}
+                  <p className="mt-2 text-xs text-slate-500">
+                    {!duty.log.officeAssigned ? 'Waiting for your office assignment'
+                      : duty.evaluated ? `Done · ${duty.log.officeAssigned} evaluated you`
+                        : dutyDone ? `Done · waiting for ${duty.log.officeAssigned}’s evaluation`
+                          : [duty.log.officeAssigned, duty.summary.weeklyNeeded ? `about ${hrs(duty.summary.weeklyNeeded)} h a week` : null, duty.log.deadline ? `due ${formatDutyDate(duty.log.deadline)}` : null].filter(Boolean).join(' · ')}
+                  </p>
+                </>
               )}
-              {upcomingDeadlines.map(s => (
-                <div
-                  key={s.id}
-                  onClick={() => onViewScholarship(s.id)}
-                  className="p-3.5 sm:p-4 hover:bg-slate-50 transition-colors cursor-pointer group"
-                >
-                  <div className="flex justify-between items-start gap-2">
-                    <span className="font-semibold text-xs text-slate-700 group-hover:text-brand-green transition-colors line-clamp-1 min-w-0">
-                      {s.name}
+            </button>
+          )}
+
+          {/* Renewal */}
+          <button type="button" onClick={() => onNavigate('renewals')} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs hover:border-brand-green/40">
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400"><RefreshCw className="h-3.5 w-3.5" aria-hidden />Renewal</p>
+            {!renewals ? <div className="mt-3 h-14 animate-pulse rounded-lg bg-slate-100" /> : renewals.available.length > 0 ? (
+              <>
+                <p className="mt-3 font-display text-lg font-bold text-slate-900">Open now</p>
+                <p className="mt-1 text-xs text-slate-500">{periodLabel(renewals.available[0])}{renewals.available[0].deadline ? ` · due ${renewals.available[0].deadline}` : ''}</p>
+              </>
+            ) : latestRenewal ? (
+              <>
+                <p className="mt-3 font-display text-lg font-bold text-slate-900">{latestRenewal.status === 'Renewed' ? 'Renewed' : latestRenewal.status}</p>
+                <p className="mt-1 text-xs text-slate-500">{periodLabel(latestRenewal)}</p>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 font-display text-lg font-bold text-slate-900">Not open yet</p>
+                <p className="mt-1 text-xs text-slate-500">You’ll renew with your grades when the office opens it.</p>
+              </>
+            )}
+            <p className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-brand-green">Go to Renewal <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden /></p>
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* Applications */}
+          <section className="rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <h3 className="font-display text-base font-bold text-slate-900">My applications</h3>
+              <button type="button" onClick={() => onNavigate('applications')} className="text-xs font-bold text-brand-green hover:text-brand-green-dark">See all</button>
+            </div>
+            {applications.length === 0 ? (
+              <p className="px-5 py-6 text-center text-sm text-slate-500">You haven’t applied yet. Scholarships open to you are on the right.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {applications.slice(0, 4).map(a => (
+                  <li key={a.id} className="flex items-center gap-3 px-5 py-3">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{a.scholarshipName}</span>
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${STATUS_STYLE[a.status] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>{STATUS_LABEL[a.status] ?? a.status}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Open to them */}
+          <section className="rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <h3 className="font-display text-base font-bold text-slate-900">Open to you <span className="text-slate-400 font-semibold">({openToMe.length})</span></h3>
+              <button type="button" onClick={() => onNavigate('explore')} className="text-xs font-bold text-brand-green hover:text-brand-green-dark">Explore</button>
+            </div>
+            <ul className="divide-y divide-slate-100">
+              {openToMe.slice(0, 4).map(s => (
+                <li key={s.id}>
+                  <button type="button" onClick={() => onViewScholarship(s.id)} className="flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-slate-50">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-slate-800">{s.name}</span>
+                      {s.deadline && <span className="block truncate text-xs text-slate-500">{s.deadline.replace(/^Applications open\s+/i, '')}</span>}
                     </span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 uppercase tracking-wide ${
-                      s.status === 'Closing Soon'
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-emerald-100 text-emerald-800'
-                    }`}>
-                      {s.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center text-slate-400 text-[11px] mt-2 gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="font-medium text-slate-500 truncate">Deadline: {s.deadline}</span>
-                  </div>
-                </div>
+                    {appliedIds.has(s.id)
+                      ? <span className="shrink-0 text-[11px] font-semibold text-slate-400">Applied</span>
+                      : <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" aria-hidden />}
+                  </button>
+                </li>
               ))}
-            </div>
-          </div>
-
-          {/* Quick Action Hub */}
-          <div>
-            <h3 className="font-display font-bold text-base sm:text-lg text-slate-900 mb-3 sm:mb-4">Quick Actions</h3>
-            <div className="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 shadow-xs space-y-2.5 sm:space-y-3">
-              <button
-                onClick={() => onNavigate('explore')}
-                className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
-              >
-                <span className="flex items-center space-x-2.5 min-w-0">
-                  <Compass className="w-4 h-4 text-brand-green shrink-0" />
-                  <span className="truncate">Browse Available Scholarships</span>
-                </span>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              </button>
-
-              {isScholar && (
-                <button
-                  onClick={() => onNavigate('renewals')}
-                  className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
-                >
-                  <span className="flex items-center space-x-2.5 min-w-0">
-                    <RefreshCw className="w-4 h-4 text-brand-green shrink-0" />
-                    <span className="truncate">Renew My Scholarship</span>
-                  </span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                </button>
-              )}
-
-              <button
-                onClick={() => onNavigate('gpa-calculator')}
-                className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
-              >
-                <span className="flex items-center space-x-2.5 min-w-0">
-                  <Calculator className="w-4 h-4 text-brand-green shrink-0" />
-                  <span className="truncate">GPA Calculator</span>
-                </span>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              </button>
-
-              <button
-                onClick={() => onNavigate('profile')}
-                className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-lg border border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors text-left text-xs font-semibold text-slate-700 focus:outline-hidden"
-              >
-                <span className="flex items-center space-x-2.5 min-w-0">
-                  <UserCheck className="w-4 h-4 text-brand-green shrink-0" />
-                  <span className="truncate">Update Profile</span>
-                </span>
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              </button>
-            </div>
-          </div>
+              {openToMe.length === 0 && <li className="px-5 py-6 text-center text-sm text-slate-500">No scholarships are open to you right now.</li>}
+            </ul>
+          </section>
         </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* Announcements */}
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-xs lg:col-span-2">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h3 className="flex items-center gap-2 font-display text-base font-bold text-slate-900"><Bell className="h-4 w-4 text-brand-green" aria-hidden />Latest from the scholarship office</h3>
+          <button type="button" onClick={() => onNavigate('announcements')} className="inline-flex items-center gap-1 text-xs font-bold text-brand-green hover:text-brand-green-dark">All announcements <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
+        </div>
+        {announcements.length === 0 ? (
+          <p className="px-5 py-6 text-center text-sm text-slate-500">No announcements yet.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {announcements.slice(0, 3).map(a => (
+              <li key={a.id}>
+                <button type="button" onClick={() => onNavigate('announcements')} className="flex w-full items-start gap-3 px-5 py-3.5 text-left hover:bg-slate-50">
+                  {a.imageUrls?.[0]
+                    ? <img src={a.imageUrls[0]} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover ring-1 ring-slate-200" />
+                    : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-brand-green"><Bell className="h-5 w-5" aria-hidden /></span>}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 text-[11px] text-slate-400">
+                      <span className="font-semibold text-slate-500">{a.category}</span>
+                      <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" aria-hidden />{a.date}</span>
+                    </span>
+                    <span className="mt-0.5 block truncate text-sm font-semibold text-slate-800">{a.title}</span>
+                    <span className="block truncate text-xs text-slate-500">{a.description}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Quick actions */}
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-xs self-start">
+        <div className="border-b border-slate-100 px-5 py-4">
+          <h3 className="font-display text-base font-bold text-slate-900">Quick actions</h3>
+        </div>
+        <ul className="space-y-1 p-2">
+          {[
+            ...(sfag ? [{ key: 'duty', icon: Clock, label: 'Log a duty', page: 'duty-hours' }] : []),
+            ...(isScholar ? [{ key: 'renew', icon: RefreshCw, label: 'Renew my scholarship', page: 'renewals' }] : []),
+            ...(held.length === 0 ? [{ key: 'explore', icon: Compass, label: 'Browse scholarships', page: 'explore' }] : []),
+            { key: 'apps', icon: FileText, label: 'My applications', page: 'applications', count: needsRevision },
+            { key: 'msg', icon: MessageSquare, label: 'Message the scholarship office', page: 'messages', count: unread },
+            { key: 'gpa', icon: Calculator, label: 'GPA calculator', page: 'gpa-calculator' },
+            { key: 'profile', icon: UserCheck, label: 'Update my profile', page: 'profile' },
+          ].map(a => (
+            <li key={a.key}>
+              <button type="button" onClick={() => onNavigate(a.page)} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-brand-green"><a.icon className="h-4 w-4" aria-hidden /></span>
+                <span className="min-w-0 flex-1 truncate">{a.label}</span>
+                {'count' in a && a.count ? <span className="rounded-full bg-amber-500 px-1.5 py-px text-[10px] font-bold text-white tabular-nums">{a.count > 9 ? '9+' : a.count}</span> : null}
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-400" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
       </div>
+
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, ArrowLeft, Building2, Mail, MailOpen, MessageSquare, PenSquare, Pin, PinOff, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, Building2, ExternalLink, Mail, MailOpen, MessageSquare, PenSquare, Pin, PinOff, Trash2, UserRound } from 'lucide-react';
+import { StudentProfile } from '../../types';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
 import { collegeName } from '../../data/programs';
@@ -50,11 +51,13 @@ interface ThreadDetail {
   state?: { pinned: boolean; archived: boolean; markedUnread: boolean };
 }
 
-export default function MessagesPage({ getToken, selectedStudent, onSelectStudent, onOpenApplication }: {
+export default function MessagesPage({ getToken, selectedStudent, onSelectStudent, onOpenApplication, onOpenScholar }: {
   getToken: () => Promise<string | null>;
   selectedStudent: string | null;
   onSelectStudent: (studentNumber: string | null) => void;
   onOpenApplication: (applicationId: string) => void;
+  // Opens the student's full record (Scholars).
+  onOpenScholar?: (studentNumber: string) => void;
 }) {
   const [threads, setThreads] = useState<Thread[] | null>(null);
   const [error, setError] = useState('');
@@ -243,6 +246,7 @@ export default function MessagesPage({ getToken, selectedStudent, onSelectStuden
             getToken={getToken}
             onBack={() => onSelectStudent(null)}
             onOpenApplication={onOpenApplication}
+            onOpenScholar={onOpenScholar}
             onChanged={loadThreads}
             menu={headerMenu}
           />
@@ -278,16 +282,18 @@ export default function MessagesPage({ getToken, selectedStudent, onSelectStuden
   );
 }
 
-function ThreadView({ studentNumber, getToken, onBack, onOpenApplication, onChanged, menu }: {
+function ThreadView({ studentNumber, getToken, onBack, onOpenApplication, onOpenScholar, onChanged, menu }: {
   studentNumber: string;
   getToken: () => Promise<string | null>;
   onBack: () => void;
   onOpenApplication: (applicationId: string) => void;
+  onOpenScholar?: (studentNumber: string) => void;
   onChanged: () => void;
   menu?: React.ReactNode;
 }) {
   const [data, setData] = useState<ThreadDetail | null>(null);
   const [error, setError] = useState('');
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -332,8 +338,17 @@ function ThreadView({ studentNumber, getToken, onBack, onOpenApplication, onChan
             {[s.studentNumber, s.college && collegeName(s.college), s.programCode, s.yearLevel].filter(Boolean).join(' · ')}{s.email ? ` · ${s.email}` : ''}
           </p>
         </div>
+        <Button size="sm" icon={UserRound} onClick={() => setProfileOpen(true)}>View profile</Button>
         {menu}
       </div>
+      {profileOpen && (
+        <StudentProfileDialog
+          studentNumber={s.studentNumber}
+          getToken={getToken}
+          onClose={() => setProfileOpen(false)}
+          onOpenRecord={onOpenScholar && data.applications.length > 0 ? () => { setProfileOpen(false); onOpenScholar(s.studentNumber); } : undefined}
+        />
+      )}
       {data.applications.length > 0 && (
         <div className="flex flex-wrap gap-2 border-b border-line px-3 py-2">
           {data.applications.map(a => (
@@ -360,6 +375,110 @@ function ThreadView({ studentNumber, getToken, onBack, onOpenApplication, onChan
         )}
       />
     </Card>
+  );
+}
+
+// A student's profile, read-only, without leaving the conversation (GET
+// /api/students/:studentNumber/profile, AdSO). Editing and the full record
+// (applications, history, files) are on the Scholars page.
+function StudentProfileDialog({ studentNumber, getToken, onClose, onOpenRecord }: {
+  studentNumber: string;
+  getToken: () => Promise<string | null>;
+  onClose: () => void;
+  onOpenRecord?: () => void;
+}) {
+  const [p, setP] = useState<StudentProfile | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/students/${encodeURIComponent(studentNumber)}/profile`, { headers: await authHeaders(getToken) });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || 'Couldn’t load the profile.');
+        if (!cancelled) setP(body.student);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Couldn’t load the profile.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [studentNumber, getToken]);
+
+  const date = (v?: string) => (v ? new Date(v).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '');
+  const parent = (name?: string, contact?: string, deceased?: boolean) => (name ? `${name}${deceased ? ' (deceased)' : contact ? ` · ${contact}` : ''}` : '');
+  const guardian = p ? (p.guardianType === 'father' ? `Father (${p.fatherName ?? ''})` : p.guardianType === 'mother' ? `Mother (${p.motherName ?? ''})`
+    : p.guardianName ? [p.guardianName, p.guardianRelationship, p.guardianContactNo].filter(Boolean).join(' · ') : '') : '';
+  const sections: [string, [string, React.ReactNode][]][] = p ? [
+    ['Academic', [
+      ['Program', [p.programCode, p.course].filter(Boolean).join(' · ')],
+      ['College', p.college ? collegeName(p.college) : ''],
+      ['Year and section', [p.yearLevel, p.section].filter(Boolean).join(' · ')],
+      ['GPA', p.gpa ? Number(p.gpa).toFixed(2) : ''],
+    ]],
+    ['Personal', [
+      ['Date of birth', date(p.dateOfBirth)],
+      ['Place of birth', p.placeOfBirth],
+      ['Nationality', p.nationality],
+      ['Civil status', p.civilStatus],
+    ]],
+    ['Contact', [
+      ['School email', p.email],
+      ['Mobile', p.mobileNumber],
+      ['Telephone', p.telephoneNumber],
+      ['Home address', [p.homeAddress, p.cityMunicipality, p.province, p.zipCode].filter(Boolean).join(', ')],
+    ]],
+    ['Family', [
+      ['Father', parent(p.fatherName, p.fatherContactNo, p.fatherDeceased)],
+      ['Mother', parent(p.motherName, p.motherContactNo, p.motherDeceased)],
+      ['Guardian', guardian],
+    ]],
+  ] : [];
+  const openRequests = (p?.correctionRequests ?? []).filter(r => r.status === 'open');
+
+  return (
+    <Modal
+      size="lg"
+      title={p ? titleCaseName(p.name) : 'Student profile'}
+      description={p ? [p.studentNumber, p.programCode, p.yearLevel].filter(Boolean).join(' · ') : studentNumber}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Close</Button>
+          {onOpenRecord && <Button variant="primary" icon={ExternalLink} onClick={onOpenRecord}>Open full record</Button>}
+        </>
+      }
+    >
+      {error ? <Alert tone="danger">{error}</Alert> : !p ? <TableSkeleton rows={6} label="Loading profile" /> : (
+        <div className="space-y-5">
+          {openRequests.length > 0 && (
+            <Alert tone="warning" title={`${openRequests.length === 1 ? 'A change request' : `${openRequests.length} change requests`} from the student`}>
+              <ul className="mt-1 space-y-1">{openRequests.map((r, i) => <li key={r._id ?? i}><span className="font-medium capitalize">{r.group}:</span> {r.message}</li>)}</ul>
+              {onOpenRecord && <p className="mt-2 text-xs">Use Open full record → Edit profile to make the change.</p>}
+            </Alert>
+          )}
+          <div className="flex items-center gap-3">
+            <Avatar name={p.name} avatarUrl={p.avatarUrl} size="lg" />
+            <div className="min-w-0 text-sm text-ink-muted">
+              <p className="font-medium text-ink">{titleCaseName(p.name)}</p>
+              <p>{p.email}</p>
+            </div>
+          </div>
+          {sections.map(([title, rows]) => (
+            <section key={title}>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-subtle">{title}</h3>
+              <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                {rows.map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <dt className="text-xs text-ink-subtle">{label}</dt>
+                    <dd className="text-sm text-ink break-words">{value || <span className="text-ink-subtle">Not provided</span>}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ))}
+        </div>
+      )}
+    </Modal>
   );
 }
 

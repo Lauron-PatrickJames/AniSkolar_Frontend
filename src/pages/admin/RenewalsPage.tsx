@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  BadgeCheck, CalendarClock, CheckCircle2, CircleAlert, CircleDashed, ClipboardCheck, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, XCircle
+  BadgeCheck, CalendarClock, CheckCircle2, ChevronDown, CircleAlert, CircleDashed, ClipboardCheck, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, XCircle
 } from 'lucide-react';
 import { mockScholarships, acceptsOnlineApplications } from '../../data/scholarships';
 import { retentionMinGpa } from '../../utils/eligibility';
@@ -669,27 +669,34 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
       onClose={onClose}
     >
       <div className="space-y-6">
-        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <DetailField label="Status" value={<Badge tone={STATE_TONE[renewal.status]} dot>{renewal.status}</Badge>} />
-          <DetailField label="Continuing" value={renewal.continuing ? 'Yes' : `No · ${renewal.notContinuingReason ?? ''}`} />
-          {renewal.continuing ? (
-            <>
-              <DetailField
-                label={period.minGpa !== undefined && period.minGpa !== null ? `GPA (min. ${formatGpa(period.minGpa)})` : 'GPA'}
-                value={<span className={meets === false ? 'text-danger-fg' : undefined}>{formatGpa(renewal.gpa)}{meets === false ? ' · below minimum' : ''}</span>}
-              />
-              <DetailField label="Failing grade" value={renewal.hasFailingGrade ? <span className="text-danger-fg">Yes</span> : 'None'} />
-            </>
-          ) : (
-            <DetailField label="Details" value={renewal.notContinuingDetails} />
-          )}
-          <DetailField label="Program" value={row.program} />
-          <DetailField label="Holds it through" value={row.holder?.renewedFrom ? `Renewed ${row.holder.renewedFrom}` : row.holder?.referenceCode ? `Application ${row.holder.referenceCode}` : 'No longer counted as a holder'} />
-          <DetailField label="Submitted" value={formatDateTime(renewal.createdAt)} />
-          <DetailField label="Email" value={row.email} />
-        </dl>
+        {/* At a glance: what the decision rests on */}
+        {renewal.continuing ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <GlanceTile
+              label={period.minGpa !== undefined && period.minGpa !== null ? `GPA · min. ${formatGpa(period.minGpa)}` : 'GPA'}
+              value={formatGpa(renewal.gpa)}
+              tone={meets === false ? 'danger' : meets ? 'success' : 'neutral'}
+              note={meets === false ? 'Below the minimum' : meets ? 'Meets the minimum' : undefined}
+            />
+            <GlanceTile label="Failing grade" value={renewal.hasFailingGrade ? 'Yes' : 'None'} tone={renewal.hasFailingGrade ? 'danger' : 'success'} />
+            <GlanceTile
+              label="Grades (TCG)"
+              value={renewal.documents.length ? 'Uploaded' : 'Missing'}
+              tone={renewal.documents.length ? 'success' : 'danger'}
+              action={renewal.documents[0] ? { label: 'View', onClick: () => openDocument(renewal.documents[0].fileId, getToken).catch(err => window.alert(err instanceof Error ? err.message : "Couldn't open the file.")) } : undefined}
+            />
+            <GlanceTile
+              label="Office evaluation"
+              value={renewal.evaluation ? `${renewal.evaluation.average.toFixed(2)} / 5` : period.requiresEvaluation ? 'Not in yet' : 'Not needed'}
+              tone={renewal.evaluation ? (renewal.evaluation.average >= PASSING_AVERAGE ? 'success' : 'warning') : period.requiresEvaluation ? 'warning' : 'neutral'}
+              note={renewal.evaluation ? ratingLabel(renewal.evaluation.average) : undefined}
+            />
+          </div>
+        ) : (
+          <Alert tone="neutral" title={`Not continuing · ${renewal.notContinuingReason ?? ''}`}>{renewal.notContinuingDetails || 'The scholar told the office they are not continuing.'}</Alert>
+        )}
 
-        {row.check && (
+        {row.check && renewal.continuing && (
           <section className="space-y-2">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-ink">Renewal check</h3>
@@ -698,6 +705,15 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
             <CheckList check={row.check} />
           </section>
         )}
+
+        {renewal.continuing && <DecisionPanel renewal={renewal} period={period} studentName={row.name} check={row.check ?? null} getToken={getToken} onUpdated={onUpdated} />}
+
+        <dl className="grid grid-cols-2 gap-4 border-t border-line pt-5 sm:grid-cols-4">
+          <DetailField label="Status" value={<Badge tone={STATE_TONE[renewal.status]} dot>{renewal.status}</Badge>} />
+          <DetailField label="Program" value={row.program} />
+          <DetailField label="Holds it through" value={row.holder?.renewedFrom ? `Renewed ${row.holder.renewedFrom}` : row.holder?.referenceCode ? `Application ${row.holder.referenceCode}` : 'No longer counted as a holder'} />
+          <DetailField label="Submitted" value={formatDateTime(renewal.createdAt)} />
+        </dl>
 
         {renewal.continuing && (
           <section className="space-y-2">
@@ -751,8 +767,6 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
           </section>
         )}
 
-        <DecisionPanel renewal={renewal} period={period} studentName={row.name} getToken={getToken} onUpdated={onUpdated} />
-
         {renewal.history.length > 0 && (
           <section className="space-y-2">
             <h3 className="text-sm font-semibold text-ink">History</h3>
@@ -775,28 +789,50 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
 function EvaluationSummary({ renewal }: { renewal: Renewal }) {
   const ev = renewal.evaluation!;
   const passing = ev.average >= PASSING_AVERAGE;
+  const [open, setOpen] = useState(false);
   return (
     <div className="space-y-3">
       <Alert tone={passing ? 'success' : 'warning'} title={`Average ${ev.average.toFixed(2)} · ${ratingLabel(ev.average)}`}>
         {passing ? 'Meets the Very satisfactory average needed to renew.' : `Below ${PASSING_AVERAGE} (Very satisfactory): interview the scholar before deciding.`}
       </Alert>
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-        {EVALUATION_ITEMS.map(item => (
-          <div key={item.key} className="flex items-baseline justify-between gap-3 border-b border-line py-1 text-sm">
-            <dt className="text-ink-muted">{item.label}</dt>
-            <dd className="shrink-0 font-medium text-ink">{ev.scores?.[item.key] ?? '—'}</dd>
-          </div>
-        ))}
-      </dl>
-      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <DetailField label="Evaluated by" value={ev.evaluatorName} />
-        <DetailField label="Assigned office" value={ev.assignedOffice} />
-        <DetailField
-          label={ev.source === 'office' ? 'Submitted by the office' : 'Entered'}
-          value={ev.enteredAt ? `${formatDateTime(ev.enteredAt)}${ev.enteredBy ? ` by ${ev.enteredBy}` : ''}` : undefined}
-        />
-      </dl>
-      {ev.remarks && <DetailField label="Remarks (staff only)" value={<span className="whitespace-pre-line font-normal">{ev.remarks}</span>} />}
+      <p className="text-sm text-ink-muted">
+        By <span className="font-medium text-ink">{ev.evaluatorName || 'the office head'}</span>{ev.assignedOffice ? `, ${ev.assignedOffice}` : ''}
+        {ev.enteredAt ? ` · ${formatDateTime(ev.enteredAt)}` : ''}{ev.source === 'office' ? ' · in the office portal' : ' · entered by the scholarship office'}
+      </p>
+      {ev.remarks && <DetailField label="Remarks (the scholar sees these too)" value={<span className="whitespace-pre-line font-normal">{ev.remarks}</span>} />}
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
+        {open ? 'Hide the ratings' : `Show all ${EVALUATION_ITEMS.length} ratings`}
+        <ChevronDown className={`size-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {open && (
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+          {EVALUATION_ITEMS.map(item => (
+            <div key={item.key} className="flex items-baseline justify-between gap-3 border-b border-line py-1 text-sm">
+              <dt className="text-ink-muted">{item.label}</dt>
+              <dd className="shrink-0 font-medium text-ink">{ev.scores?.[item.key] ?? '—'}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
+  );
+}
+
+// A fact the decision rests on, coloured by whether it's fine.
+function GlanceTile({ label, value, tone, note, action }: {
+  label: string; value: React.ReactNode; tone: 'success' | 'warning' | 'danger' | 'neutral'; note?: string;
+  action?: { label: string; onClick: () => void };
+}) {
+  const ring = { success: 'ring-success-fg/20 bg-success-bg/40', warning: 'ring-warning-fg/25 bg-warning-bg/50', danger: 'ring-danger-fg/25 bg-danger-bg/50', neutral: 'ring-line bg-surface-muted' }[tone];
+  const text = { success: 'text-success-fg', warning: 'text-warning-fg', danger: 'text-danger-fg', neutral: 'text-ink' }[tone];
+  return (
+    <div className={`rounded-card p-3 ring-1 ${ring}`}>
+      <p className="text-xs text-ink-muted">{label}</p>
+      <p className={`mt-1 text-lg font-semibold ${text}`}>{value}</p>
+      <div className="flex items-center justify-between gap-2">
+        {note && <p className="text-xs text-ink-muted">{note}</p>}
+        {action && <button type="button" onClick={action.onClick} className="text-xs font-medium text-accent hover:underline">{action.label}</button>}
+      </div>
     </div>
   );
 }
@@ -886,29 +922,58 @@ function EvaluationForm({ renewal, dutyOffice, getToken, onCancel, onSaved }: {
   );
 }
 
-const DECISION_ICONS: Record<RenewalDecision, React.ElementType> = { Renewed: CheckCircle2, 'Needs Revision': RefreshCw, 'Not Renewed': XCircle };
+// The three decisions, said plainly: what each does, and its button.
+const DECISION_COPY: Record<RenewalDecision, {
+  title: string; hint: (term: string) => string; icon: React.ElementType;
+  tone: 'success' | 'warning' | 'danger'; button: (firstName: string) => string; variant: 'primary' | 'secondary' | 'danger';
+}> = {
+  Renewed: {
+    title: 'Renew', icon: CheckCircle2, tone: 'success', variant: 'primary',
+    hint: term => `Keeps the scholarship for the ${term}. The scholar sees it on their Renewal page.`,
+    button: first => `Renew ${first || 'scholar'}`,
+  },
+  'Needs Revision': {
+    title: 'Send back for revision', icon: RefreshCw, tone: 'warning', variant: 'secondary',
+    hint: () => 'They fix what you ask (e.g. an unreadable TCG) and submit again.',
+    button: () => 'Send back for revision',
+  },
+  'Not Renewed': {
+    title: 'Don’t renew', icon: XCircle, tone: 'danger', variant: 'danger',
+    hint: () => 'The scholarship ends after this semester. Tell them why.',
+    button: first => `Don’t renew ${first || 'scholar'}`,
+  },
+};
+const TONE_RING = { success: 'ring-success-fg/40 bg-success-bg/50', warning: 'ring-warning-fg/40 bg-warning-bg/60', danger: 'ring-danger-fg/40 bg-danger-bg/60' };
+const TONE_TEXT = { success: 'text-success-fg', warning: 'text-warning-fg', danger: 'text-danger-fg' };
 
-function DecisionPanel({ renewal, period, studentName, getToken, onUpdated }: {
+function DecisionPanel({ renewal, period, studentName, check, getToken, onUpdated }: {
   renewal: Renewal;
   period: RenewalPeriod;
   studentName: string;
+  check: RenewalCheck | null;
   getToken: () => Promise<string | null>;
   onUpdated: (renewal: Renewal) => void;
 }) {
+  const decided = renewal.status !== 'Under Evaluation';
+  const [changing, setChanging] = useState(false);
   const [decision, setDecision] = useState<RenewalDecision | ''>('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [result, setResult] = useState('');
 
-  const decided = renewal.status !== 'Under Evaluation';
+  const first = firstNameOf(studentName);
+  const term = periodLabel(period);
   const options = RENEWAL_DECISIONS.filter(d => d !== renewal.status);
   const noteRequired = decision === 'Needs Revision' || decision === 'Not Renewed' || (decision !== '' && decided);
-  const needsEvaluation = decision === 'Renewed' && period.requiresEvaluation && !renewal.evaluation;
+  const evaluationMissing = period.requiresEvaluation && !renewal.evaluation;
+  // What the renewal check points to.
+  const recommended: RenewalDecision | null = check?.result === 'eligible' ? 'Renewed' : check?.result === 'not_eligible' ? 'Not Renewed' : null;
 
   const save = async () => {
     if (!decision) return;
     if (noteRequired && !note.trim()) {
-      setError(decided ? 'Add a message to the scholar explaining why the decision changed.' : 'Add a message to the scholar explaining what to do or why.');
+      setError(decided ? 'Tell the scholar why the decision changed.' : decision === 'Needs Revision' ? 'Tell the scholar what to fix.' : 'Tell the scholar why.');
       return;
     }
     setSaving(true);
@@ -921,8 +986,12 @@ function DecisionPanel({ renewal, period, studentName, getToken, onUpdated }: {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Failed to save the decision.');
+      setResult(decision === 'Renewed' ? `${first || 'The scholar'} keeps the scholarship for the ${term}.`
+        : decision === 'Needs Revision' ? `Sent back to ${first || 'the scholar'} with your note. They can submit again.`
+          : `${first || 'The scholar'} won’t be renewed. They see your message on their Renewal page.`);
       setDecision('');
       setNote('');
+      setChanging(false);
       onUpdated(body.renewal);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save the decision.');
@@ -931,52 +1000,96 @@ function DecisionPanel({ renewal, period, studentName, getToken, onUpdated }: {
     }
   };
 
+  const current = decided ? DECISION_COPY[renewal.status as RenewalDecision] : null;
+
   return (
-    <section className="space-y-3 rounded-card bg-surface-muted p-4">
-      <div>
-        <h3 className="text-sm font-semibold text-ink">{decided ? 'Change decision' : 'Decision'}</h3>
-        {renewal.reviewNote && decided && (
-          <p className="mt-1 text-sm text-ink-muted">Current message to the scholar: <span className="whitespace-pre-line text-ink">{renewal.reviewNote}</span></p>
-        )}
-      </div>
-      <SegmentedControl<RenewalDecision>
-        label="Decision"
-        options={options}
-        value={decision}
-        onChange={v => { setDecision(v); setError(''); }}
-        renderLabel={option => {
-          const Icon = DECISION_ICONS[option];
-          return <span className="inline-flex items-center gap-1.5"><Icon className="size-3.5" aria-hidden />{option}</span>;
-        }}
-      />
-      {decision && (
+    <section className="space-y-3 rounded-card p-4 ring-1 ring-line">
+      <h3 className="text-sm font-semibold text-ink">Decision</h3>
+
+      {/* Already decided: say so, and offer to change it. */}
+      {current && !changing && (
+        <div className={`flex flex-wrap items-start gap-3 rounded-control p-3 ring-1 ${TONE_RING[current.tone]}`}>
+          <current.icon className={`mt-0.5 size-5 shrink-0 ${TONE_TEXT[current.tone]}`} aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className={`text-sm font-semibold ${TONE_TEXT[current.tone]}`}>{renewal.status}</p>
+            {renewal.reviewNote && <p className="mt-0.5 whitespace-pre-line text-sm text-ink-muted">“{renewal.reviewNote}”</p>}
+          </div>
+          <Button size="sm" onClick={() => setChanging(true)}>Change decision</Button>
+        </div>
+      )}
+
+      {(!decided || changing) && (
         <>
-          <Field
-            label="Message to the scholar"
-            labelAside={
-              <TemplatePicker
-                getToken={getToken}
-                context="renewal"
-                decision={decision}
-                vars={{ firstName: firstNameOf(studentName), scholarship: renewal.scholarshipName, term: periodLabel(period) }}
-                value={note}
-                onInsert={setNote}
-                disabled={saving}
-              />
-            }
-            optional={!noteRequired}
-            helper={decision === 'Needs Revision' ? 'Say what to fix or upload again.' : 'The scholar sees this on their Renewal page.'}
-          >
-            <Textarea rows={3} value={note} onChange={e => setNote(e.target.value)} disabled={saving} maxLength={2000} />
-          </Field>
-          <UnfilledHint text={note} />
-          {needsEvaluation && <Alert tone="warning">Enter the department head's evaluation before renewing.</Alert>}
-          <div className="flex justify-end">
-            <Button variant="primary" onClick={save} loading={saving} disabled={needsEvaluation}>Save decision</Button>
+          <div role="radiogroup" aria-label="Decision" className="grid gap-2 sm:grid-cols-3">
+            {options.map(option => {
+              const c = DECISION_COPY[option];
+              const disabled = option === 'Renewed' && evaluationMissing;
+              const active = decision === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  disabled={disabled || saving}
+                  onClick={() => { setDecision(option); setError(''); }}
+                  className={`flex flex-col items-start gap-1 rounded-control p-3 text-left ring-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    active ? TONE_RING[c.tone] : 'ring-line hover:bg-surface-muted'
+                  }`}
+                >
+                  <span className="flex w-full items-center gap-2">
+                    <c.icon className={`size-4 ${active ? TONE_TEXT[c.tone] : 'text-ink-subtle'}`} aria-hidden />
+                    <span className={`text-sm font-semibold ${active ? TONE_TEXT[c.tone] : 'text-ink'}`}>{c.title}</span>
+                    {recommended === option && !disabled && <Badge tone={c.tone === 'danger' ? 'danger' : 'success'}>Check says</Badge>}
+                  </span>
+                  <span className="text-xs leading-snug text-ink-muted">
+                    {disabled ? 'Waiting for the office head’s evaluation (enter a paper one above if needed).' : c.hint(term)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {check?.result === 'review' && !decision && <p className="text-xs text-warning-fg">The check flagged something to look at (see above) before you decide.</p>}
+
+          {decision && (
+            <>
+              <Field
+                label={decision === 'Needs Revision' ? 'What should they fix?' : decision === 'Not Renewed' ? 'Why not?' : 'Message to the scholar'}
+                labelAside={
+                  <TemplatePicker
+                    getToken={getToken}
+                    context="renewal"
+                    decision={decision}
+                    vars={{ firstName: first, scholarship: renewal.scholarshipName, term }}
+                    value={note}
+                    onInsert={setNote}
+                    disabled={saving}
+                  />
+                }
+                optional={!noteRequired}
+                helper="The scholar sees this on their Renewal page."
+              >
+                <Textarea rows={3} value={note} onChange={e => { setNote(e.target.value); setError(''); }} disabled={saving} maxLength={2000} />
+              </Field>
+              <UnfilledHint text={note} />
+            </>
+          )}
+          {error && <Alert tone="danger">{error}</Alert>}
+          <div className="flex flex-wrap justify-end gap-2">
+            {changing && <Button onClick={() => { setChanging(false); setDecision(''); setNote(''); setError(''); }} disabled={saving}>Cancel</Button>}
+            <Button
+              variant={decision ? DECISION_COPY[decision].variant : 'primary'}
+              icon={decision ? DECISION_COPY[decision].icon : undefined}
+              onClick={save}
+              loading={saving}
+              disabled={!decision}
+            >
+              {decision ? DECISION_COPY[decision].button(first) : 'Choose a decision'}
+            </Button>
           </div>
         </>
       )}
-      {error && <Alert tone="danger">{error}</Alert>}
+      {result && <ResultDialog message={result} onClose={() => setResult('')} />}
     </section>
   );
 }

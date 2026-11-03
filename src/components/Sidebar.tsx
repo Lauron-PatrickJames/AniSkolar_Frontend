@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { LayoutDashboard, Compass, Megaphone, LogOut, X, Award, Calculator, RefreshCw, Clock, MessageSquare, FileText, ShieldCheck, AlertTriangle } from 'lucide-react';
-import { displayName, nameInitials } from '../utils/names';
+import React from 'react';
+import { LayoutDashboard, Compass, Megaphone, X, Award, Calculator, RefreshCw, Clock, MessageSquare, FileText, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { StudentProfile } from '../types';
 import logo from '/src/assets/logo.png';
 
@@ -31,7 +30,6 @@ export default function Sidebar({
   student,
   isOpen,
   onClose,
-  onLogout,
   isScholar = false,
   isSfagScholar = false,
   heldScholarships = [],
@@ -39,12 +37,10 @@ export default function Sidebar({
   needsRevision = 0,
   id
 }: SidebarProps) {
-  const [avatarFailed, setAvatarFailed] = useState(false);
   const holds = heldScholarships.length > 0;
   const choosing = heldScholarships.length > 1;
   // "Student Financial Aid Grant (SFAG)" -> "SFAG" for the chip.
   const short = (name: string) => name.match(/\(([^)]+)\)\s*$/)?.[1] ?? name;
-  const fullName = displayName(student);
 
   type Item = { id: string; name: string; icon: React.ElementType; count?: number; tone?: 'alert' | 'info' };
   type Group = { label?: string; chip?: React.ReactNode; items: Item[] };
@@ -180,36 +176,6 @@ export default function Sidebar({
           ))}
         </nav>
 
-        {/* Account: opens Profile; sign out beside it. */}
-        <div className="border-t border-slate-100 p-3 shrink-0">
-          <div className={`flex items-center gap-1 rounded-lg ${activeFor('profile') ? 'bg-emerald-50' : ''}`}>
-            <button
-              type="button"
-              onClick={() => go('profile')}
-              aria-current={activeFor('profile') ? 'page' : undefined}
-              className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-2 text-left hover:bg-slate-50 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green"
-            >
-              {student.avatarUrl && !avatarFailed ? (
-                <img src={student.avatarUrl} alt="" onError={() => setAvatarFailed(true)} className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-slate-200" />
-              ) : (
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-green text-xs font-bold text-white">{nameInitials(fullName)}</span>
-              )}
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold text-slate-800">{fullName}</span>
-                <span className="block truncate text-[11px] text-slate-400">{student.studentNumber} · View profile</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={onLogout}
-              title="Sign out"
-              aria-label="Sign out"
-              className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-rose-500"
-            >
-              <LogOut className="h-[18px] w-[18px]" aria-hidden />
-            </button>
-          </div>
-        </div>
       </aside>
     </>
   );

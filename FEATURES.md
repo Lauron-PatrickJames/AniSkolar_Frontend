@@ -118,7 +118,7 @@ A scholar can be evaluated once their hours for the semester are complete. At th
 
 ## Other things worth knowing
 
-- Office accounts can reset a forgotten password from the login page with a code sent by email. Students reset theirs through Microsoft. Everyone has an Account security page: office accounts can change their password and turn on two-step verification with an authenticator app, and everyone can see the devices they're signed in on and sign any of them out.
+- Office accounts can reset a forgotten password from the login page with a code sent by email. Students sign in with their DLSU-D Microsoft account and the Authenticator, so they have no AniSkolar password. Everyone has an Account security page: office accounts can change their password and turn on two-step verification with an authenticator app, and everyone can see the devices they're signed in on and sign any of them out.
 - Notifications can't be cleared. "View all notifications" lists every one, read or unread.
 
 - Each office can only see its own data. Uploaded files can only be opened by the student who owns them or by the office handling them, and the server always uses the signed-in account to identify the student.

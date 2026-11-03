@@ -14,6 +14,7 @@ import AdminScholars from './AdminScholars';
 import MessagesPage from './MessagesPage';
 import AccountSecurity from '../../components/AccountSecurity';
 import AddScholarDialog from './AddScholarDialog';
+import AdminHome from './AdminHome';
 import { officeFormFor } from '../../data/officeForms';
 import { PageHeader, ResultDialog } from './AdminUI';
 import { MESSAGES_READ_EVENT } from '../../utils/messages';
@@ -48,7 +49,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const adminOffice = adminOfficeRaw && adminOfficeRaw !== 'ADSO' ? adminOfficeRaw : null;
   const officeLabel = adminOffice
     ? (OFFICE_LABELS[adminOffice as keyof typeof OFFICE_LABELS] ?? adminOffice)
-    : adminOfficeRaw === 'ADSO' ? OFFICE_SHORT_LABELS.LSO : 'No office assigned';
+    : adminOfficeRaw === 'ADSO' ? OFFICE_LABELS.LSO : 'No office assigned';
 
   // Announcements, scholarship management and the FSE report are the
   // AdSO's alone; the server enforces the same rule.
@@ -75,7 +76,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const [addScholarFor, setAddScholarFor] = useState<string | null>(null);
   const [addedNotice, setAddedNotice] = useState('');
-  const homeView: MainView = onlyDirect ? 'lifecycle' : 'applications';
+  // Every office starts on its dashboard.
+  const homeView: MainView = 'home';
   const [mainView, setMainView] = useState<MainView>(homeView);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // A page this office doesn't have (an old link or history entry), or the
@@ -321,6 +323,24 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     );
   } else if (mainView === 'announcements') {
     page = <AdminAnnouncements ownOffice={(adminOffice ?? 'LSO') as ScholarshipOffice} />;
+  } else if (mainView === 'home') {
+    page = (
+      <AdminHome
+        applications={applications}
+        isLoading={isLoading}
+        getToken={getToken}
+        isAdso={isAdso}
+        adminName={(user?.firstName || user?.primaryEmailAddress?.emailAddress?.split('@')[0] || 'there').replace(/[._-]+/g, ' ')}
+        officeLabel={officeLabel}
+        messageCount={messageCount}
+        hasRenewals={officeHasRenewals}
+        onlyDirect={onlyDirect}
+        onNavigate={navigate}
+        onOpenStatus={status => { navigate('applications'); setListFilters({ ...DEFAULT_FILTERS, status }); }}
+        onOpenApplication={id => { navigate('applications'); openApplication(id, []); }}
+        onAddScholar={directAward.length ? () => setAddScholarFor(directAward[0].id) : undefined}
+      />
+    );
   } else if (mainView === 'security') {
     page = (
       <div className="max-w-3xl space-y-6">
@@ -376,7 +396,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       onNavigate={navigate}
       onLogout={onLogout}
       adminEmail={user?.primaryEmailAddress?.emailAddress}
+      adminName={user?.fullName || undefined}
+      adminAvatarUrl={user?.hasImage ? user.imageUrl : undefined}
       officeLabel={officeLabel}
+      officeShort={adminOffice ? OFFICE_SHORT_LABELS[adminOffice as keyof typeof OFFICE_SHORT_LABELS] ?? adminOffice : OFFICE_SHORT_LABELS.LSO}
       pendingCount={pendingCount}
       messageCount={messageCount}
       hiddenViews={sidebarHidden}

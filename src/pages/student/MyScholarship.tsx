@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { OFFICE_LABELS } from '../../data/scholarships';
 import { useAuth } from '@clerk/react';
 import { AlertCircle, Award, CalendarCheck, CheckCircle2, Clock, FileText, Hash, Percent, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import { Application, Scholarship } from '../../types';
@@ -13,11 +14,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 // internally funded scholarship can be credited); the other is declined
 // (POST /api/students/me/holdings/choose).
 
-const OFFICE_NAMES: Record<string, string> = {
-  LSO: 'Admissions and Scholarship Office',
-  POLCA: 'POLCA Office',
-  ALUMNI: 'Alumni Office',
-};
+const OFFICE_NAMES: Record<string, string> = { ...OFFICE_LABELS, LSO: 'Admissions and Scholarship Office' };
 
 const formatDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Manila' }) : '—');
 

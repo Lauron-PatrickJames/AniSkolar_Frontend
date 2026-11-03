@@ -9,7 +9,7 @@ const APPLICATION_STATUS_STYLES: Record<Application['status'], string> = {
 };
 import { Calendar, Award, DollarSign, Dumbbell, Users, CheckCircle, ChevronRight, AlertCircle, Bookmark } from 'lucide-react';
 import { motion } from 'motion/react';
-import { acceptsOnlineApplications } from '../data/scholarships';
+import { acceptsOnlineApplications, handlingOffice } from '../data/scholarships';
 
 interface ScholarshipCardProps {
   scholarship: Scholarship;
@@ -176,7 +176,7 @@ export default function ScholarshipCard({
           </button>
           {onApply && !acceptsOnlineApplications(scholarship) && (
             <span className="flex-1 sm:flex-none text-xs font-semibold px-3.5 py-2 rounded-lg text-slate-500 bg-slate-100 border border-slate-200 text-center whitespace-nowrap">
-              Info only
+              Through the {handlingOffice(scholarship).replace(/\s*\([^)]*\)\s*$/, '')}
             </span>
           )}
           {onApply && acceptsOnlineApplications(scholarship) && (

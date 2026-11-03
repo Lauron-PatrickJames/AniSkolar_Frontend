@@ -44,7 +44,7 @@ The system enforces a few of the office's rules:
 
 Once approved, Explore Grants in the sidebar is replaced by My Scholarship, and a Scholar badge shows which scholarship they hold. My Scholarship shows the grant percentage, approval date, reference number and what they need to keep it. If a student is approved for two scholarships, My Scholarship asks them to choose one. The other is marked "Declined by student", its slot opens, and the AdSO is told in Messages.
 
-Scholars renew their scholarship every semester by submitting their grades only: their GPA, whether they had a failing grade, and a JPG of their Certified True Copy of Grades (TCG). SFAG scholars can renew only after their office head has evaluated last semester's duty. Until then the renewal says what it's waiting for, though they can still say they're not continuing. If they're not continuing because of OJT, graduation or something else, they say so on the same form.
+Scholars renew their scholarship every semester. For the 2nd semester they submit their grades only: their GPA, whether they had a failing grade, and a JPG of their Certified True Copy of Grades (TCG). For the 1st semester (a new school year) they also submit the scholarship's application requirements again. SFAG scholars can renew only after their office head has evaluated last semester's duty. Until then the renewal says what it's waiting for, though they can still say they're not continuing. If they're not continuing because of OJT, graduation or something else, they say so on the same form.
 
 SFAG scholars also have a Duty Hours page:
 - They log each duty after rendering it. Duty is only allowed Monday to Thursday from 8 to 6 and Friday from 8 to 5, it can't overlap the 12 to 1 lunch break, each duty has to be at least 1.5 hours, and times are picked in 30-minute steps (8:00, 8:30 and so on). These rules are checked when they save.
@@ -66,7 +66,7 @@ The Scholars page lists everyone who has applied, with each person's full histor
 
 ### Renewals
 
-The AdSO opens a renewal period for each scholarship and semester and sets the deadline, minimum GPA, and whether an evaluation from the office head is needed. The only document is the scholar's grades, the same for every period. The list shows every scholar who holds the scholarship, including those who haven't submitted yet.
+The AdSO opens a renewal period for each scholarship and semester and sets the deadline, minimum GPA, and whether an evaluation from the office head is needed. A 2nd-semester renewal asks for the grades only; a 1st-semester renewal also asks for the scholarship's application requirements. The list shows every scholar who holds the scholarship, including those who haven't submitted yet.
 
 Each submitted renewal is checked automatically against the GPA, failing grades, documents, last semester's duty hours and the evaluation, and marked Eligible, Waiting, Needs review or Not eligible, with the reasons listed. The ones that pass everything can be renewed together with one button. The rest are still decided one at a time.
 
@@ -76,7 +76,7 @@ The page also shows where each scholar did their duty, can email the office head
 
 This page shows every SFAG scholar for the semester along with their hours, status and pace. The AdSO assigns each scholar an office. This can be done one at a time, for several scholars at once, or randomly based on how many slots each office has. When assigning an office, the AdSO can search the office list and see how many slots are used and who the head is.
 
-The AdSO also sets the duty deadline for each semester, keeps the list of offices with their slots and heads, sets the required hours for each year level and grant percentage, adds events that count for duty hours and approves claims for them, and handles requests from office heads.
+The AdSO also sets the duty deadline for each semester, keeps the list of offices with their slots and heads, sets the required hours for each year level and grant percentage, and adds events that count for duty hours and approves claims for them.
 
 ### Statistics and reports
 
@@ -96,15 +96,13 @@ The Automation page has tasks the system can do on its own. Each one is off unti
 - Weekly reminders to SFAG scholars who are behind on duty hours
 - Weekly reminders to office heads who have duties to confirm or scholars ready to evaluate
 - Reminders before renewal and application deadlines, and to students who haven't fixed an application that needs revision
-- A morning summary for the AdSO of what's waiting
-- Assigning offices to scholars at the start of each semester, keeping them in the same office as last semester when there's room
 
 Emails are sent a few at a time to stay within the email service's limits. If one fails, it's tried again later, and the ones that still fail are listed on this page.
 
 
-## For the POLCA and Alumni offices
+## For the other scholarship offices
 
-POLCA and Alumni review applications for their own scholarships. When they approve one, it's sent to the AdSO automatically, and the AdSO can still change the decision. Each office only sees its own applications, renewals and documents, and has its own message templates. The statistics page is for the AdSO only.
+Every office that offers a scholarship has its own accounts: POLCA, Alumni, the Sports Development Office, Vicissitude, ROTC, the USG, Heraldo Filipino, and the college student governments (CICS, CBAA, COEd, CCJE, CEAT, CTHM, COS). Students apply to all of them online through AniSkolar. Each office handles its own scholarships entirely: they open and close them, edit their details, create new ones, decide the applications, run their renewals, and record when a scholar graduates or stops. The AdSO sees only their approved scholars, read-only, and can't change those scholarships or decisions. Each office only sees its own applications, renewals and documents, and has its own message templates. The statistics page is for the AdSO only.
 
 POLCA accepts 2 scholars per college and Alumni accepts 2 for the whole campus. Neither scholarship has renewals. When a scholar graduates or stops, recording it opens the slot for someone else.
 
@@ -113,7 +111,7 @@ POLCA accepts 2 scholars per college and Alumni accepts 2 for the whole campus. 
 
 Office heads sign in with the school email the AdSO has listed for their office. They don't need to register separately. The portal opens with three counts: duties to check, scholars ready to evaluate, and unread messages. It shows the scholars assigned to their office, grouped by semester, with each scholar's progress toward their required hours and every duty they logged. Heads confirm or flag each duty, or confirm all of them at once. Once an office has a head in the system, only confirmed duties count toward a scholar's hours.
 
-A scholar can be evaluated once their hours for the semester are complete. At that moment the head gets an email, and the scholar moves to "Ready to evaluate" in the portal. The scholar is told too, by email, a notification and a note on their Duty Hours page, that their hours are done and their office head will evaluate them next. Once the head evaluates them, the scholar sees the evaluation on Duty Hours and on their renewal: the average and what it means, each rating, and the head's remarks. Heads fill out the 1 to 5 evaluation, which goes into the scholar's renewal for the next semester. They can ask the AdSO for a specific scholar, picked from a list that shows the scholars who worked with them before and every SFAG scholar this semester, or for more or fewer scholars, and message the AdSO directly. The AdSO can assign a requested scholar with one button.
+A scholar can be evaluated once their hours for the semester are complete. At that moment the head gets an email, and the scholar moves to "Ready to evaluate" in the portal. The scholar is told too, by email, a notification and a note on their Duty Hours page, that their hours are done and their office head will evaluate them next. Once the head evaluates them, the scholar sees the evaluation on Duty Hours and on their renewal: the average and what it means, each rating, and the head's remarks. Heads fill out the 1 to 5 evaluation, which goes into the scholar's renewal for the next semester. They can message the AdSO directly.
 
 
 ## Other things worth knowing

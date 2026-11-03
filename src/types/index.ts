@@ -92,6 +92,9 @@ export interface Scholarship {
   // refuses applications. `availNote` says how the scholarship is awarded.
   applicationMode?: 'online' | 'info';
   availNote?: string;
+  // No online application: the office students go to (e.g. "Sports
+  // Development Office (SDO)").
+  handledBy?: string;
   // An extra date the AdSO keeps up to date, e.g. varsity tryouts for the
   // Athletic Scholarship. Shown when scheduleLabel is set; `schedule` is
   // editable from the admin Scholarships page.
@@ -138,13 +141,16 @@ export interface ScholarshipOverride {
   category?: Scholarship['category'];
   applicationMode?: 'online' | 'info';
   availNote?: string;
+  handledBy?: string;
   referenceCode?: string;
   updatedAt?: string;
   updatedBy?: string;
 }
 
 export type ApplicationFormType = 'standard' | 'sfag' | 'polca' | 'alumni';
-export type ScholarshipOffice = 'LSO' | 'POLCA' | 'ALUMNI';
+// Offices that run scholarships (backend data/offices.js).
+export type ScholarshipOffice = 'LSO' | 'POLCA' | 'ALUMNI' | 'SDO' | 'VICISSITUDE' | 'ROTC' | 'USG' | 'HERALDO'
+  | 'CICSSG' | 'CBAASG' | 'COEDSG' | 'CCJESG' | 'CEATSG' | 'CTHMSG' | 'COSSG';
 
 // One requirement in a grant-form scholarship's document checklist.
 export interface DocumentSlot {

@@ -1,3 +1,4 @@
+import { ScholarshipOffice } from '../../types';
 import { AdminApplication, AppStatus, applicantName, titleCaseName } from './adminData';
 
 // The Applications list's filters, sorting and "waiting" time. The list and
@@ -5,7 +6,7 @@ import { AdminApplication, AppStatus, applicantName, titleCaseName } from './adm
 // through applications follows exactly what the list shows.
 
 export type StatusTab = AppStatus | 'All';
-export type OfficeFilter = 'All' | 'LSO' | 'POLCA' | 'ALUMNI';
+export type OfficeFilter = 'All' | ScholarshipOffice;
 export type QueueSort = 'waiting' | 'newest' | 'oldest' | 'name';
 
 export interface ListFilters {

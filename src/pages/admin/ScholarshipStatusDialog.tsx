@@ -79,8 +79,10 @@ export interface StatusDialogResult {
   announcement?: { scheduledFor: string | null; facebookError?: string };
 }
 
-export default function ScholarshipStatusDialog({ scholarship, next, mode, getToken, changeStatus, onDone, onCancel }: {
+export default function ScholarshipStatusDialog({ scholarship, next, mode, getToken, changeStatus, onDone, onCancel, canAnnounce = true }: {
   scholarship: Scholarship;
+  // Announcements are the AdSO's; other offices only change the status.
+  canAnnounce?: boolean;
   next: ScholarshipStatus;
   mode: 'change' | 'announce';
   getToken: () => Promise<string | null>;
@@ -90,7 +92,7 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => announcementFor(scholarship, next));
-  const [announce, setAnnounce] = useState(true);
+  const [announce, setAnnounce] = useState(canAnnounce);
   const [fbEnabled, setFbEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [schedule, setSchedule] = useState<ScheduleState>(() => initialSchedule());
@@ -203,7 +205,7 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
     >
       <form className="space-y-5" onSubmit={e => { e.preventDefault(); confirm(); }} noValidate>
         {error && <Alert tone="danger">{error}</Alert>}
-        <div className="rounded-control bg-surface-muted p-4 ring-1 ring-inset ring-line">
+        {canAnnounce && <div className="rounded-control bg-surface-muted p-4 ring-1 ring-inset ring-line">
           <Checkbox
             checked={announce}
             onChange={setAnnounce}
@@ -211,7 +213,7 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
             label="Post an announcement"
             description="Shows on every student's dashboard and on this scholarship's page. You can still edit it later in Announcements."
           />
-        </div>
+        </div>}
         {announce && (
           <>
             <Field label="Title" error={shown.title || undefined} labelAside={`${draft.title.length}/150`}>

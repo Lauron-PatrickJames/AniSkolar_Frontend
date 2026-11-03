@@ -110,7 +110,6 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
     <div className="space-y-6">
       <PageHeader
         title="Full Scholarship Equivalent"
-        description="Upload a term's scholarship export from the registrar to compute headcount and FSE by fund source."
         actions={
           <>
             {report && (
@@ -206,7 +205,7 @@ function ReportView({ report }: { report: FseReport }) {
 
   return (
     <>
-      <Card flush title="Summary" description="Headcount % and FSE % are out of the student population for the term.">
+      <Card flush title="Summary">
         <Table label="FSE summary" minWidth="40rem">
           <thead>
             <tr>
@@ -350,7 +349,6 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
     <Modal
       size="lg"
       title="Upload a term"
-      description="Use the registrar's scholarship report for the term (.xls or .xlsx) — the one with TOTAL ASSESSMENT and TOTAL DISC columns — or the Raw sheet of the FSE template."
       onClose={onClose}
       dismissible={!saving}
       footer={

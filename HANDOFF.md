@@ -376,6 +376,63 @@ their own accounts). One head per office.
 - To see the portal yourself, put your own school email as a head in Duty
   hours → Offices and sign in again.
 
+## Offices (2026-10-29)
+Every scholarship belongs to one office, and each office runs its own
+entirely in AniSkolar: it opens and closes its scholarships, decides the
+online applications, runs its renewals and records graduated / stopped.
+The AdSO runs its own (SFAG, Entrance, Academic, EBPSP) and sees every
+other office's **approved** scholars, live and read-only.
+
+| Clerk `office` | Office | Scholarships now |
+|---|---|---|
+| `ADSO` | Admissions and Scholarship Office | SFAG, Entrance, Academic, EBPSP |
+| `POLCA` | POLCA Office | POLCA Scholarship Trust Fund |
+| `ALUMNI` | Alumni Office | Alumni Association Scholarship |
+| `SDO` | Sports Development Office | Athletic Scholarship |
+| `VICISSITUDE` | Vicissitude | Vicissitude Scholarship Program |
+| `ROTC` | ROTC Office (267th NROTCU) | 267th NROTC Scholarship |
+| `USG` | University Student Government | USG Student Financial Aid Grant |
+| `HERALDO` | Heraldo Filipino | Heraldo Filipino Scholarship (details to follow) |
+| `CICSSG`, `CBAASG`, `COEDSG`, `CCJESG`, `CEATSG`, `CTHMSG`, `COSSG` | College student governments | none yet: they create their own once their agreements are done |
+
+- Giving someone an office account: in Clerk set their publicMetadata to
+  `{ "role": "admin", "office": "SDO" }` (the code from the table). The
+  list lives in the backend's `data/offices.js` and the frontend's
+  `OFFICES` in src/data/scholarships.ts; keep them the same.
+- Athletic, Vicissitude, ROTC, USG and Heraldo were "info only" before;
+  they now take online applications (standard form) and **start closed**
+  (`defaultStatus` in data/scholarships.js) until their office opens them.
+- Any office can create scholarships for itself (Scholarships → New
+  scholarship; the office is fixed to theirs) and open renewal periods for
+  its own. The AdSO's Renewals list shows its own scholarships only.
+- Not in AniSkolar (granted without application): PD 577, Usaha Tega
+  Foundation, Kundirana, NBCMSEF, CCTI. Performing Arts Group declined.
+
+## Changes 2026-10-29
+- **Office requests removed** (portal tab, AdSO dialog, routes and the
+  `OfficeRequest` model). Heads use Messages.
+- **Renewal papers by semester** (`renewalDocuments` in
+  models/RenewalPeriod.js): 2nd semester = the TCG only; 1st semester = the
+  TCG plus the scholarship's application requirements, which the period
+  dialog sends (as the AdSO set them in the requirements matrix) and the
+  period stores in `requirements`.
+- **Partner offices own their scholarships**: the AdSO sees POLCA / Alumni
+  applications only once approved (`officeFilter`), read-only;
+  `partnerLock` (utils/officeScope.js) refuses the AdSO changing their
+  status, graduated / stopped, or office fields. Scholarships: each office
+  edits its own (`PATCH /api/scholarships/:id` checks the office; POLCA and
+  Alumni now have the Scholarships page for theirs, without announcements);
+  the AdSO sees theirs read-only.
+- **"Info only" is now "Through the [office]"**: scholarships without an
+  online application name the office students go to (`handledBy`; now only
+  the Academic Scholarship, awarded by ranking; created ones ask for it).
+- **Automation**: the morning summary and the start-of-semester office
+  assignment were removed (3 jobs left).
+- **Announcement filters**: students filter by scholarship; the admin list
+  filters by category and scholarship (not Facebook status).
+- Page and card descriptions were trimmed across the admin and office
+  portals.
+
 ## Panel feedback changes (2026-10-21)
 From the panel's review. Tested with a temporary end-to-end script (39
 checks) plus the older office, duty, messages, POLCA and Alumni scripts.
@@ -797,6 +854,20 @@ host such as Heroku adds about 1–2 s per page). The frontend's static files
 are on Vercel's CDN. Nothing is stored on the backend server itself
 (files go to Azure), so moving it to Azure App Service at handover only
 means copying the settings and changing `VITE_API_BASE_URL`.
+
+**Domain (2026-11-03): https://www.aniskolar.com.** Registered at
+Cloudflare (Registrar; expires 2027-11-03, turn on auto-renew), so DNS is
+on Cloudflare: two CNAME records, `@` and `www`, both to Vercel's target
+(`d2a24d3d6475782f.vercel-dns-017.com`), **DNS only (grey cloud)** so
+Vercel issues the HTTPS certificate. In Vercel, `aniskolar.com` redirects
+(308) to `www.aniskolar.com`; aniskolar.vercel.app still works. On Render:
+`APP_URL=https://www.aniskolar.com` and
+`FRONTEND_ORIGINS=https://www.aniskolar.com,https://aniskolar.com,https://aniskolar.vercel.app`
+(no spaces: the server splits on commas and refuses saves from any other
+origin). Still to do on this domain: Clerk production keys (Clerk gives
+CNAMEs to add in Cloudflare, grey cloud), an `api.aniskolar.com` for
+Render if wanted, and Azure email sender records if mail goes out as
+@aniskolar.com.
 
 Backend on Render (`render.yaml` in the backend repo is a Blueprint):
 1. render.com → New → **Blueprint** → connect the AniSkolar_Backend repo.

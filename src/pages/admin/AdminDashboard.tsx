@@ -53,7 +53,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   // until they graduate) has no Renewals page either.
   const officeHasRenewals = !adminOffice || mockScholarships.some(s => officeOf(s) === adminOffice && !s.noRenewal && acceptsOnlineApplications(s));
   // Partner offices (POLCA, Alumni) don't get Statistics either (panel, Oct 2026).
-  const hiddenViews: MainView[] = isAdso ? [] : ['analytics', 'announcements', 'scholarships', 'automation', 'fse', 'dutyHours', 'messages', ...(officeHasRenewals ? [] : ['renewals' as MainView])];
+  // Each office manages its own scholarships, so they keep Scholarships.
+  const hiddenViews: MainView[] = isAdso ? [] : ['analytics', 'announcements', 'automation', 'fse', 'dutyHours', 'messages', ...(officeHasRenewals ? [] : ['renewals' as MainView])];
 
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -264,7 +265,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   } else if (mainView === 'automation' && isAdso) {
     page = <AutomationPage getToken={getToken} />;
   } else if (mainView === 'renewals' && !hiddenViews.includes('renewals')) {
-    page = <RenewalsPage getToken={getToken} isAdso={isAdso} />;
+    page = <RenewalsPage getToken={getToken} isAdso={isAdso} ownOffice={adminOffice ?? 'LSO'} />;
   } else if (mainView === 'analytics' && isAdso) {
     page = (
       <AdminAnalytics
@@ -297,10 +298,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     );
   } else if (mainView === 'announcements' && isAdso) {
     page = <AdminAnnouncements />;
-  } else if (mainView === 'scholarships' && isAdso) {
+  } else if (mainView === 'scholarships') {
     page = (
       <ScholarshipsManager
-        ownOffice="LSO"
+        ownOffice={isAdso ? 'LSO' : (adminOffice as ScholarshipOffice)}
         selectedId={selectedScholarship}
         onSelect={id => (id ? setSelectedScholarship(id) : backToList())}
         onViewApplications={viewApplicationsFor}

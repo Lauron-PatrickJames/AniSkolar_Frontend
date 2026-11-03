@@ -3,8 +3,7 @@ import { useAuth } from '@clerk/react';
 import { CircleCheck, CircleOff, Clock, Info, LayoutList, ListChecks, Pencil, Plus, Save, Table2, Trash2 } from 'lucide-react';
 import { ApplicationFormType, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../../types';
 import {
-  OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, officeOf, registerCustomScholarships, scholarshipDefaults
-} from '../../data/scholarships';
+  OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, officeOf, registerCustomScholarships, scholarshipDefaults, handlingOffice } from '../../data/scholarships';
 import { EligibilityRules, lockedRules, ruleLines } from '../../data/requirementCatalog';
 import { DocumentsEditor, ListEditor, RulesEditor } from './RequirementEditors';
 import ScholarshipMatrix, { MatrixPatch } from './ScholarshipMatrix';
@@ -84,7 +83,7 @@ const isEdited = (overrides: ScholarshipOverride) =>
   Object.keys(overrides).some(k => !['id', 'updatedAt', 'updatedBy'].includes(k));
 
 function routingNote(office: ScholarshipOffice): string {
-  return `Reviewed by the ${OFFICE_LABELS[office]} first. Applications it approves are forwarded to the AdSO automatically.`;
+  return `Handled by the ${OFFICE_LABELS[office]}: they open and close it and decide its applications. The AdSO sees the approved scholars.`;
 }
 
 // The applications list's form labels name the scholarship ("Entrance
@@ -154,6 +153,7 @@ interface EditorState {
   applicationMode: 'online' | 'info';
   referenceCode: string;
   availNote: string;
+  handledBy: string;
 }
 
 const CATEGORIES: Scholarship['category'][] = ['Academic', 'Financial', 'Athletic', 'Leadership', 'Others'];
@@ -183,7 +183,8 @@ function editorFrom(s: Scholarship): EditorState {
     category: s.category,
     applicationMode: s.applicationMode ?? 'online',
     referenceCode: s.referenceCode ?? '',
-    availNote: s.availNote ?? ''
+    availNote: s.availNote ?? '',
+    handledBy: s.handledBy ?? ''
   };
 }
 
@@ -205,7 +206,8 @@ function sameEditor(a: EditorState, b: EditorState): boolean {
     && a.category === b.category
     && a.applicationMode === b.applicationMode
     && a.referenceCode.trim().toUpperCase() === b.referenceCode.trim().toUpperCase()
-    && a.availNote.trim() === b.availNote.trim();
+    && a.availNote.trim() === b.availNote.trim()
+    && a.handledBy.trim() === b.handledBy.trim();
 }
 
 // Builds the PATCH body. A value equal to the default in code is sent as
@@ -236,7 +238,8 @@ function toPayload(form: EditorState, defaults: Scholarship) {
       category: form.category,
       applicationMode: form.applicationMode,
       referenceCode: form.referenceCode.trim().toUpperCase(),
-      availNote: form.availNote.trim() || null
+      availNote: form.availNote.trim() || null,
+      handledBy: form.handledBy.trim() || null
     } : {})
   };
 }
@@ -425,7 +428,7 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
             applyOverrides(selected.defaults.id, overrides);
             setNotice({ tone: 'success', text: `Saved changes to ${selected.scholarship.name}.` });
             // A status change gets the announcement step.
-            if (updated.scholarship.status !== before) setStatusChange({ row: updated, next: updated.scholarship.status, mode: 'announce' });
+            if (updated.scholarship.status !== before && ownOffice === 'LSO') setStatusChange({ row: updated, next: updated.scholarship.status, mode: 'announce' });
             onSelect(null);
           }}
           onViewApplications={onViewApplications}
@@ -447,6 +450,13 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
   // --- List view -------------------------------------------------------------------
   const menuItems = (row: Row): DropdownMenuItem[] => {
     const s = row.scholarship;
+    // Another office's scholarship: view only.
+    if (officeOf(s) !== ownOffice) {
+      return [
+        { key: 'view', label: 'View details', icon: Pencil, onSelect: () => onSelect(s.id) },
+        ...(acceptsOnlineApplications(s) ? [{ key: 'applications', label: 'View approved scholars', icon: ListChecks, onSelect: () => onViewApplications(s.id) }] : []),
+      ];
+    }
     const items: DropdownMenuItem[] = [
       { key: 'edit', label: 'Edit', icon: Pencil, onSelect: () => onSelect(s.id) },
       s.status === 'Closed'
@@ -466,7 +476,6 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
     <div className="space-y-6">
       <PageHeader
         title="Scholarships"
-        description="Open or close scholarships and edit their eligibility and documents."
         actions={<Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>New scholarship</Button>}
       />
 
@@ -559,7 +568,7 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
                     <Td>
                       <div className={`min-w-0 ${dim}`}>
                         <RowLink onClick={() => onSelect(s.id)}>{s.name}</RowLink>
-                        {s.custom && <Badge className="ml-2">Added by AdSO</Badge>}
+                        {s.custom && <Badge className="ml-2">Added</Badge>}
                         {office !== ownOffice && (
                           <p className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-ink-subtle">
                             <span className="truncate">{OFFICE_LABELS[office]}</span>
@@ -588,7 +597,7 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
       </Card>
 
       {creating && (
-        <CreateScholarshipDialog getToken={getToken} onClose={() => setCreating(false)} onCreated={created} />
+        <CreateScholarshipDialog getToken={getToken} ownOffice={ownOffice} onClose={() => setCreating(false)} onCreated={created} />
       )}
 
       {statusChange && (
@@ -603,6 +612,7 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
           })}
           onDone={result => statusChanged(statusChange, result)}
           onCancel={() => setStatusChange(null)}
+          canAnnounce={ownOffice === 'LSO'}
         />
       )}
     </div>
@@ -613,7 +623,7 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
 // the tooltip and on the detail view.
 function ApplicationsCell({ row }: { row: Row }) {
   if (!acceptsOnlineApplications(row.scholarship)) {
-    return <span className="text-ink-subtle">Info only</span>;
+    return <span className="text-ink-subtle">Through the {handlingOffice(row.scholarship)}</span>;
   }
   const { total, byStatus } = row.applications;
   if (total === 0) {
@@ -673,6 +683,8 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
   const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setForm(f => ({ ...f, [key]: value }));
 
   const office = isCustom ? form.office : officeOf(s);
+  // Another office's scholarship: they manage it; shown read-only.
+  const readOnly = officeOf(s) !== ownOffice;
   const online = isCustom ? form.applicationMode === 'online' : acceptsOnlineApplications(s);
   const slotBased = !!row.defaults.documentSlots?.length;
   const locked = lockedRules(row.defaults.applicationFormType);
@@ -746,14 +758,15 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
         meta={
           <>
             <ScholarshipStatusBadge status={s.status} />
-            {!online && <Badge>Info only</Badge>}
-            {isCustom && <Badge>Added by AdSO</Badge>}
+            {!online && <Badge>Through the {handlingOffice(s)}</Badge>}
+            {isCustom && <Badge>Added</Badge>}
             <span className="text-xs text-ink-subtle">{editedLine}</span>
           </>
         }
       />
 
       {saveError && <Alert tone="danger" title="Couldn't save the scholarship">{saveError}</Alert>}
+      {readOnly && <Alert tone="info" title={`Managed by the ${OFFICE_LABELS[officeOf(s)]}`}>Only they can open, close or edit it.</Alert>}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
         {/* scroll-margin keeps a focused field clear of the sticky save bar */}
@@ -763,14 +776,15 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
           onSubmit={submit}
           noValidate
         >
+          <fieldset disabled={readOnly} className="min-w-0 space-y-6">
           {isCustom && (
-            <Card title="Details" description="Set when the scholarship was added. Students see the name and category.">
+            <Card title="Details">
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Field label="Name" error={shown.name} className="sm:col-span-2">
                   <TextInput value={form.name} onChange={e => set('name', e.target.value)} maxLength={150} disabled={isSaving} />
                 </Field>
-                <Field label="Reviewed by">
-                  <Select value={form.office} onChange={v => set('office', v as ScholarshipOffice)} disabled={isSaving}>
+                <Field label="Handled by">
+                  <Select value={form.office} onChange={v => set('office', v as ScholarshipOffice)} disabled={isSaving || ownOffice !== 'LSO'}>
                     {(Object.keys(OFFICE_LABELS) as ScholarshipOffice[]).map(o => <option key={o} value={o}>{OFFICE_LABELS[o]}</option>)}
                   </Select>
                 </Field>
@@ -785,9 +799,14 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
                     value={form.applicationMode}
                     onChange={v => v && set('applicationMode', v)}
                     label="How students get it"
-                    renderLabel={o => (o === 'online' ? 'Online application' : 'Info only')}
+                    renderLabel={o => (o === 'online' ? 'Online application' : 'Through another office')}
                   />
                 </Field>
+                {form.applicationMode === 'info' && (
+                  <Field label="Office students go to" className="sm:col-span-2">
+                    <TextInput value={form.handledBy} onChange={e => set('handledBy', e.target.value)} maxLength={150} disabled={isSaving} placeholder="e.g. Sports Development Office (SDO)" />
+                  </Field>
+                )}
                 {form.applicationMode === 'info' && (
                   <Field label="How it's awarded" optional className="sm:col-span-2">
                     <TextInput value={form.availNote} onChange={e => set('availNote', e.target.value)} maxLength={500} disabled={isSaving} placeholder="e.g. Nominated by the department chair each semester." />
@@ -800,7 +819,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
             </Card>
           )}
 
-          <Card title="Basic info" description="What students read on the scholarship's card and details page.">
+          <Card title="Basic info">
             <div className="space-y-5">
               <Field label="Status" helper="Closed scholarships are hidden from students' Explore list and can't be applied to.">
                 <SegmentedControl<ScholarshipStatus>
@@ -824,7 +843,6 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
 
           <Card
             title="Eligibility"
-            description="Tick what applies. Students read the lines shown; rules marked “Checked against profile” warn a student whose profile doesn't fit."
           >
             <div className="space-y-5">
               <RulesEditor rules={form.rules} onChange={v => set('rules', v)} locked={locked} disabled={isSaving} />
@@ -838,7 +856,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
             title="Documents"
             description={slotBased
               ? `Set by the ${s.name} application form.`
-              : online ? 'Tick the documents students upload. Each one becomes an upload slot on the application form.' : 'Info-only scholarships have no online application, so nothing is uploaded.'}
+              : online ? 'Tick the documents students upload. Each one becomes an upload slot on the application form.' : 'Students apply through another office, so nothing is uploaded here.'}
           >
             <div className="space-y-5">
               {slotBased ? (
@@ -883,6 +901,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
               )}
             </div>
           </Card>
+          </fieldset>
         </form>
 
         <aside className="space-y-6">
@@ -943,7 +962,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
         </aside>
       </div>
 
-      <div className="sticky bottom-4 z-20 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card bg-surface/95 px-4 py-3 shadow-overlay ring-1 ring-line backdrop-blur">
+      <div className={`sticky bottom-4 z-20 ${readOnly ? 'hidden' : 'flex'} flex-wrap items-center gap-x-3 gap-y-2 rounded-card bg-surface/95 px-4 py-3 shadow-overlay ring-1 ring-line backdrop-blur`}>
         <p
           className={`mr-auto text-sm ${showFooterError ? 'w-full text-danger-fg sm:w-auto' : 'hidden text-ink-muted sm:block'}`}
           aria-live="polite"
@@ -999,13 +1018,15 @@ function suggestCode(name: string): string {
   return letters.length >= 2 ? letters.slice(0, 8) : name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase();
 }
 
-function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
+function CreateScholarshipDialog({ getToken, onClose, onCreated, ownOffice }: {
   getToken: () => Promise<string | null>;
+  // An office creates for itself; only the AdSO picks the office.
+  ownOffice: ScholarshipOffice;
   onClose: () => void;
   onCreated: (overrides: ScholarshipOverride) => void;
 }) {
   const [name, setName] = useState('');
-  const [office, setOffice] = useState<ScholarshipOffice>('LSO');
+  const [office, setOffice] = useState<ScholarshipOffice>(ownOffice);
   const [category, setCategory] = useState<Scholarship['category']>('Others');
   const [mode, setMode] = useState<'online' | 'info'>('online');
   const [code, setCode] = useState('');
@@ -1014,6 +1035,7 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
   const [benefits, setBenefits] = useState('');
   const [deadline, setDeadline] = useState('');
   const [availNote, setAvailNote] = useState('');
+  const [handledBy, setHandledBy] = useState('');
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
@@ -1029,6 +1051,7 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
     if (!benefitList.length) e.benefits = 'List at least one benefit.';
     if (mode === 'online' && !deadline.trim()) e.deadline = 'Enter when applications are accepted.';
     if (mode === 'info' && !availNote.trim()) e.availNote = 'Tell students how to get it outside AniSkolar.';
+    if (mode === 'info' && !handledBy.trim()) e.handledBy = 'Name the office students go to.';
     setErrors(e);
     if (Object.keys(e).length) return;
     setBusy(true);
@@ -1040,7 +1063,7 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
         body: JSON.stringify({
           name: name.trim(), office, category, applicationMode: mode, referenceCode: shownCode,
           description: description.trim(), benefits: benefitList, deadline: deadline.trim() || undefined,
-          ...(mode === 'info' ? { availNote: availNote.trim() } : {}),
+          ...(mode === 'info' ? { availNote: availNote.trim(), handledBy: handledBy.trim() } : {}),
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -1064,7 +1087,6 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
       size="lg"
       sheet
       title="New scholarship"
-      description="It starts closed. After this you'll pick its eligibility rules and documents, then open it."
       onClose={onClose}
       dismissible={!busy}
       footer={
@@ -1081,8 +1103,8 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
         <Field label="Name" error={errors.name} className="sm:col-span-2">
           <TextInput value={name} onChange={ev => setName(ev.target.value)} maxLength={150} placeholder="e.g. Computer Studies Grant" autoFocus disabled={busy} />
         </Field>
-        <Field label="Reviewed by">
-          <Select value={office} onChange={v => setOffice(v as ScholarshipOffice)} disabled={busy}>
+        <Field label="Handled by">
+          <Select value={office} onChange={v => setOffice(v as ScholarshipOffice)} disabled={busy || ownOffice !== 'LSO'}>
             {(Object.keys(OFFICE_LABELS) as ScholarshipOffice[]).map(o => <option key={o} value={o}>{OFFICE_LABELS[o]}</option>)}
           </Select>
         </Field>
@@ -1097,7 +1119,7 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
             value={mode}
             onChange={v => v && setMode(v)}
             label="How students get it"
-            renderLabel={o => (o === 'online' ? 'Online application' : 'Info only')}
+            renderLabel={o => (o === 'online' ? 'Online application' : 'Through another office')}
           />
         </Field>
         <Field label="Reference code" error={errors.code} helper={!errors.code ? `Application numbers start with it: ${shownCode || 'CODE'}-2026-0001.` : undefined}>
@@ -1120,9 +1142,14 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated }: {
           <TextInput value={deadline} onChange={ev => setDeadline(ev.target.value)} maxLength={200} disabled={busy} placeholder="e.g. June 16 – July 3, 2027" />
         </Field>
         {mode === 'info' && (
-          <Field label="How to get it" error={errors.availNote} className="sm:col-span-2" helper={!errors.availNote ? 'Where and how students apply outside AniSkolar.' : undefined}>
+          <>
+          <Field label="Office students go to" error={errors.handledBy} className="sm:col-span-2">
+            <TextInput value={handledBy} onChange={ev => setHandledBy(ev.target.value)} maxLength={150} disabled={busy} placeholder="e.g. Sports Development Office (SDO)" />
+          </Field>
+          <Field label="How to get it" error={errors.availNote} className="sm:col-span-2">
             <Textarea value={availNote} onChange={ev => setAvailNote(ev.target.value)} rows={2} maxLength={500} disabled={busy} placeholder="e.g. Apply at the Sports Development Office, 2nd floor, during tryouts." className="resize-y" />
           </Field>
+          </>
         )}
       </form>
     </Modal>

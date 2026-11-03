@@ -295,7 +295,6 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
   return (
     <Modal
       title={isEdit ? 'Edit announcement' : 'New announcement'}
-      description="Published announcements appear on every student's dashboard."
       onClose={onClose}
       dismissible={!isSaving}
       initialFocusRef={refs.title}
@@ -489,7 +488,9 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
 
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<ListTab>('all');
-  const [facebookFilter, setFacebookFilter] = useState<FbStatus | 'All'>('All');
+  const [categoryFilter, setCategoryFilter] = useState<string>('All');
+  // 'All', 'none' (not about a scholarship) or a scholarship id.
+  const [scholarshipFilter, setScholarshipFilter] = useState<string>('All');
 
   const [editorState, setEditorState] = useState<EditorState | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -577,12 +578,14 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
         if (tab === 'draft' && a.status !== 'draft') return false;
         if (tab === 'scheduled' && a.status !== 'scheduled') return false;
         if (tab === 'pinned' && !a.isPinned) return false;
-        if (facebookFilter !== 'All' && a.fbStatus !== facebookFilter) return false;
+        if (categoryFilter !== 'All' && a.category !== categoryFilter) return false;
+        if (scholarshipFilter === 'none' && a.scholarshipId) return false;
+        if (scholarshipFilter !== 'All' && scholarshipFilter !== 'none' && a.scholarshipId !== scholarshipFilter) return false;
         if (q && !a.title.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) return false;
         return true;
       })
       .sort((a, b) => Number(b.isPinned) - Number(a.isPinned));
-  }, [announcements, search, tab, facebookFilter]);
+  }, [announcements, search, tab, categoryFilter, scholarshipFilter]);
 
   const openCreate = () => { setSaveError(''); setEditorState({ ...BLANK_FORM, schedule: initialSchedule() }); };
   const openEdit = (a: AdminAnnouncement) => {
@@ -734,7 +737,8 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
     }
   };
 
-  const listFiltersActive = search.trim() !== '' || facebookFilter !== 'All';
+  const listFiltersActive = search.trim() !== '' || categoryFilter !== 'All' || scholarshipFilter !== 'All';
+  const usedScholarships = [...new Set(announcements.map(a => a.scholarshipId).filter((id): id is string => !!id))];
   const hasData = announcements.length > 0;
   const firstLoad = isLoading && !hasData;
   const failedEmpty = !!loadError && !hasData && !isLoading;
@@ -745,7 +749,6 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
     <div id={id} className="space-y-6">
       <PageHeader
         title="Announcements"
-        description="Post updates to the student dashboard and the Facebook Page."
         actions={newButton}
       />
 
@@ -777,11 +780,14 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
             />
             <Toolbar>
               <SearchInput value={search} onChange={setSearch} label="Search announcements" placeholder="Search title or summary…" className="flex-1" />
-              <Select value={facebookFilter} onChange={v => setFacebookFilter(v as FbStatus | 'All')} className="md:w-56" label="Filter by Facebook status">
-                <option value="All">Any Facebook status</option>
-                <option value="posted">Posted to Facebook</option>
-                <option value="not_posted">Not on Facebook</option>
-                <option value="failed">Facebook failed</option>
+              <Select value={categoryFilter} onChange={setCategoryFilter} className="md:w-44" label="Filter by category">
+                <option value="All">All categories</option>
+                {['General', 'Update', 'Deadline', 'Event'].map(c => <option key={c} value={c}>{c}</option>)}
+              </Select>
+              <Select value={scholarshipFilter} onChange={setScholarshipFilter} className="md:w-60" label="Filter by scholarship">
+                <option value="All">All scholarships</option>
+                <option value="none">Not about a scholarship</option>
+                {usedScholarships.map(id => <option key={id} value={id}>{scholarshipName(id) ?? id}</option>)}
               </Select>
             </Toolbar>
           </>
@@ -796,8 +802,8 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
             <EmptyState
               icon={Megaphone}
               title="No announcements match"
-              description="Try a different search or Facebook status."
-              action={<Button onClick={() => { setSearch(''); setFacebookFilter('All'); }}>Clear filters</Button>}
+              description="Try a different search or filter."
+              action={<Button onClick={() => { setSearch(''); setCategoryFilter('All'); setScholarshipFilter('All'); }}>Clear filters</Button>}
             />
           ) : (
             <EmptyState icon={tab === 'pinned' ? Pin : Megaphone} title={EMPTY_TABS[tab].title} description={EMPTY_TABS[tab].description} action={newButton} />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Download, Lock } from 'lucide-react';
 import { Scholarship } from '../../types';
-import { acceptsOnlineApplications } from '../../data/scholarships';
+import { acceptsOnlineApplications, handlingOffice } from '../../data/scholarships';
 import {
   APPLICANT_TYPE_SHORT, ApplicantType, DOCUMENTS, EligibilityRules, RULES, RuleDef, TICKABLE_DOCUMENTS, documentDef, hasDocument,
   lockedRules, ruleCell
@@ -146,7 +146,7 @@ export default function ScholarshipMatrix({ scholarships, onPatch, onOpen, readO
                   <button type="button" onClick={() => onOpen(s.id)} title={s.name} className="line-clamp-3 text-left text-ink hover:text-accent">
                     {s.name}
                   </button>
-                  {!acceptsOnlineApplications(s) && <span className="mt-0.5 block font-normal text-ink-subtle">Info only</span>}
+                  {!acceptsOnlineApplications(s) && <span className="mt-0.5 block font-normal text-ink-subtle">Through the {handlingOffice(s)}</span>}
                 </th>
               ))}
             </tr>

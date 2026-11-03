@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BadgeCheck, CalendarClock, CheckCircle2, ChevronDown, CircleAlert, CircleDashed, ClipboardCheck, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, XCircle
 } from 'lucide-react';
-import { mockScholarships, acceptsOnlineApplications } from '../../data/scholarships';
+import { mockScholarships, acceptsOnlineApplications, applyScholarshipOverrides } from '../../data/scholarships';
 import { retentionMinGpa } from '../../utils/eligibility';
 import {
   DEFAULT_RENEWAL_REQUIREMENTS, EVALUATION_ITEMS, PASSING_AVERAGE, RATING_LABELS, RENEWAL_DECISIONS, RENEWAL_TERMS, Renewal,
@@ -100,9 +100,12 @@ const rowState = (row: ScholarRow): RowState => row.renewal?.status ?? 'Not subm
 
 // Read at render, so scholarships the AdSO created are included.
 // POLCA has no renewals: its scholars keep it until they graduate.
-const renewableScholarships = () => mockScholarships.filter(s => acceptsOnlineApplications(s) && !s.noRenewal);
+// The signed-in office's scholarships that renew (each office runs its own).
+let renewalOffice = 'LSO';
+const renewableScholarships = () => mockScholarships.filter(s => acceptsOnlineApplications(s) && !s.noRenewal && (s.office ?? 'LSO') === renewalOffice);
 
-export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Promise<string | null>; isAdso: boolean }) {
+export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { getToken: () => Promise<string | null>; isAdso: boolean; ownOffice?: string }) {
+  renewalOffice = ownOffice;
   const [periods, setPeriods] = useState<RenewalPeriod[]>([]);
   const [periodsLoading, setPeriodsLoading] = useState(true);
   const [periodsError, setPeriodsError] = useState('');
@@ -267,7 +270,6 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
     <div className="space-y-6">
       <PageHeader
         title="Renewals"
-        description="Scholars renew each semester: they submit their grades, the office checks them and the department head's evaluation, then decides."
         actions={
           <>
             {period && (
@@ -283,19 +285,17 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
                       downloadZip(`renewal-period/${period._id}`, getToken).catch(err => setActionError(err instanceof Error ? err.message : "Couldn't prepare the download."));
                     },
                   },
-                  ...(isAdso ? [
-                    { key: 'edit', label: 'Edit period', icon: Pencil, onSelect: () => setEditingPeriod(period) },
-                    period.open
-                      ? { key: 'close', label: 'Close period', icon: Lock, onSelect: () => setOpen(false) }
-                      : { key: 'open', label: 'Reopen period', icon: LockOpen, onSelect: () => setOpen(true) },
-                    ...(period.open && period.requiresEvaluation
-                      ? [{ key: 'notify', label: 'Email office heads to evaluate', icon: Mail, onSelect: notifyOfficeHeads }]
-                      : []),
-                  ] : []),
+                  { key: 'edit', label: 'Edit period', icon: Pencil, onSelect: () => setEditingPeriod(period) },
+                  period.open
+                    ? { key: 'close', label: 'Close period', icon: Lock, onSelect: () => setOpen(false) }
+                    : { key: 'open', label: 'Reopen period', icon: LockOpen, onSelect: () => setOpen(true) },
+                  ...(isAdso && period.open && period.requiresEvaluation
+                    ? [{ key: 'notify', label: 'Email office heads to evaluate', icon: Mail, onSelect: notifyOfficeHeads }]
+                    : []),
                 ]}
               />
             )}
-            {isAdso && <Button variant="primary" icon={Plus} onClick={() => setEditingPeriod('new')}>Open renewal period</Button>}
+            <Button variant="primary" icon={Plus} onClick={() => setEditingPeriod('new')}>Open renewal period</Button>
           </>
         }
       />
@@ -311,10 +311,8 @@ export default function RenewalsPage({ getToken, isAdso }: { getToken: () => Pro
           <EmptyState
             icon={RefreshCw}
             title="No renewal periods yet"
-            description={isAdso
-              ? 'Open a renewal period for a scholarship and term. Scholars who hold it can then submit their grades.'
-              : 'The AdSO opens renewal periods. They will appear here for your office’s scholarships.'}
-            action={isAdso ? <Button variant="primary" icon={Plus} onClick={() => setEditingPeriod('new')}>Open renewal period</Button> : undefined}
+            description="Open a renewal period for a scholarship and term. Scholars who hold it can then submit."
+            action={<Button variant="primary" icon={Plus} onClick={() => setEditingPeriod('new')}>Open renewal period</Button>}
           />
         </Card>
       ) : (
@@ -548,6 +546,25 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
   const [open, setOpenState] = useState(period?.open ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // 1st semester: the scholarship's application requirements (as the AdSO
+  // set them) are asked again with the grades.
+  const [appDocs, setAppDocs] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/scholarships`);
+        const body = await res.json().catch(() => ({}));
+        const merged = applyScholarshipOverrides(mockScholarships, body.scholarships ?? []);
+        if (!cancelled) setAppDocs(merged.find(s => s.id === scholarshipId)?.requirements ?? []);
+      } catch {
+        if (!cancelled) setAppDocs(mockScholarships.find(s => s.id === scholarshipId)?.requirements ?? []);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [scholarshipId]);
+  const firstSem = term === '1st Semester';
+  const docs = firstSem ? [...new Set([DEFAULT_RENEWAL_REQUIREMENTS[0], ...appDocs])] : [DEFAULT_RENEWAL_REQUIREMENTS[0]];
 
   // Suggestions for a new period: the SFAG's renewal uses the head
   // evaluation, and the scholarship's own retention GPA (e.g. 2.50).
@@ -571,6 +588,7 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
         ...(isNew ? { scholarshipId, academicYear: Number(academicYear), term } : {}),
         deadline, notes, open, requiresEvaluation,
         minGpa: min === '' ? null : Number(min),
+        requirements: firstSem ? appDocs : [],
       };
       const res = await fetch(`${API_BASE_URL}/api/renewals/admin/periods${isNew ? '' : `/${period!._id}`}`, {
         method: isNew ? 'POST' : 'PATCH', headers: await authHeaders(getToken, true), body: JSON.stringify(body),
@@ -624,8 +642,8 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
             <TextInput type="number" inputMode="decimal" step="0.01" min={0} max={4} value={minGpa} onChange={e => setMinGpa(e.target.value)} placeholder="e.g. 2.50" disabled={saving} />
           </Field>
         </div>
-        <Alert tone="info" title="Scholars submit their grades only">
-          Their GPA for last semester, whether they had a failing grade, and a JPG of their {DEFAULT_RENEWAL_REQUIREMENTS[0]}.
+        <Alert tone="info" title={firstSem ? 'Grades and the application papers' : 'Grades only'}>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">{docs.map(d => <li key={d}>{d}</li>)}</ul>
         </Alert>
         <Field label="Note to scholars" optional>
           <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} disabled={saving} maxLength={1000} placeholder="e.g. Upload your TCG from the Online Student Records Portal." />

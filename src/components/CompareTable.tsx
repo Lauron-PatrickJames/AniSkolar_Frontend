@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowRight, Check, CheckCircle2, Info, Minus, Plus, RotateCcw, X } from 'lucide-react';
 import { Scholarship, StudentProfile } from '../types';
-import { acceptsOnlineApplications } from '../data/scholarships';
+import { acceptsOnlineApplications, handlingOffice, OFFICE_LABELS } from '../data/scholarships';
 import {
   APPLICANT_TYPE_LABELS, EligibilityRules, RULES, RuleDef, RuleKey, documentRows, hasDocument
 } from '../data/requirementCatalog';
@@ -13,7 +13,7 @@ import { isContinuingStudent, toGpaNumber } from '../utils/eligibility';
 // and the documents to upload. Built from the same shared list as the
 // AdSO's requirements matrix.
 
-const OFFICE_NAMES: Record<string, string> = { LSO: 'AdSO', POLCA: 'POLCA Office', ALUMNI: 'Alumni Office' };
+const OFFICE_NAMES: Record<string, string> = { ...OFFICE_LABELS, LSO: 'AdSO' };
 
 const MAX = 4;
 
@@ -171,7 +171,7 @@ export default function CompareTable({ scholarships, student, onViewDetails }: {
                                 <span className={`rounded-full px-2 py-0.5 font-bold ${s.status === 'Closed' ? 'bg-slate-100 text-slate-500' : 'bg-emerald-50 text-emerald-700'}`}>{s.status}</span>
                                 <span className="text-slate-500">{docs} {docs === 1 ? 'document' : 'documents'}</span>
                               </>
-                            ) : <span className="rounded-full bg-slate-100 px-2 py-0.5 font-bold text-slate-500">Info only</span>}
+                            ) : <span className="rounded-full bg-slate-100 px-2 py-0.5 font-bold text-slate-500">Through the {handlingOffice(s)}</span>}
                           </p>
                           <button type="button" onClick={() => onViewDetails(s.id)} className="mt-3 inline-flex items-center justify-center gap-1 self-start rounded-lg bg-brand-green px-3 py-1.5 text-[11px] font-bold text-white hover:bg-brand-green-dark">
                             View details <ArrowRight className="w-3 h-3" aria-hidden />

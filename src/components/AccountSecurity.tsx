@@ -92,7 +92,13 @@ function TwoStepCard() {
   const run = async (fn: () => Promise<void>, fallback: string) => {
     setBusy(true);
     setError('');
-    try { await fn(); } catch (err) { setError(errorText(err, fallback)); } finally { setBusy(false); }
+    try { await fn(); } catch (err) {
+      const text = errorText(err, fallback);
+      // Clerk's wording when authenticator apps are off for the app.
+      setError(/not enabled on this instance/i.test(text)
+        ? 'Two-step verification isn’t turned on for AniSkolar yet. Ask the system administrator to turn on authenticator apps in Clerk (Configure → Multi-factor).'
+        : text);
+    } finally { setBusy(false); }
   };
   const start = () => run(async () => {
     const totp = await user.createTOTP();

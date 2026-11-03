@@ -48,7 +48,10 @@ export interface StandardInfo {
   studentNumber: string;
   program: string;
   yearLevel: string;
+  // Not asked by some offices (the SDO).
   gpa: string;
+  // The office's own questions (data/officeForms.ts).
+  officeAnswers?: Record<string, string | number | boolean | undefined>;
 }
 
 export interface SfagPersonalInfo {
@@ -136,6 +139,8 @@ export interface AdminApplication {
   eligibilityAnswers?: Record<string, unknown>;
   evaluationSheet?: Record<string, unknown>;
   adminFields?: PolcaAdminFields;
+  // What the deciding office recorded (data/officeForms.ts).
+  officeAssessment?: Record<string, string | number | boolean | undefined> & { updatedBy?: string; updatedAt?: string };
   // SFAG only: the tuition discount granted (100 / 75 / 50 / 25), set by
   // the AdSO once approved; it decides the scholar's duty hours.
   sfagPercentage?: number | null;

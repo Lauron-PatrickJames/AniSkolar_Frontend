@@ -5,6 +5,7 @@ import {
   todayInManila, weekday, weeklyTotals
 } from '../../utils/dutyHours';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
+import AttendanceDialog, { AttendanceEvent, printAttendanceSheet } from './EventAttendance';
 import { ResultDialog,
   Alert, Avatar, Badge, Button, Card, DatePicker, DetailField, EmptyState, ErrorState, Field, KpiCard, KpiGrid, MobileList, Modal, PageHeader,
   SearchInput, SegmentedControl, Select, Table, TableSkeleton, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
@@ -693,10 +694,12 @@ function RandomAssignDialog({ rows, term, offices, officeCounts, getToken, onClo
 
 // Credited events (AdSO, Oct 2026): events set up by the scholarship
 // office or COSA that the office credits for duty hours — the credit is the
-// office's call, not the event's length. Scholars claim the ones they
-// attended; their hours count once a claim is approved here.
+// office's call, not the event's length. The AdSO prints each event's
+// attendance sheet, scholars sign it there, and the AdSO uploads it and
+// ticks who attended (EventAttendance.tsx). Claims scholars made before
+// the sheets can still be reviewed here.
 
-interface AdminEvent extends CreditedEvent { claims: Record<ClaimStatus, number> }
+interface AdminEvent extends AttendanceEvent { claims: Record<ClaimStatus, number> }
 interface PendingClaim { studentNumber: string; name: string; eventId: string; claimedAt: string; event: CreditedEvent }
 interface EventDraft { id: string | null; name: string; date: string; organizer: EventOrganizer; creditHours: string }
 const emptyDraft = (): EventDraft => ({ id: null, name: '', date: todayInManila(), organizer: 'Scholarship office', creditHours: '3' });
@@ -714,6 +717,7 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
   const [draft, setDraft] = useState<EventDraft>(emptyDraft);
   const [rejecting, setRejecting] = useState<{ key: string; note: string } | null>(null);
   const [changed, setChanged] = useState(false);
+  const [attendanceFor, setAttendanceFor] = useState<AdminEvent | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -766,7 +770,7 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
     <Modal
       size="lg"
       title="Events"
-      description={`${termLabel(term)} · Events credited as duty hours, set up by the scholarship office or COSA. Scholars claim the ones they attended; approve each claim before its hours count.`}
+      description={`${termLabel(term)} · Events credited as duty hours. Print each event’s attendance sheet for scholars to sign, then upload it and tick who attended.`}
       onClose={close}
       dismissible={!busy}
       footer={<Button onClick={close} disabled={!!busy}>Done</Button>}
@@ -774,9 +778,9 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
       {error && <Alert tone="danger">{error}</Alert>}
       {!events ? (!error && <TableSkeleton rows={4} label="Loading events" />) : (
         <div className="space-y-6">
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-ink">Waiting for approval ({pending.length})</h3>
-            {pending.length === 0 ? <p className="text-sm text-ink-muted">No claims to review.</p> : (
+          {pending.length > 0 && <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-ink">Claims from before the attendance sheets ({pending.length})</h3>
+            {(
               <ul className="divide-y divide-line rounded-control ring-1 ring-line">
                 {pending.map(c => {
                   const key = `${c.studentNumber}|${c.eventId}`;
@@ -808,13 +812,13 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
                 })}
               </ul>
             )}
-          </section>
+          </section>}
 
           <section className="space-y-2">
             <h3 className="text-sm font-semibold text-ink">{draft.id ? 'Edit event' : 'Add an event'}</h3>
             <form onSubmit={saveDraft} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_9rem_11rem_6rem]">
               <Field label="Event name"><TextInput value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} maxLength={200} placeholder="e.g. Scholars' Assembly" /></Field>
-              <Field label="Date"><TextInput type="date" value={draft.date} onChange={e => setDraft(d => ({ ...d, date: e.target.value }))} /></Field>
+              <Field label="Date"><DatePicker value={draft.date} onChange={v => setDraft(d => ({ ...d, date: v }))} /></Field>
               <Field label="Organized by">
                 <Select value={draft.organizer} onChange={v => setDraft(d => ({ ...d, organizer: v as EventOrganizer }))}>
                   {EVENT_ORGANIZERS.map(o => <option key={o} value={o}>{o}</option>)}
@@ -839,12 +843,15 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
                       <p className="text-sm font-medium text-ink">{ev.name}</p>
                       <p className="text-xs text-ink-muted">
                         {weekday(ev.date)}, {formatDutyDate(ev.date, true)} · {ev.organizer} · {formatHours(ev.creditHours)} hours
-                        {' · '}{ev.claims.Approved} credited{ev.claims.Pending ? `, ${ev.claims.Pending} waiting` : ''}{ev.claims.Rejected ? `, ${ev.claims.Rejected} rejected` : ''}
+                        {' · '}{ev.claims.Approved} credited{ev.claims.Pending ? `, ${ev.claims.Pending} waiting` : ''}
+                        {' · '}{ev.sheets.length ? `${ev.sheets.length} sheet${ev.sheets.length === 1 ? '' : 's'} uploaded` : 'no sheet yet'}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => { if (!printAttendanceSheet(ev)) setError('Allow pop-ups for AniSkolar to print the sheet.'); }} disabled={!!busy}>Print sheet</Button>
+                      <Button size="sm" onClick={() => setAttendanceFor(ev)} disabled={!!busy}>{ev.date > todayInManila() ? 'Attendance' : ev.attendanceSavedAt ? 'Edit attendance' : 'Check attendance'}</Button>
                       <Button size="sm" variant="ghost" onClick={() => setDraft({ id: ev._id, name: ev.name, date: ev.date, organizer: ev.organizer, creditHours: String(ev.creditHours) })} disabled={!!busy}>Edit</Button>
-                      <Button size="sm" variant="ghost" onClick={() => { if (window.confirm(`Delete "${ev.name}"? Claims waiting for review are removed too.`)) call(`del-${ev._id}`, `events/${ev._id}`, 'DELETE'); }} loading={busy === `del-${ev._id}`} disabled={!!busy && busy !== `del-${ev._id}`}>Delete</Button>
+                      <Button size="sm" variant="ghost" onClick={() => { if (window.confirm(`Delete "${ev.name}" and its uploaded sheets?`)) call(`del-${ev._id}`, `events/${ev._id}`, 'DELETE'); }} loading={busy === `del-${ev._id}`} disabled={!!busy && busy !== `del-${ev._id}`}>Delete</Button>
                     </div>
                   </li>
                 ))}
@@ -852,6 +859,15 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
             )}
           </section>
         </div>
+      )}
+      {attendanceFor && (
+        <AttendanceDialog
+          event={attendanceFor}
+          term={term}
+          getToken={getToken}
+          onClose={() => setAttendanceFor(null)}
+          onChanged={() => { setChanged(true); load(); }}
+        />
       )}
     </Modal>
   );

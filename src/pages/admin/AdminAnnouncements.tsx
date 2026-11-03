@@ -5,7 +5,8 @@ import {
   Plus, RotateCw, Send, Trash2, X
 } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatShortDate } from './adminData';
-import { mockScholarships } from '../../data/scholarships';
+import { mockScholarships, officeOf } from '../../data/scholarships';
+import { ScholarshipOffice } from '../../types';
 import EmailAudience, { DEFAULT_EMAIL_TARGET, EmailTarget, describeTarget } from './EmailAudience';
 import {
   Alert, Badge, Button, Card, Checkbox, ConfirmDialog, DropdownMenu, EmptyState, ErrorState, Field, IconButton, Modal,
@@ -194,8 +195,9 @@ function PreviewImages({ images }: { images: string[] }) {
   );
 }
 
-function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToken }: {
+function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToken, ownOffice }: {
   initial: EditorState;
+  ownOffice: ScholarshipOffice;
   getToken: () => Promise<string | null>;
   onClose: () => void;
   onSave: (form: EditorState, images: ImageItem[], publish: boolean) => void;
@@ -203,6 +205,9 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
   error: string;
 }) {
   const [form, setForm] = useState<EditorState>(initial);
+  // Other offices post about their own scholarships, in AniSkolar only.
+  const isAdso = ownOffice === 'LSO';
+  const scholarshipOptions = isAdso ? mockScholarships : mockScholarships.filter(s => officeOf(s) === ownOffice);
   const [images, setImages] = useState<ImageItem[]>(() =>
     initial.existingImages.map(img => ({ key: img.id, existingId: img.id, src: imageSrc(img.url) }))
   );
@@ -412,7 +417,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
           <Field label="Related scholarship" optional helper="The announcement also shows on that scholarship's page, e.g. varsity tryout dates on the Athletic Scholarship.">
             <Select value={form.scholarshipId} onChange={v => set('scholarshipId', v)} disabled={isSaving}>
               <option value="">None</option>
-              {mockScholarships.map(sch => <option key={sch.id} value={sch.id}>{sch.name}</option>)}
+              {scholarshipOptions.map(sch => <option key={sch.id} value={sch.id}>{sch.name}</option>)}
             </Select>
           </Field>
         </div>
@@ -435,20 +440,23 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
                 relatedScholarshipId={form.scholarshipId}
                 getToken={getToken}
                 disabled={isSaving}
+                onlyScholarshipIds={isAdso ? undefined : scholarshipOptions.map(s => s.id)}
               />
             )}
             {form.emailLocked && <p className="text-xs text-ink-muted">Sent to: {describeTarget(form.emailTarget)}</p>}
           </div>
-          <div className="rounded-control bg-surface-muted p-4 ring-1 ring-inset ring-line">
-            <Checkbox
-              checked={form.fbEnabled}
-              onChange={v => set('fbEnabled', v)}
-              disabled={isSaving}
-              label="Also post to Facebook"
-              description={fbHelp}
-            />
-          </div>
-          {form.fbEnabled && (
+          {isAdso && (
+            <div className="rounded-control bg-surface-muted p-4 ring-1 ring-inset ring-line">
+              <Checkbox
+                checked={form.fbEnabled}
+                onChange={v => set('fbEnabled', v)}
+                disabled={isSaving}
+                label="Also post to Facebook"
+                description={fbHelp}
+              />
+            </div>
+          )}
+          {isAdso && form.fbEnabled && (
             <>
               <p className="text-xs font-medium text-ink-muted">Preview on Facebook</p>
               <FacebookPreview title={form.title} content={form.content} images={images.map(img => img.src)} />
@@ -475,7 +483,7 @@ const EMPTY_TABS: Record<ListTab, { title: string; description: string }> = {
 // Refetch when the admin comes back to the tab, at most this often.
 const REFETCH_AFTER_MS = 30_000;
 
-export default function AdminAnnouncements({ id }: { id?: string }) {
+export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: string; ownOffice?: ScholarshipOffice }) {
   const { getToken } = useAuth();
 
   const [announcements, setAnnouncements] = useState<AdminAnnouncement[]>([]);
@@ -587,7 +595,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
       .sort((a, b) => Number(b.isPinned) - Number(a.isPinned));
   }, [announcements, search, tab, categoryFilter, scholarshipFilter]);
 
-  const openCreate = () => { setSaveError(''); setEditorState({ ...BLANK_FORM, schedule: initialSchedule() }); };
+  const openCreate = () => { setSaveError(''); setEditorState({ ...BLANK_FORM, fbEnabled: ownOffice === 'LSO', schedule: initialSchedule() }); };
   const openEdit = (a: AdminAnnouncement) => {
     setSaveError('');
     setEditorState({
@@ -836,6 +844,7 @@ export default function AdminAnnouncements({ id }: { id?: string }) {
           isSaving={isSaving}
           error={saveError}
           getToken={getToken}
+          ownOffice={ownOffice}
         />
       )}
 

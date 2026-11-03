@@ -7,12 +7,12 @@ import { retentionMinGpa } from '../../utils/eligibility';
 import {
   DEFAULT_RENEWAL_REQUIREMENTS, EVALUATION_ITEMS, PASSING_AVERAGE, RATING_LABELS, RENEWAL_DECISIONS, RENEWAL_TERMS, Renewal,
   RenewalDecision, RenewalPeriod, RenewalStatus, RenewalTerm, academicYearLabel, currentAcademicYear, formatGpa, meetsGpa,
-  periodLabel, ratingLabel
+  deadlineLabel, isIsoDate, periodLabel, ratingLabel
 } from '../../utils/renewals';
 import { downloadZip, openDocument } from '../../utils/documents';
 import { API_BASE_URL, authHeaders, formatDate, formatDateTime, officeName, titleCaseName } from './adminData';
 import { ResultDialog,
-  Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, DetailField, DropdownMenu, EmptyState, ErrorState, Field, KpiCard, KpiGrid,
+  Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, DatePicker, DetailField, DropdownMenu, EmptyState, ErrorState, Field, KpiCard, KpiGrid,
   MobileList, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table, TableSkeleton, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
 import { TemplatePicker, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
@@ -495,7 +495,7 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
 function PeriodSummary({ period }: { period: RenewalPeriod }) {
   const parts = [
     period.open ? null : 'Closed',
-    period.deadline ? `Deadline ${period.deadline}` : null,
+    period.deadline ? `Deadline ${deadlineLabel(period.deadline)}` : null,
     period.minGpa !== undefined && period.minGpa !== null ? `Min. GPA ${formatGpa(period.minGpa)}` : null,
     period.requiresEvaluation ? 'Head evaluation required' : null,
     `${officeName(period.office)}`,
@@ -539,7 +539,8 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
   const [scholarshipId, setScholarshipId] = useState(period?.scholarshipId ?? renewableScholarships()[0]?.id ?? '');
   const [academicYear, setAcademicYear] = useState(String(period?.academicYear ?? ay));
   const [term, setTerm] = useState<RenewalTerm>(period?.term ?? '2nd Semester');
-  const [deadline, setDeadline] = useState(period?.deadline ?? '');
+  // Older periods have a typed deadline: pick it again.
+  const [deadline, setDeadline] = useState(isIsoDate(period?.deadline) ? period!.deadline! : '');
   const [minGpa, setMinGpa] = useState(period?.minGpa !== undefined && period?.minGpa !== null ? String(period.minGpa) : '');
   const [requiresEvaluation, setRequiresEvaluation] = useState(period?.requiresEvaluation ?? false);
   const [notes, setNotes] = useState(period?.notes ?? '');
@@ -635,8 +636,8 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
           </div>
         )}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Field label="Deadline" optional helper="Shown to scholars as written.">
-            <TextInput value={deadline} onChange={e => setDeadline(e.target.value)} placeholder="e.g. January 20, 2027" disabled={saving} maxLength={200} />
+          <Field label="Deadline" optional helper={period?.deadline && !isIsoDate(period.deadline) ? `Was typed as “${period.deadline}”. Pick it from the calendar.` : 'Scholars are reminded 3 days and 1 day before.'}>
+            <DatePicker value={deadline} onChange={setDeadline} disabled={saving} placeholder="Pick the last day" />
           </Field>
           <Field label="Minimum GPA" optional helper="0.00–4.00. Lower GPAs are flagged for review.">
             <TextInput type="number" inputMode="decimal" step="0.01" min={0} max={4} value={minGpa} onChange={e => setMinGpa(e.target.value)} placeholder="e.g. 2.50" disabled={saving} />

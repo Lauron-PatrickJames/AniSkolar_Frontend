@@ -155,6 +155,7 @@ let sfagOpenAllYear = false;
 export function setSfagOpenAllYear(value: boolean): void {
   sfagOpenAllYear = value;
 }
+export const isSfagOpenAllYear = () => sfagOpenAllYear;
 export function inSfagApplicationWindow(date = new Date()): boolean {
   if (sfagOpenAllYear) return true;
   const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', month: 'numeric' }).format(date));

@@ -1,5 +1,6 @@
 import { DocumentSlot, GpaRequirement, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../types';
 import { EligibilityRules, documentTexts, ruleLines } from './requirementCatalog';
+import { isSfagOpenAllYear } from '../utils/eligibility';
 
 // The offices that run scholarships (mirrors the backend's data/offices.js).
 // Each has its own admin accounts and handles its scholarships entirely;
@@ -174,6 +175,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'No new applicants are accommodated during the second semester. The office reserves the right to reject or decline applications.'
     ],
     deadline: 'Applications open June 16 – July 3, 2026',
+    opensOn: '2026-06-16',
+    closesOn: '2026-07-03',
     status: 'Open',
     applicationFormType: 'sfag'
   },
@@ -207,6 +210,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Step 4: Wait for your application status notification via the DLSU-D Student Portal. If approved, the scholarship is applied to your tuition fee upon enrollment. If disapproved, you may still enroll but will not receive the entrance scholarship discount.'
     ],
     deadline: 'Applications open June 1–20, 2026',
+    opensOn: '2026-06-01',
+    closesOn: '2026-06-20',
     status: 'Open',
     applicationFormType: 'standard'
   },
@@ -405,6 +410,13 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Full matriculation fee discount',
       'Free food and accommodation for recruited athletes'
     ],
+    // No application and no renewals: the coaches pick players from the
+    // tryouts and the SDO adds them (Nov 2026).
+    applicationMode: 'info',
+    directAward: true,
+    noRenewal: true,
+    handledBy: 'Sports Development Office (SDO)',
+    availNote: 'There’s no application. Players are picked from the varsity tryouts: the coach evaluates and recommends you (or endorses you, if you’re already on the team), the SDO Director approves, and the SDO adds you as a scholar in AniSkolar.',
     eligibilityCriteria: { applicantType: 'any' },
     rules: { applicantType: 'any' },
     customEligibility: [
@@ -413,16 +425,18 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     ],
     scheduleLabel: 'Varsity tryouts',
     schedule: 'To be announced. Tryout dates are posted in Announcements.',
+    // One of the two, by player (data/officeForms.ts asks which).
     customDocuments: [
-      'Coach\'s evaluation and recommendation (incoming players) or evaluation and endorsement (current varsity members)'
+      'Coach\'s evaluation and recommendation (incoming players)',
+      'Coach\'s evaluation and endorsement (current varsity members)'
     ],
     process: [
-      'Step 1: Try out for or get recruited into a varsity team. Tryout dates are posted in Announcements.',
-      'Step 2: Apply here with your coach\'s evaluation and recommendation (incoming players) or endorsement (current members).',
-      'Step 3: The Sports Development Office reviews it, and the SDO Director approves.'
+      'Step 1: Try out for a varsity team. Tryout dates are posted in Announcements.',
+      'Step 2: The coach evaluates you and recommends you (incoming players) or endorses you (current members).',
+      'Step 3: The SDO Director approves, and the SDO adds you as a scholar. You’ll see it under My Scholarship.'
     ],
-    deadline: 'Set by the Sports Development Office',
-    status: 'Closed',
+    deadline: 'Picked from the varsity tryouts',
+    status: 'Open',
     applicationFormType: 'standard'
   },
   {
@@ -600,6 +614,56 @@ function deriveGpaRequirement(base: GpaRequirement | undefined, rules: Eligibili
   return { ...base, stage: 'apply', minGpa, noFailingGrade, keepToo: base.keepToo || base.stage === 'keep' || undefined };
 }
 
+// Dates are picked (YYYY-MM-DD, Manila time), never typed.
+const DAY = 86_400_000;
+const todayInManila = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+const utcDate = (iso: string) => new Date(`${iso}T00:00:00Z`);
+const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', ...opts }).format(utcDate(iso));
+export const formatDate = (iso: string) => fmt(iso, { month: 'long', day: 'numeric', year: 'numeric' });
+
+// "June 16 – July 3, 2026", "June 1–20, 2026", "Until July 3, 2026".
+export function formatPeriod(opensOn?: string, closesOn?: string): string {
+  if (opensOn && closesOn) {
+    const [a, b] = [utcDate(opensOn), utcDate(closesOn)];
+    if (a.getUTCFullYear() !== b.getUTCFullYear()) return `${formatDate(opensOn)} – ${formatDate(closesOn)}`;
+    if (a.getUTCMonth() === b.getUTCMonth()) return `${fmt(opensOn, { month: 'long', day: 'numeric' })}–${fmt(closesOn, { day: 'numeric' })}, ${b.getUTCFullYear()}`;
+    return `${fmt(opensOn, { month: 'long', day: 'numeric' })} – ${formatDate(closesOn)}`;
+  }
+  if (closesOn) return `Until ${formatDate(closesOn)}`;
+  if (opensOn) return `Opens ${formatDate(opensOn)}`;
+  return '';
+}
+
+// "Friday, November 7, 2026, 4:00 PM, at the University Gym".
+export function formatSchedule(on?: string, time?: string, venue?: string): string {
+  if (!on) return '';
+  const parts = [fmt(on, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })];
+  if (time) {
+    const [h, m] = time.split(':').map(Number);
+    parts.push(`${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`);
+  }
+  return parts.join(', ') + (venue?.trim() ? `, at ${venue.trim()}` : '');
+}
+
+// null while applications are accepted by date; otherwise why not.
+// Mirrors windowError() in the backend's utils/scholarshipDates.js.
+export function applicationWindow(s: { id: string; opensOn?: string; closesOn?: string }): string | null {
+  if (s.id === 's1' && isSfagOpenAllYear()) return null;
+  const today = todayInManila();
+  if (s.opensOn && today < s.opensOn) return `Applications open on ${formatDate(s.opensOn)}.`;
+  if (s.closesOn && today > s.closesOn) return `Applications closed on ${formatDate(s.closesOn)}.`;
+  return null;
+}
+
+// The status students see: closed outside the picked dates, "Closing Soon"
+// in the last 7 days.
+function effectiveStatus(source: ScholarshipSource): Scholarship['status'] {
+  if (source.status === 'Closed' || applicationWindow(source)) return 'Closed';
+  const daysLeft = source.closesOn ? (utcDate(source.closesOn).getTime() - utcDate(todayInManila()).getTime()) / DAY : null;
+  if (daysLeft !== null && daysLeft >= 0 && daysLeft <= 7) return 'Closing Soon';
+  return source.status;
+}
+
 // Fills in what's generated from the rules and documents: the text
 // students read, the applicant-type filter and the GPA rule.
 export function deriveScholarship(source: ScholarshipSource): Scholarship {
@@ -608,6 +672,10 @@ export function deriveScholarship(source: ScholarshipSource): Scholarship {
   const applicantType = rules.applicantType ?? 'any';
   return {
     ...source,
+    deadline: formatPeriod(source.opensOn, source.closesOn) || source.deadline || 'To be announced',
+    schedule: formatSchedule(source.scheduleOn, source.scheduleTime, source.scheduleVenue) || source.schedule,
+    status: effectiveStatus(source),
+    setStatus: source.setStatus ?? source.status,
     rules,
     customEligibility: source.customEligibility ?? [],
     // Slot-based forms: their slots are the documents (for the matrix).
@@ -632,7 +700,8 @@ export const mockScholarships: Scholarship[] = BUILT_IN_SCHOLARSHIPS.map(deriveS
 // Fields the AdSO can change from the admin Scholarships page. Name,
 // office and application form are fixed for the built-in scholarships.
 export const EDITABLE_SCHOLARSHIP_FIELDS = [
-  'status', 'deadline', 'description', 'benefits', 'process', 'submissionNote', 'schedule',
+  'status', 'deadline', 'opensOn', 'closesOn', 'description', 'benefits', 'process', 'submissionNote',
+  'schedule', 'scheduleOn', 'scheduleTime', 'scheduleVenue',
   'rules', 'customEligibility', 'documentKeys', 'customDocuments'
 ] as const;
 
@@ -664,11 +733,14 @@ function mergeOverride(source: ScholarshipSource, o: ScholarshipOverride | undef
   const merged: ScholarshipSource = { ...source };
   if (o.status) merged.status = o.status;
   if (o.deadline) merged.deadline = o.deadline;
+  // Picked dates replace the code's (and any typed deadline).
+  if (o.opensOn || o.closesOn) { merged.opensOn = o.opensOn; merged.closesOn = o.closesOn; }
   if (o.description) merged.description = o.description;
   if (o.benefits?.length) merged.benefits = o.benefits;
   if (o.process?.length) merged.process = o.process;
   if (o.submissionNote) merged.submissionNote = o.submissionNote;
   if (o.schedule && source.scheduleLabel) merged.schedule = o.schedule;
+  if (o.scheduleOn && source.scheduleLabel) Object.assign(merged, { scheduleOn: o.scheduleOn, scheduleTime: o.scheduleTime, scheduleVenue: o.scheduleVenue });
   if (o.rules) merged.rules = o.rules;
   if (o.customEligibility) merged.customEligibility = o.customEligibility;
   if (!source.documentSlots?.length) {

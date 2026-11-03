@@ -293,12 +293,19 @@ Communication Service with a free Azure-managed domain) connected to
   (the scholars' org; it asks Ms. Nor first) that the office credits for
   duty. The credit is the office's call, not the event's length (a 1-hour
   event can be worth 3 hours). The AdSO adds each event (name, date,
-  organizer, credit hours); scholars tap "I attended" on past events of
-  the term → Pending; the AdSO approves or rejects (optional reason) and
-  only approved claims count, at the event's current credit. Scholars can
-  withdraw a pending claim. Scholars can no longer type their own event
-  hours (`specialEvents` from old logs still count). An event with
-  credited claims can't be deleted or moved to another term.
+  organizer, credit hours). **Attendance sheets (Nov 2026):** "Print
+  sheet" prints a blank A4 sheet (event, date, credit; rows for student
+  number, name, program & year, time in/out, signature). After the event
+  the AdSO uploads photos or scans of the signed sheets (JPG/PNG/PDF,
+  `DutyEvent.sheets`) and, in "Check attendance", ticks who attended
+  beside the sheet (or pastes the student numbers). Saving credits the
+  ticked scholars (an Approved claim, note "Attendance sheet") and
+  uncredits anyone unticked (src/pages/admin/EventAttendance.tsx, the
+  attendance routes in routes/dutyHours.js). Scholars no longer claim
+  (POST /mine/claims answers 410); claims made before still show for
+  review and can be withdrawn. Scholars can no longer type their own
+  event hours (`specialEvents` from old logs still count). An event with
+  credited scholars can't be deleted or moved to another term.
 - Random assign (Duty hours → "Random assign"): the AdSO lists offices and
   how many scholars each takes (`officeSlots` in DutySetting, saved and
   reused every term; big offices — Registrar, Accounting, Admissions —
@@ -407,6 +414,50 @@ other office's **approved** scholars, live and read-only.
   its own. The AdSO's Renewals list shows its own scholarships only.
 - Not in AniSkolar (granted without application): PD 577, Usaha Tega
   Foundation, Kundirana, NBCMSEF, CCTI. Performing Arts Group declined.
+
+## Changes 2026-11-03
+- **Office forms** (src/data/officeForms.ts, backend data/officeForms.js;
+  keep their keys the same): the SDO, Vicissitude, ROTC, USG and Heraldo
+  scholarships add a step to the standard form with that office's
+  questions (saved as standardInfo.officeAnswers, checked on submit).
+  **The SDO has no applications and no renewals** (`directAward`,
+  `applicationMode: 'info'`, `noRenewal`): coaches pick players from the
+  tryouts, and the SDO adds each one from Scholars → "Add scholar"
+  (AddScholarDialog → POST /api/applications/direct-award): the student,
+  incoming or current player, sport, coach, the matching coach's document
+  (evaluation and recommendation, or evaluation and endorsement), the
+  grant, and the SDO Director's approval. The scholar is approved at once
+  and the AdSO sees them; the SDO records when a player stops. In the review, the deciding office
+  fills its assessment (PATCH /api/applications/:id/office-assessment,
+  never shown to students) and sees the result: the SDO's discount,
+  Vicissitude's rating → discount, the ROTC amount by rank, the USG's
+  verification and on-site schedule, the Heraldo's points (0–20,
+  disqualified below 60). College SGs: not yet, ask them first.
+- **Dates are picked, not typed.** Scholarships have opensOn / closesOn
+  (YYYY-MM-DD): applications are refused outside them
+  (utils/scholarshipDates.js), the student status shows Closed / Closing
+  Soon (last 7 days) on its own, and the deadline text is made from them.
+  The old typed `deadline` only shows while no dates are picked. Entrance
+  and SFAG have their 2026 dates in code, so they show Closed now until
+  the AdSO picks new ones (SFAG_OPEN_ALL_YEAR still lifts the SFAG's).
+  Tryout schedules are a date, time and place. Renewal deadlines are a
+  date too; older typed ones are shown as written until picked again.
+- **Announcements by office.** Every office has Announcements: the AdSO's
+  go to everyone and can go to Facebook; another office posts about its
+  own scholarships only, no Facebook, emailing only their applicants or
+  scholars. Each office lists only its own. Duty offices post from the
+  Office portal (Announcements tab) to the scholars assigned to them
+  this term (`dutyOffice` set; not in the public feed;
+  GET /api/announcements/feed/duty). Students see "Posted by …".
+- **Notifications**: "Clear all" is gone; "View all notifications" opens
+  a page with every notification (All / Unread, mark all as read).
+- **Forgot password** (admin login): Clerk emails a code, then a new
+  password signs them in and out of other devices. Students get a link to
+  Microsoft's reset. **Account security** (admins: sidebar shield icon;
+  students: profile menu; office heads: header): change password,
+  authenticator-app two-step verification with backup codes, signed-in
+  devices with sign out. Two-step needs "Authenticator application"
+  turned on in Clerk (Configure → Multi-factor).
 
 ## Changes 2026-10-29
 - **Office requests removed** (portal tab, AdSO dialog, routes and the

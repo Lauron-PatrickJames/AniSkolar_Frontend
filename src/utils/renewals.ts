@@ -17,6 +17,15 @@ export type NotContinuingReason = typeof NOT_CONTINUING_REASONS[number];
 // RENEWAL_DOCUMENTS in models/RenewalPeriod.js).
 export const DEFAULT_RENEWAL_REQUIREMENTS = ['Certified True Copy of Grades (TCG)'];
 
+// A renewal deadline is picked (YYYY-MM-DD); older ones were typed.
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+export const isIsoDate = (value?: string | null): value is string => !!value && ISO_DATE.test(value);
+export function deadlineLabel(value?: string | null): string {
+  if (!value) return '';
+  if (!isIsoDate(value)) return value;
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(`${value}T00:00:00Z`));
+}
+
 export interface RenewalPeriod {
   _id: string;
   scholarshipId: string;

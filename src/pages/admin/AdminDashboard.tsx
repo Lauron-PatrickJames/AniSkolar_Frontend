@@ -12,6 +12,10 @@ import ScholarshipsManager from './ScholarshipsManager';
 import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
 import AdminScholars from './AdminScholars';
 import MessagesPage from './MessagesPage';
+import AccountSecurity from '../../components/AccountSecurity';
+import AddScholarDialog from './AddScholarDialog';
+import { officeFormFor } from '../../data/officeForms';
+import { PageHeader, ResultDialog } from './AdminUI';
 import { MESSAGES_READ_EVENT } from '../../utils/messages';
 import ApplicationReview from './ApplicationReview';
 import ApplicationsList, { DEFAULT_FILTERS, ListFilters } from './ApplicationsList';
@@ -54,14 +58,32 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const officeHasRenewals = !adminOffice || mockScholarships.some(s => officeOf(s) === adminOffice && !s.noRenewal && acceptsOnlineApplications(s));
   // Partner offices (POLCA, Alumni) don't get Statistics either (panel, Oct 2026).
   // Each office manages its own scholarships, so they keep Scholarships.
-  const hiddenViews: MainView[] = isAdso ? [] : ['analytics', 'announcements', 'automation', 'fse', 'dutyHours', 'messages', ...(officeHasRenewals ? [] : ['renewals' as MainView])];
+  // Scholarships this office fills itself, without applications (the
+  // SDO's, from its tryouts). An office with only those has no Applications page and starts on Scholars.
+  const directAward = mockScholarships.filter(s => s.directAward && officeOf(s) === (adminOffice ?? 'LSO'));
+  const onlyDirect = !!adminOffice && directAward.length > 0 && mockScholarships.filter(s => officeOf(s) === adminOffice).every(s => s.directAward);
+  const hiddenViews: MainView[] = isAdso ? [] : [
+    'analytics', 'automation', 'fse', 'dutyHours', 'messages',
+    ...(officeHasRenewals ? [] : ['renewals' as MainView]),
+  ];
+  // Its scholars' records still open in the application view.
+  const sidebarHidden: MainView[] = onlyDirect ? [...hiddenViews, 'applications'] : hiddenViews;
 
   const [applications, setApplications] = useState<AdminApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  const [mainView, setMainView] = useState<MainView>('applications');
+  const [addScholarFor, setAddScholarFor] = useState<string | null>(null);
+  const [addedNotice, setAddedNotice] = useState('');
+  const homeView: MainView = onlyDirect ? 'lifecycle' : 'applications';
+  const [mainView, setMainView] = useState<MainView>(homeView);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // A page this office doesn't have (an old link or history entry), or the
+  // empty application list of an office without applications: go home.
+  useEffect(() => {
+    if (hiddenViews.includes(mainView) || (onlyDirect && mainView === 'applications' && !selectedId)) setMainView(homeView);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainView, onlyDirect, selectedId]);
   const [selectedScholar, setSelectedScholar] = useState<string | null>(null);
   // Scholarship open in the Scholarships page's detail view.
   const [selectedScholarship, setSelectedScholarship] = useState<string | null>(null);
@@ -294,10 +316,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           openApplication(applicationId, []);
         }}
         onMessageStudent={isAdso ? messageStudent : undefined}
+        onAddScholar={directAward.length ? () => setAddScholarFor(directAward[0].id) : undefined}
       />
     );
-  } else if (mainView === 'announcements' && isAdso) {
-    page = <AdminAnnouncements />;
+  } else if (mainView === 'announcements') {
+    page = <AdminAnnouncements ownOffice={(adminOffice ?? 'LSO') as ScholarshipOffice} />;
+  } else if (mainView === 'security') {
+    page = (
+      <div className="max-w-3xl space-y-6">
+        <PageHeader title="Account security" />
+        <AccountSecurity />
+      </div>
+    );
   } else if (mainView === 'scholarships') {
     page = (
       <ScholarshipsManager
@@ -349,11 +379,21 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       officeLabel={officeLabel}
       pendingCount={pendingCount}
       messageCount={messageCount}
-      hiddenViews={hiddenViews}
+      hiddenViews={sidebarHidden}
       breadcrumbs={breadcrumbs}
       pageKey={`${mainView}:${selectedId ?? ''}:${selectedScholar ?? ''}:${selectedScholarship ?? ''}`}
     >
       {page}
+      {addScholarFor && officeFormFor(addScholarFor) && (
+        <AddScholarDialog
+          scholarship={mockScholarships.find(s => s.id === addScholarFor)!}
+          form={officeFormFor(addScholarFor)!}
+          getToken={getToken}
+          onClose={() => setAddScholarFor(null)}
+          onAdded={(name, pending) => { setAddScholarFor(null); setAddedNotice(pending ? `${name} is now a scholar. They'll see it the first time they sign in to AniSkolar; we emailed them.` : `${name} is now a scholar. We emailed them.`); fetchApplications(); }}
+        />
+      )}
+      {addedNotice && <ResultDialog message={addedNotice} onClose={() => setAddedNotice('')} />}
     </AdminLayout>
   );
 }

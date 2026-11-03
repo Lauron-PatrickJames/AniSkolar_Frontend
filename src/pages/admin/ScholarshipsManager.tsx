@@ -3,13 +3,13 @@ import { useAuth } from '@clerk/react';
 import { CircleCheck, CircleOff, Clock, Info, LayoutList, ListChecks, Pencil, Plus, Save, Table2, Trash2 } from 'lucide-react';
 import { ApplicationFormType, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../../types';
 import {
-  OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, officeOf, registerCustomScholarships, scholarshipDefaults, handlingOffice } from '../../data/scholarships';
+  OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, formatPeriod, officeOf, registerCustomScholarships, scholarshipDefaults, handlingOffice } from '../../data/scholarships';
 import { EligibilityRules, lockedRules, ruleLines } from '../../data/requirementCatalog';
 import { DocumentsEditor, ListEditor, RulesEditor } from './RequirementEditors';
 import ScholarshipMatrix, { MatrixPatch } from './ScholarshipMatrix';
 import { API_BASE_URL, AppStatus, STATUS_OPTIONS, authHeaders, formatDateTime } from './adminData';
 import {
-  Alert, Badge, Button, Card, ConfirmDialog, DropdownMenu, DropdownMenuItem, EmptyState, ErrorState, Field, Modal, PageHeader,
+  Alert, Badge, Button, Card, ConfirmDialog, DatePicker, DropdownMenu, DropdownMenuItem, EmptyState, ErrorState, Field, Modal, PageHeader,
   RowLink, SearchInput, SegmentedControl, Select, Skeleton, Table, TableSkeleton, Tabs, Td, TextInput, Textarea, Th,
   Toolbar, Tone, Tooltip, Tr
 } from './AdminUI';
@@ -136,12 +136,16 @@ function scheduleTime(text: string): number | null {
 
 interface EditorState {
   status: ScholarshipStatus;
-  deadline: string;
+  // Picked dates (YYYY-MM-DD) and time (HH:MM); '' = none.
+  opensOn: string;
+  closesOn: string;
   description: string;
   benefits: string[];
   process: string[];
   submissionNote: string;
-  schedule: string;
+  scheduleOn: string;
+  scheduleTime: string;
+  scheduleVenue: string;
   rules: EligibilityRules;
   customEligibility: string[];
   documentKeys: string[];
@@ -167,13 +171,16 @@ const rulesKey = (rules: EligibilityRules) => JSON.stringify(
 
 function editorFrom(s: Scholarship): EditorState {
   return {
-    status: s.status,
-    deadline: s.deadline,
+    status: s.setStatus ?? s.status,
+    opensOn: s.opensOn ?? '',
+    closesOn: s.closesOn ?? '',
     description: s.description,
     benefits: [...s.benefits],
     process: [...s.process],
     submissionNote: s.submissionNote ?? '',
-    schedule: s.schedule ?? '',
+    scheduleOn: s.scheduleOn ?? '',
+    scheduleTime: s.scheduleTime ?? '',
+    scheduleVenue: s.scheduleVenue ?? '',
     rules: { ...(s.rules ?? {}) },
     customEligibility: [...(s.customEligibility ?? [])],
     documentKeys: [...(s.documentKeys ?? [])],
@@ -191,12 +198,15 @@ function editorFrom(s: Scholarship): EditorState {
 // Compares what would be saved, so whitespace-only edits don't count.
 function sameEditor(a: EditorState, b: EditorState): boolean {
   return a.status === b.status
-    && a.deadline.trim() === b.deadline.trim()
+    && a.opensOn === b.opensOn
+    && a.closesOn === b.closesOn
     && a.description.trim() === b.description.trim()
     && sameList(clean(a.benefits), clean(b.benefits))
     && sameList(clean(a.process), clean(b.process))
     && a.submissionNote.trim() === b.submissionNote.trim()
-    && a.schedule.trim() === b.schedule.trim()
+    && a.scheduleOn === b.scheduleOn
+    && a.scheduleTime === b.scheduleTime
+    && a.scheduleVenue.trim() === b.scheduleVenue.trim()
     && rulesKey(a.rules) === rulesKey(b.rules)
     && sameList(clean(a.customEligibility), clean(b.customEligibility))
     && sameSet(a.documentKeys, b.documentKeys)
@@ -217,14 +227,22 @@ function toPayload(form: EditorState, defaults: Scholarship) {
   const list = (value: string[], base: string[] = []) => (sameList(clean(value), base) ? null : clean(value));
   const slotBased = !!defaults.documentSlots?.length;
   return {
-    status: form.status === defaults.status ? null : form.status,
-    deadline: text(form.deadline, defaults.deadline),
+    status: form.status === (defaults.setStatus ?? defaults.status) ? null : form.status,
+    // Picked dates replace any typed deadline from before.
+    opensOn: form.opensOn === (defaults.opensOn ?? '') ? null : form.opensOn,
+    closesOn: form.closesOn === (defaults.closesOn ?? '') ? null : form.closesOn,
+    ...(form.opensOn || form.closesOn ? { deadline: null } : {}),
     description: text(form.description, defaults.description),
     benefits: list(form.benefits, defaults.benefits),
     process: list(form.process, defaults.process),
     submissionNote: text(form.submissionNote, defaults.submissionNote),
     // Only scholarships with a schedule (e.g. Athletic tryouts) send it.
-    ...(defaults.scheduleLabel ? { schedule: text(form.schedule, defaults.schedule) } : {}),
+    ...(defaults.scheduleLabel ? {
+      schedule: null,
+      scheduleOn: form.scheduleOn || null,
+      scheduleTime: form.scheduleOn ? form.scheduleTime || null : null,
+      scheduleVenue: form.scheduleOn ? form.scheduleVenue.trim() || null : null,
+    } : {}),
     rules: rulesKey(form.rules) === rulesKey(defaults.rules ?? {}) ? null : form.rules,
     customEligibility: list(form.customEligibility, defaults.customEligibility),
     // POLCA and Alumni upload against their own form's fixed slots.
@@ -242,6 +260,33 @@ function toPayload(form: EditorState, defaults: Scholarship) {
       handledBy: form.handledBy.trim() || null
     } : {})
   };
+}
+
+// The application period: two calendars. Applications are accepted only
+// between them; empty means "To be announced".
+function PeriodFields({ opensOn, closesOn, onChange, disabled, error }: {
+  opensOn: string;
+  closesOn: string;
+  onChange: (field: 'opensOn' | 'closesOn', value: string) => void;
+  disabled?: boolean;
+  error?: string;
+}) {
+  const label = formatPeriod(opensOn || undefined, closesOn || undefined);
+  return (
+    <div className="space-y-2">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Applications open" optional>
+          <DatePicker value={opensOn} onChange={v => onChange('opensOn', v)} max={closesOn || undefined} disabled={disabled} placeholder="Pick the first day" />
+        </Field>
+        <Field label="Applications close" optional error={error}>
+          <DatePicker value={closesOn} onChange={v => onChange('closesOn', v)} min={opensOn || undefined} disabled={disabled} placeholder="Pick the last day" />
+        </Field>
+      </div>
+      <p className="text-sm text-ink-muted">
+        {label ? <>Students see “{label}”. It closes on its own after the last day.</> : 'Students see “To be announced” until you pick the dates.'}
+      </p>
+    </div>
+  );
 }
 
 async function patchScholarship(
@@ -608,11 +653,11 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
           mode={statusChange.mode}
           getToken={getToken}
           changeStatus={() => patchScholarship(getToken, statusChange.row.defaults.id, {
-            status: statusChange.next === statusChange.row.defaults.status ? null : statusChange.next
+            status: statusChange.next === (statusChange.row.defaults.setStatus ?? statusChange.row.defaults.status) ? null : statusChange.next
           })}
           onDone={result => statusChanged(statusChange, result)}
           onCancel={() => setStatusChange(null)}
-          canAnnounce={ownOffice === 'LSO'}
+          adso={ownOffice === 'LSO'}
         />
       )}
     </div>
@@ -695,7 +740,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
   const errors: Partial<Record<keyof EditorState, string>> = {};
   if (isCustom && !form.name.trim()) errors.name = 'Enter the scholarship name.';
   if (isCustom && !/^[A-Za-z]{2,8}$/.test(form.referenceCode.trim())) errors.referenceCode = '2–8 letters, e.g. CSG.';
-  if (!form.deadline.trim()) errors.deadline = 'Enter a deadline or application period.';
+  if (form.opensOn && form.closesOn && form.closesOn < form.opensOn) errors.closesOn = 'The closing date can’t be before the opening date.';
   if (!form.description.trim()) errors.description = 'Enter a description.';
   if (ruleLines(form.rules).length + clean(form.customEligibility).length === 0) errors.customEligibility = 'Tick at least one rule or add a condition, so students know who can apply.';
   const errorCount = Object.keys(errors).length;
@@ -887,17 +932,25 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
 
           <Card title="Schedule">
             <div className="space-y-5">
-              <Field
-                label="Deadline / application period"
-                error={shown.deadline}
-                helper={form.deadline.trim() ? <>Shown in the list as “{shortSchedule(form.deadline)}”.</> : undefined}
-              >
-                <TextInput value={form.deadline} onChange={e => set('deadline', e.target.value)} maxLength={200} disabled={isSaving} placeholder="e.g. Applications open June 15, 2026" />
-              </Field>
+              <PeriodFields
+                opensOn={form.opensOn}
+                closesOn={form.closesOn}
+                onChange={(field, value) => set(field, value)}
+                disabled={isSaving}
+                error={shown.closesOn}
+              />
               {row.defaults.scheduleLabel && (
-                <Field label={row.defaults.scheduleLabel} optional helper="Shown on the scholarship's card and details page. For the full details, post an announcement and set its related scholarship to this one.">
-                  <TextInput value={form.schedule} onChange={e => set('schedule', e.target.value)} maxLength={300} disabled={isSaving} placeholder="e.g. November 3–7, 2026, 4:00 PM, at the University Gym" />
-                </Field>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Field label={`${row.defaults.scheduleLabel}: date`} optional>
+                    <DatePicker value={form.scheduleOn} onChange={v => set('scheduleOn', v)} disabled={isSaving} placeholder="To be announced" />
+                  </Field>
+                  <Field label="Time" optional>
+                    <TextInput type="time" value={form.scheduleTime} onChange={e => set('scheduleTime', e.target.value)} disabled={isSaving || !form.scheduleOn} />
+                  </Field>
+                  <Field label="Where" optional>
+                    <TextInput value={form.scheduleVenue} onChange={e => set('scheduleVenue', e.target.value)} maxLength={150} disabled={isSaving || !form.scheduleOn} placeholder="e.g. University Gym" />
+                  </Field>
+                </div>
               )}
             </div>
           </Card>
@@ -1033,7 +1086,8 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated, ownOffice }: {
   const [codeTouched, setCodeTouched] = useState(false);
   const [description, setDescription] = useState('');
   const [benefits, setBenefits] = useState('');
-  const [deadline, setDeadline] = useState('');
+  const [opensOn, setOpensOn] = useState('');
+  const [closesOn, setClosesOn] = useState('');
   const [availNote, setAvailNote] = useState('');
   const [handledBy, setHandledBy] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1049,7 +1103,7 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated, ownOffice }: {
     if (!/^[A-Za-z]{2,8}$/.test(shownCode)) e.code = 'Use 2–8 letters, e.g. CSG.';
     if (!description.trim()) e.description = 'Describe the scholarship for students.';
     if (!benefitList.length) e.benefits = 'List at least one benefit.';
-    if (mode === 'online' && !deadline.trim()) e.deadline = 'Enter when applications are accepted.';
+    if (opensOn && closesOn && closesOn < opensOn) e.closesOn = 'The closing date can’t be before the opening date.';
     if (mode === 'info' && !availNote.trim()) e.availNote = 'Tell students how to get it outside AniSkolar.';
     if (mode === 'info' && !handledBy.trim()) e.handledBy = 'Name the office students go to.';
     setErrors(e);
@@ -1062,7 +1116,7 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated, ownOffice }: {
         headers: await authHeaders(getToken, true),
         body: JSON.stringify({
           name: name.trim(), office, category, applicationMode: mode, referenceCode: shownCode,
-          description: description.trim(), benefits: benefitList, deadline: deadline.trim() || undefined,
+          description: description.trim(), benefits: benefitList, opensOn: opensOn || undefined, closesOn: closesOn || undefined,
           ...(mode === 'info' ? { availNote: availNote.trim(), handledBy: handledBy.trim() } : {}),
         }),
       });
@@ -1138,9 +1192,17 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated, ownOffice }: {
         <Field label="Benefits" error={errors.benefits} className="sm:col-span-2" helper={!errors.benefits ? 'One per line, e.g. “100% tuition discount”.' : undefined}>
           <Textarea value={benefits} onChange={ev => setBenefits(ev.target.value)} rows={3} disabled={busy} placeholder={'100% tuition discount\nMonthly book allowance'} className="resize-y" />
         </Field>
-        <Field label="Application period" error={errors.deadline} optional={mode === 'info'} className="sm:col-span-2" helper={!errors.deadline ? 'Typed as students should read it, e.g. “June 16 – July 3, 2027”.' : undefined}>
-          <TextInput value={deadline} onChange={ev => setDeadline(ev.target.value)} maxLength={200} disabled={busy} placeholder="e.g. June 16 – July 3, 2027" />
-        </Field>
+        {mode === 'online' && (
+          <div className="sm:col-span-2">
+            <PeriodFields
+              opensOn={opensOn}
+              closesOn={closesOn}
+              onChange={(field, value) => (field === 'opensOn' ? setOpensOn(value) : setClosesOn(value))}
+              disabled={busy}
+              error={errors.closesOn}
+            />
+          </div>
+        )}
         {mode === 'info' && (
           <>
           <Field label="Office students go to" error={errors.handledBy} className="sm:col-span-2">

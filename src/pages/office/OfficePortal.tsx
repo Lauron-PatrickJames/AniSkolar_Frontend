@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { Building2, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, Flag, Hourglass, LogOut, MessageSquare, Minus, Plus, Search, Send, Undo2, UserMinus, UserPlus, UserRound, Users, X } from 'lucide-react';
+import { Building2, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, Flag, Hourglass, LogOut, Megaphone, MessageSquare, Minus, Plus, Search, Send, ShieldCheck, Trash2, Undo2, UserMinus, UserPlus, UserRound, Users, X } from 'lucide-react';
+import AccountSecurity from '../../components/AccountSecurity';
 import logo from '../../assets/logo.png';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
@@ -8,7 +9,7 @@ import { DutyTerm, format12h, formatDutyDate, formatHours, termLabel, weekday } 
 import { EVALUATION_ITEMS, PASSING_AVERAGE, RATING_LABELS, ratingLabel } from '../../utils/renewals';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from '../admin/adminData';
 import { ResultDialog,
-  Alert, Avatar, Badge, Button, Card, EmptyState, ErrorState, Field, KpiCard, KpiGrid, Modal, PageHeader, SegmentedControl, Select, Table,
+  Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, EmptyState, ErrorState, Field, KpiCard, KpiGrid, Modal, PageHeader, SegmentedControl, Select, Table,
   TableSkeleton, Tabs, Td, TextInput, Textarea, Th, Toast, Tr
 } from '../admin/AdminUI';
 
@@ -26,7 +27,7 @@ export interface OfficeHeadInfo {
   current: { academicYear: number; term: DutyTerm };
 }
 
-type Tab = 'scholars' | 'evaluations' | 'messages';
+type Tab = 'scholars' | 'evaluations' | 'announcements' | 'messages';
 type GetToken = () => Promise<string | null>;
 
 async function api<T>(getToken: GetToken, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
@@ -45,6 +46,7 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
   const [tab, setTab] = useState<Tab>('scholars');
   const [counts, setCounts] = useState({ waiting: 0, evaluations: 0, unread: 0 });
   const [toast, setToast] = useState('');
+  const [securityOpen, setSecurityOpen] = useState(false);
 
   // Badges: duties waiting, evaluations not done, unread messages.
   const refreshCounts = useCallback(async () => {
@@ -84,6 +86,7 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
           </div>
           <div className="flex min-w-0 items-center gap-3">
             <Badge icon={Building2} className="hidden max-w-xs truncate sm:inline-flex">{head.office}</Badge>
+            <Button size="sm" variant="ghost" icon={ShieldCheck} onClick={() => setSecurityOpen(true)}><span className="hidden sm:inline">Account security</span></Button>
             <Button size="sm" variant="ghost" icon={LogOut} onClick={onLogout}>Sign out</Button>
           </div>
         </div>
@@ -105,14 +108,21 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
           tabs={[
             { key: 'scholars', label: 'Scholars & duties', icon: Users, count: counts.waiting || undefined },
             { key: 'evaluations', label: 'Evaluations', icon: ClipboardCheck, count: counts.evaluations || undefined },
+            { key: 'announcements', label: 'Announcements', icon: Megaphone },
             { key: 'messages', label: 'Messages', icon: MessageSquare, count: counts.unread || undefined },
           ]}
         />
         {tab === 'scholars' && <ScholarsTab head={head} getToken={getToken} onChanged={refreshCounts} onToast={setToast} onEvaluate={() => setTab('evaluations')} />}
         {tab === 'evaluations' && <EvaluationsTab getToken={getToken} onChanged={refreshCounts} onToast={setToast} />}
+        {tab === 'announcements' && <AnnouncementsTab head={head} getToken={getToken} onToast={setToast} />}
         {tab === 'messages' && <MessagesTab getToken={getToken} />}
       </main>
       {toast && <ResultDialog message={toast} onClose={() => setToast('')} />}
+      {securityOpen && (
+        <Modal title="Account security" onClose={() => setSecurityOpen(false)} size="lg">
+          <AccountSecurity />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -643,6 +653,121 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
 }
 
 // --- Messages ---------------------------------------------------------------------
+
+// --- Announcements --------------------------------------------------------------
+// Posted to the scholars assigned to this office: they see it with their
+// announcements, and can get it by email too.
+
+interface OfficeAnnouncement {
+  id: string;
+  title: string;
+  content: string;
+  publishedAt: string;
+  emailEnabled: boolean;
+  emailStatus: string;
+  emailSent: number;
+  emailTotal: number;
+}
+
+function AnnouncementsTab({ head, getToken, onToast }: { head: OfficeHeadInfo; getToken: GetToken; onToast: (m: string) => void }) {
+  const [items, setItems] = useState<OfficeAnnouncement[] | null>(null);
+  const [error, setError] = useState('');
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [email, setEmail] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [deleting, setDeleting] = useState<OfficeAnnouncement | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setItems((await api<{ announcements: OfficeAnnouncement[] }>(getToken, '/api/office/announcements')).announcements);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load your announcements.');
+    }
+  }, [getToken]);
+  useEffect(() => { load(); }, [load]);
+
+  const post = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    if (!title.trim() || !content.trim()) return setFormError('Write a title and the message.');
+    setBusy(true);
+    setFormError('');
+    try {
+      await api(getToken, '/api/office/announcements', { method: 'POST', body: { title: title.trim(), content: content.trim(), email } });
+      setTitle(''); setContent('');
+      onToast(email ? 'Posted. Your scholars will also get it by email.' : 'Posted to your scholars.');
+      load();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Failed to post it.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async () => {
+    if (!deleting) return;
+    setBusy(true);
+    try {
+      await api(getToken, `/api/office/announcements/${deleting.id}`, { method: 'DELETE' });
+      setDeleting(null);
+      load();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Failed to delete it.');
+      setDeleting(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-5">
+      <Card title="New announcement" description={`To the scholars assigned to you for the ${termLabel(head.current)}.`} className="lg:col-span-2">
+        <form onSubmit={post} className="space-y-4">
+          {formError && <Alert tone="danger">{formError}</Alert>}
+          <Field label="Title"><TextInput value={title} onChange={e => setTitle(e.target.value)} maxLength={150} disabled={busy} placeholder="e.g. No duty on Friday" /></Field>
+          <Field label="Message"><Textarea value={content} onChange={e => setContent(e.target.value)} rows={6} maxLength={8000} disabled={busy} className="resize-y" /></Field>
+          <Checkbox checked={email} onChange={setEmail} disabled={busy} label="Also email them (Outlook)" />
+          <Button type="submit" variant="primary" icon={Send} loading={busy}>Post</Button>
+        </form>
+      </Card>
+      <Card flush title="Posted" className="lg:col-span-3">
+        {error && !items ? <ErrorState title="Couldn't load your announcements" message={error} onRetry={load} />
+          : !items ? <TableSkeleton rows={3} label="Loading announcements" />
+          : !items.length ? <EmptyState icon={Megaphone} title="Nothing posted yet" description="Your scholars see what you post here with their announcements." />
+          : (
+            <ul className="divide-y divide-line">
+              {items.map(a => (
+                <li key={a.id} className="flex items-start gap-3 px-5 py-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-ink">{a.title}</p>
+                    <p className="mt-1 line-clamp-3 whitespace-pre-line text-sm text-ink-muted">{a.content}</p>
+                    <p className="mt-1.5 text-xs text-ink-subtle">
+                      {formatDateTime(a.publishedAt)}
+                      {a.emailEnabled && ` · emailed ${a.emailStatus === 'sent' ? `to ${a.emailSent}` : a.emailStatus === 'failed' ? '(failed)' : '(sending)'}`}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="ghost" icon={Trash2} onClick={() => setDeleting(a)} aria-label={`Delete ${a.title}`} />
+                </li>
+              ))}
+            </ul>
+          )}
+      </Card>
+      {deleting && (
+        <ConfirmDialog
+          title="Delete this announcement?"
+          description="Your scholars won't see it any more. An email already sent stays in their inbox."
+          confirmLabel="Delete"
+          tone="danger"
+          busy={busy}
+          onConfirm={remove}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
+    </div>
+  );
+}
 
 function MessagesTab({ getToken }: { getToken: GetToken }) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);

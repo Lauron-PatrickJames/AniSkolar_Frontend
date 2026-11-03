@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import MyScholarship from './pages/student/MyScholarship';
 import MyApplications from './pages/student/MyApplications';
 import { AppSkeleton, FormSkeleton } from './components/Skeletons';
 import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, SaveResult } from './types';
-import { acceptsOnlineApplications, applyScholarshipOverrides, mockScholarships, registerCustomScholarships } from './data/scholarships';
+import { acceptsOnlineApplications, applicationWindow, applyScholarshipOverrides, mockScholarships, registerCustomScholarships } from './data/scholarships';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
 import { Holdings, applyBlock, holdingNotice, isSfagScholar, setSfagOpenAllYear } from './utils/eligibility';
 import { DutyNotice } from './utils/notifications';
@@ -26,6 +26,8 @@ import ScholarshipDetails from './pages/student/ScholarshipDetails';
 import ApplyScholarship from './pages/student/ApplyScholarship';
 import Announcements from './pages/student/Announcements';
 import Profile from './pages/student/Profile';
+import NotificationsPage from './pages/student/Notifications';
+import AccountSecurity from './components/AccountSecurity';
 import GPACalculator from './pages/student/GPACalculator';
 import Renewals from './pages/student/Renewals';
 import DutyHours from './pages/student/DutyHours';
@@ -728,6 +730,27 @@ export default function App() {
     return () => { cancelled = true; };
   }, [isSignedIn, role, student.studentNumber, approvedKey, getToken, holdingsVersion]);
 
+  // SFAG scholars: what their duty office posted to its scholars (not in
+  // the public feed), shown with the other announcements.
+  const [dutyAnnouncements, setDutyAnnouncements] = useState<Announcement[]>([]);
+  useEffect(() => {
+    if (!isSignedIn || role !== 'student' || !isSfag) { setDutyAnnouncements([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`${API_BASE_URL}/api/announcements/feed/duty`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!cancelled && Array.isArray(body.announcements)) setDutyAnnouncements(body.announcements);
+      } catch {
+        // Leave them out.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isSignedIn, role, isSfag, getToken]);
+  const studentAnnouncements = useMemo(() => [...dutyAnnouncements, ...announcements], [dutyAnnouncements, announcements]);
+
   // SFAG scholars: this semester's duty hours, for the bell's "hours
   // completed" / "evaluated" notices. Checked on load and when the page
   // changes (cheap; the duty page itself loads the full log).
@@ -872,7 +895,9 @@ export default function App() {
         'scholarship-details': 'Scholarship Details',
         'apply-scholarship': 'Scholarship Digital Application',
         announcements: 'Office Announcements',
-        profile: 'Profile'
+        profile: 'Profile',
+        notifications: 'Notifications',
+        'account-security': 'Account Security'
       };
 
       const title = pageTitleMap[currentPage] || 'Student Portal';
@@ -948,12 +973,12 @@ export default function App() {
                   <ScholarshipDetails
                     scholarship={activeScholarship}
                     applications={applications}
-                    announcements={announcements}
+                    announcements={studentAnnouncements}
                     onBack={() => goBackTo('explore')}
                     onApply={handleApplyScholarship}
                     onResubmit={handleResubmitApplication}
                     onViewApplications={() => handleNavigate('applications')}
-                    blockedReason={applyBlock(activeScholarship.id, holdings)}
+                    blockedReason={applyBlock(activeScholarship.id, holdings) ?? applicationWindow(activeScholarship)}
                     notice={holdingNotice(activeScholarship.id, holdings)}
                   />
                 );
@@ -969,7 +994,19 @@ export default function App() {
                   />
                 );
               case 'announcements':
-                return <Announcements announcements={announcements} scholarships={scholarships} />;
+                return <Announcements announcements={studentAnnouncements} scholarships={scholarships} />;
+              case 'notifications':
+                return (
+                  <NotificationsPage
+                    student={student}
+                    applications={applications}
+                    dutyNotice={dutyNotice}
+                    onNavigate={handleNavigate}
+                    onViewScholarship={handleViewScholarship}
+                  />
+                );
+              case 'account-security':
+                return <div className="mx-auto max-w-3xl"><AccountSecurity /></div>;
               case 'profile':
                 return (
                   <Profile
@@ -983,7 +1020,7 @@ export default function App() {
                 return (
                   <Dashboard
                     scholarships={scholarships}
-                    announcements={announcements}
+                    announcements={studentAnnouncements}
                     applications={applications}
                     student={student}
                     holdings={holdings}

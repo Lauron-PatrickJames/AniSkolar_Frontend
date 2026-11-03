@@ -222,7 +222,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       )}
 
       <div className={`grid grid-cols-1 gap-6 ${log.entries.length > 0 ? 'lg:grid-cols-2' : ''}`}>
-        <EventsCard events={events} claims={claims} busyId={claimBusy} onClaim={id => claimEvent(id, false)} onWithdraw={id => claimEvent(id, true)} />
+        <EventsCard events={events} claims={claims} busyId={claimBusy} onWithdraw={id => claimEvent(id, true)} />
         {log.entries.length > 0 && <WeeklyCard entries={log.entries} />}
       </div>
     </div>
@@ -351,7 +351,7 @@ function AwaitingOfficeCard() {
       <Building2 className="w-8 h-8 text-slate-300 mx-auto" aria-hidden />
       <h3 className="font-display font-bold text-base text-slate-900">Waiting for your office assignment</h3>
       <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
-        You can log duties once the scholarship office assigns where you'll render them. You'll see the office under Details. Credited events below can be claimed anytime.
+        You can log duties once the scholarship office assigns where you'll render them. You'll see the office under Details. Events you attend are credited from their attendance sheet.
       </p>
     </div>
   );
@@ -496,19 +496,19 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
 
 // --- Special events & weekly -------------------------------------------------------
 
-// Credited events of the term: the scholar claims the ones they attended
-// and the scholarship office approves each claim before its hours count.
+// Credited events of the term: the scholar signs the attendance sheet at
+// the event and the scholarship office credits them from it. Claims made
+// before the sheets (Nov 2026) still show, and can be withdrawn.
 const CLAIM_BADGE: Record<ClaimStatus, string> = {
   Pending: 'bg-amber-50 text-amber-800 ring-amber-200',
   Approved: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
   Rejected: 'bg-rose-50 text-rose-800 ring-rose-200',
 };
 
-function EventsCard({ events, claims, busyId, onClaim, onWithdraw }: {
+function EventsCard({ events, claims, busyId, onWithdraw }: {
   events: CreditedEvent[];
   claims: EventClaim[];
   busyId: string | null;
-  onClaim: (eventId: string) => void;
   onWithdraw: (eventId: string) => void;
 }) {
   const today = todayInManila();
@@ -517,7 +517,7 @@ function EventsCard({ events, claims, busyId, onClaim, onWithdraw }: {
     <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
       <div className="px-5 sm:px-6 py-4 border-b border-slate-100">
         <h3 className="font-display font-bold text-base text-slate-900">Events</h3>
-        <p className="text-[11px] text-slate-400 mt-0.5">Events credited by the scholarship office (including COSA events). Claim the ones you attended; the hours count once the office approves.</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">Events credited by the scholarship office (including COSA events). Sign the attendance sheet at the event with your student number; the hours count once the office checks the sheet.</p>
       </div>
       {events.length === 0 ? (
         <p className="px-5 sm:px-6 py-6 text-sm text-slate-500">No credited events this term yet.</p>
@@ -540,7 +540,7 @@ function EventsCard({ events, claims, busyId, onClaim, onWithdraw }: {
                   {claim ? (
                     <>
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset ${CLAIM_BADGE[claim.status]}`}>
-                        {claim.status === 'Pending' ? 'Waiting for approval' : claim.status}
+                        {claim.status === 'Pending' ? 'Waiting for approval' : claim.status === 'Approved' ? 'Credited' : claim.status}
                       </span>
                       {claim.status === 'Pending' && (
                         <button type="button" onClick={() => onWithdraw(event._id)} disabled={busy} className="text-[11px] font-bold text-slate-500 hover:text-rose-600 disabled:opacity-50">
@@ -549,16 +549,9 @@ function EventsCard({ events, claims, busyId, onClaim, onWithdraw }: {
                       )}
                     </>
                   ) : upcoming ? (
-                    <span className="text-[11px] text-slate-400">Upcoming</span>
+                    <span className="text-[11px] text-slate-400">Upcoming · sign the sheet there</span>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => onClaim(event._id)}
-                      disabled={busy}
-                      className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                    >
-                      {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} I attended
-                    </button>
+                    <span className="text-[11px] text-slate-400">Not credited</span>
                   )}
                 </div>
               </li>

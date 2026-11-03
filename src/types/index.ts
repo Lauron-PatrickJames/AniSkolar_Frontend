@@ -44,6 +44,9 @@ export interface Scholarship {
   // No renewals: approved scholars keep it until they graduate or stop
   // (POLCA). Same as noRenewal in the backend's data/scholarships.js.
   noRenewal?: boolean;
+  // No application: the office adds its scholars itself (the SDO, from
+  // its tryouts; AddScholarDialog). Same as directAward in the backend.
+  directAward?: boolean;
   // At most this many current scholars per college (POLCA: 2).
   slotsPerCollege?: number;
   // At most this many current scholars in all, campus-wide (Alumni: 2).
@@ -72,8 +75,17 @@ export interface Scholarship {
   // Generated from the documents; the upload slots for standard / SFAG forms.
   requirements: string[];
   process: string[];
+  // What students read, e.g. "June 16 – July 3, 2026": made from opensOn /
+  // closesOn when they're picked, else the older typed text.
   deadline: string;
+  // The application period, picked as dates (YYYY-MM-DD, Manila).
+  // Applications are accepted only between them (applicationWindow).
+  opensOn?: string;
+  closesOn?: string;
   status: 'Open' | 'Closed' | 'Closing Soon';
+  // The status the office set, before the picked dates close it (`status`
+  // is what students see).
+  setStatus?: 'Open' | 'Closed' | 'Closing Soon';
   // Determines which application form the applicant fills out.
   // 'sfag'     -> the full 5-tab detailed form (personal, contact/school,
   //               parents & guardian, siblings, assets/expenses & agreement)
@@ -100,6 +112,11 @@ export interface Scholarship {
   // editable from the admin Scholarships page.
   scheduleLabel?: string;
   schedule?: string;
+  // Picked date (YYYY-MM-DD) and time (HH:MM), and where; `schedule` is
+  // made from them.
+  scheduleOn?: string;
+  scheduleTime?: string;
+  scheduleVenue?: string;
 
   // Which office reviews the grant. Omitted = LSO. Office-scoped admins
   // only see their own office's applications.
@@ -125,11 +142,16 @@ export interface ScholarshipOverride {
   id: string;
   status?: Scholarship['status'];
   deadline?: string;
+  opensOn?: string;
+  closesOn?: string;
   description?: string;
   benefits?: string[];
   process?: string[];
   submissionNote?: string;
   schedule?: string;
+  scheduleOn?: string;
+  scheduleTime?: string;
+  scheduleVenue?: string;
   rules?: EligibilityRules;
   customEligibility?: string[];
   documentKeys?: string[];
@@ -185,6 +207,9 @@ export interface Announcement {
   // The scholarship this announcement is about; it also shows on that
   // scholarship's details page.
   scholarshipId?: string | null;
+  // The office that posted it, e.g. "Sports Development Office (SDO)" or a
+  // duty office ("Office of the University Registrar").
+  postedBy?: string | null;
 }
 
 // --- Detailed SFAG application schema ------------------------------

@@ -20,6 +20,8 @@ import { ResultDialog,
   LinkButton, PageHeader, Quote, Select, Skeleton, StatusBadge, STATUS_META, Tabs, Textarea, Toast, Tooltip
 } from './AdminUI';
 import HistoryList from './HistoryList';
+import OfficeAssessmentCard from './OfficeAssessmentCard';
+import { OfficeAnswers, answerText, askedQuestions, officeFormFor } from '../../data/officeForms';
 import { buildApplicationHistory, latestDecision, partnerOfficeDecision, relativeTime } from './history';
 
 type ReviewTab = 'form' | 'documents' | 'activity';
@@ -203,6 +205,15 @@ export default function ApplicationReview({
           {app.status === 'Approved' && !(!adminOffice && officeApp) && mockScholarships.find(s => s.id === app.scholarshipId)?.noRenewal && (
             <ScholarshipEndCard app={app} getToken={getToken} onSaved={(updated, msg) => { onUpdated(updated); setToast(msg); }} />
           )}
+          {officeFormFor(app.scholarshipId) && (
+            <OfficeAssessmentCard
+              app={app}
+              form={officeFormFor(app.scholarshipId)!}
+              getToken={getToken}
+              readOnly={!adminOffice}
+              onSaved={updated => { onUpdated(updated); setToast('Saved.'); }}
+            />
+          )}
           {app.applicationFormType === 'polca' && !!adminOffice && (
             <PolcaAdminFieldsCard
               applicationId={app._id}
@@ -263,7 +274,26 @@ function FormTab({ app, scholarship, grantDetails }: {
       } as unknown as SfagApplicationDetails} />
     );
   } else if (app.standardInfo) {
-    content = <StandardProfileAnswers info={app.standardInfo} />;
+    const officeForm = officeFormFor(app.scholarshipId);
+    const answers = (app.standardInfo.officeAnswers ?? {}) as OfficeAnswers;
+    content = (
+      <div className="space-y-8">
+        <StandardProfileAnswers info={app.standardInfo} />
+        {officeForm && (
+          <section className="space-y-4 border-t border-line pt-6">
+            <h2 className="text-base font-semibold text-ink">{officeForm.stepLabel}</h2>
+            <dl className="grid gap-4 sm:grid-cols-2">
+              {askedQuestions(officeForm, answers).map(q => (
+                <div key={q.key} className={q.type === 'confirm' ? 'sm:col-span-2' : ''}>
+                  <dt className="text-xs text-ink-muted">{q.label}</dt>
+                  <dd className="text-sm font-medium text-ink">{answerText(q, answers[q.key])}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
+      </div>
+    );
   } else {
     content = <EmptyState title="No form answers on file" description="This application was saved without form answers." />;
   }
@@ -286,7 +316,10 @@ function missingDocuments(app: AdminApplication, scholarship: Scholarship | unde
       .map(slot => slot.label);
   }
   const present = new Set(app.documents.map(d => d.docType));
-  return scholarship.requirements.filter(req => !present.has(req));
+  // An office's documents follow the student's answers (the SDO's coach's document).
+  const officeDocs = officeFormFor(app.scholarshipId)?.documents;
+  const required = officeDocs ? officeDocs((app.standardInfo?.officeAnswers ?? {}) as OfficeAnswers) : scholarship.requirements;
+  return required.filter(req => !present.has(req));
 }
 
 function DocumentsTab({ appId, docs, missing, getToken }: { appId: string; docs: AdminDocument[]; missing: string[]; getToken: () => Promise<string | null> }) {

@@ -4,6 +4,7 @@ import AnnouncementCard from '../../components/AnnouncementCard';
 import { ArrowLeft, ArrowRight, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info, Megaphone } from 'lucide-react';
 import { motion } from 'motion/react';
 import { OFFICE_SHORT_LABELS, acceptsOnlineApplications, handlingOffice, officeOf } from '../../data/scholarships';
+import { officeFormFor } from '../../data/officeForms';
 
 interface ScholarshipDetailsProps {
   scholarship: Scholarship;
@@ -321,7 +322,10 @@ export default function ScholarshipDetails({
               <FileCheck className="w-5 h-5 text-brand-green" />
               <span>Required Documents</span>
             </h3>
-            <p className="text-xs text-slate-500 mb-2">Upload each one as a JPG file, up to 10 MB.</p>
+            <p className="text-xs text-slate-500 mb-2">
+              {scholarship.directAward ? 'Your coach prepares the one that applies to you; you don’t upload anything.'
+                : officeFormFor(scholarship.id)?.documents ? 'Upload only the one that applies to you, as a JPG file up to 10 MB.' : 'Upload each one as a JPG file, up to 10 MB.'}
+            </p>
             <ul className="divide-y divide-slate-100">
               {(scholarship.documentSlots
                 ? scholarship.documentSlots.filter(slot => slot.placement !== 'form').map(slot => ({
@@ -340,6 +344,9 @@ export default function ScholarshipDetails({
                 </li>
               ))}
             </ul>
+            {officeFormFor(scholarship.id) && (
+              <p className="mt-3 text-xs font-semibold text-slate-600">Approved by the {officeFormFor(scholarship.id)!.approver}.</p>
+            )}
             {scholarship.submissionNote && (
               <p className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100 text-[11px] font-semibold text-amber-800 flex items-start gap-1.5">
                 <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />

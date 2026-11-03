@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
-import { Award, BarChart3, Building2, Calculator, ChevronRight, Clock, GraduationCap, LayoutList, LogOut, Megaphone, Menu, MessageSquare, RefreshCw, X, Zap } from 'lucide-react';
+import { Award, BarChart3, Building2, Calculator, ChevronRight, Clock, GraduationCap, LayoutList, LogOut, Megaphone, Menu, MessageSquare, RefreshCw, ShieldCheck, X, Zap } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import { Avatar, Badge, IconButton } from './AdminUI';
 
-export type MainView = 'applications' | 'renewals' | 'dutyHours' | 'analytics' | 'fse' | 'lifecycle' | 'messages' | 'announcements' | 'scholarships' | 'automation';
+export type MainView = 'applications' | 'renewals' | 'dutyHours' | 'analytics' | 'fse' | 'lifecycle' | 'messages' | 'announcements' | 'scholarships' | 'automation' | 'security';
 
 export const VIEW_TITLES: Record<MainView, string> = {
   applications: 'Applications',
@@ -16,7 +16,8 @@ export const VIEW_TITLES: Record<MainView, string> = {
   messages: 'Messages',
   announcements: 'Announcements',
   scholarships: 'Scholarships',
-  automation: 'Automation'
+  automation: 'Automation',
+  security: 'Account security'
 };
 
 const SECTIONS: { title: string; items: { id: MainView; icon: React.ElementType }[] }[] = [
@@ -248,6 +249,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
               <p className="truncate text-sm font-medium capitalize text-ink">{displayName}</p>
               <p className="truncate text-xs text-ink-subtle">{officeLabel}</p>
             </div>
+            <IconButton icon={ShieldCheck} label="Account security" onClick={() => { onNavigate('security'); onClose(); }} />
             <IconButton icon={LogOut} label="Sign out" onClick={onLogout} />
           </div>
         </div>

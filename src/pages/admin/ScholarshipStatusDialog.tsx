@@ -79,10 +79,12 @@ export interface StatusDialogResult {
   announcement?: { scheduledFor: string | null; facebookError?: string };
 }
 
-export default function ScholarshipStatusDialog({ scholarship, next, mode, getToken, changeStatus, onDone, onCancel, canAnnounce = true }: {
+export default function ScholarshipStatusDialog({ scholarship, next, mode, getToken, changeStatus, onDone, onCancel, canAnnounce = true, adso = true }: {
   scholarship: Scholarship;
-  // Announcements are the AdSO's; other offices only change the status.
   canAnnounce?: boolean;
+  // Only the AdSO posts to its Facebook Page and emails every student;
+  // other offices' announcements show in AniSkolar.
+  adso?: boolean;
   next: ScholarshipStatus;
   mode: 'change' | 'announce';
   getToken: () => Promise<string | null>;
@@ -93,7 +95,7 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
 }) {
   const [draft, setDraft] = useState<Draft>(() => announcementFor(scholarship, next));
   const [announce, setAnnounce] = useState(canAnnounce);
-  const [fbEnabled, setFbEnabled] = useState(true);
+  const [fbEnabled, setFbEnabled] = useState(adso);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [schedule, setSchedule] = useState<ScheduleState>(() => initialSchedule());
   const [attempted, setAttempted] = useState(false);
@@ -229,20 +231,24 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
             {scheduling && !scheduleError && scheduleToIso(schedule).iso && (
               <p className="text-xs text-ink-subtle">Publishes {formatScheduled(scheduleToIso(schedule).iso)}{mode === 'change' ? `; the scholarship is ${next === 'Open' ? 'opened' : next === 'Closed' ? 'closed' : 'updated'} now` : ''}.</p>
             )}
-            <Checkbox
-              checked={fbEnabled}
-              onChange={setFbEnabled}
-              disabled={busy}
-              label="Also post to Facebook"
-              description={scheduling ? 'Posts to the Page when it publishes.' : 'Posts to the Page right away.'}
-            />
-            <Checkbox
-              checked={emailEnabled}
-              onChange={setEmailEnabled}
-              disabled={busy}
-              label="Also email all students (Outlook)"
-              description={scheduling ? 'Emails their school address when it publishes.' : 'Emails their school address right away, a few batches a minute.'}
-            />
+            {adso && (
+              <>
+                <Checkbox
+                  checked={fbEnabled}
+                  onChange={setFbEnabled}
+                  disabled={busy}
+                  label="Also post to Facebook"
+                  description={scheduling ? 'Posts to the Page when it publishes.' : 'Posts to the Page right away.'}
+                />
+                <Checkbox
+                  checked={emailEnabled}
+                  onChange={setEmailEnabled}
+                  disabled={busy}
+                  label="Also email all students (Outlook)"
+                  description={scheduling ? 'Emails their school address when it publishes.' : 'Emails their school address right away, a few batches a minute.'}
+                />
+              </>
+            )}
           </>
         )}
       </form>

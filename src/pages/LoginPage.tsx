@@ -67,6 +67,10 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
   const [verifyStep, setVerifyStep] = useState<VerifyStep | null>(null);
   const [code, setCode] = useState('');
   const [codeNotice, setCodeNotice] = useState('');
+  // Forgot password (admin accounts): email → code → new password.
+  const [resetStep, setResetStep] = useState<'email' | 'code' | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   // Surfaces the reason when SsoCallbackPage bounces someone back here
   // (e.g. ?error=invalid_domain for a non-DLSU-D email). Read once on
@@ -238,6 +242,70 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
     setCodeNotice('');
     setError('');
     setPassword('');
+  };
+
+  // Forgot password: Clerk emails a code to the account's address; the code
+  // and a new password sign the admin in (other devices are signed out).
+  const startReset = () => {
+    setError('');
+    setPassword('');
+    setCode('');
+    setCodeNotice('');
+    setResetStep('email');
+  };
+
+  const sendResetCode = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setError('');
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      setError('Enter the email address of your account.');
+      return;
+    }
+    const { error: createError } = await signIn.create({ identifier: email.trim() });
+    if (createError) {
+      setError(createError.message || 'We couldn\u2019t find an account with that email.');
+      return;
+    }
+    const { error: sendError } = await signIn.resetPasswordEmailCode.sendCode();
+    if (sendError) {
+      setError(sendError.message || 'Couldn\u2019t send the reset code. Please try again.');
+      return;
+    }
+    setCode('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setCodeNotice(resetStep === 'code' ? 'A new code is on its way.' : '');
+    setResetStep('code');
+  };
+
+  const submitReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!code.trim()) return setError('Enter the code we emailed you.');
+    if (newPassword.length < 8) return setError('Use at least 8 characters for the new password.');
+    if (newPassword !== confirmPassword) return setError('The two passwords don\u2019t match.');
+    if (signIn.status !== 'needs_new_password') {
+      const { error: verifyError } = await signIn.resetPasswordEmailCode.verifyCode({ code: code.trim() });
+      if (verifyError) return setError(verifyError.message || 'That code didn\u2019t work. Check it and try again.');
+    }
+    const { error: submitError } = await signIn.resetPasswordEmailCode.submitPassword({ password: newPassword, signOutOfOtherSessions: true });
+    if (submitError) return setError(submitError.message || 'Couldn\u2019t save the new password. Try a stronger one.');
+    setResetStep(null);
+    if (signIn.status === 'complete') {
+      await signIn.finalize({ navigate: noopNavigate });
+    } else if (signIn.status === 'needs_second_factor' || signIn.status === 'needs_client_trust') {
+      await startVerification(signIn.status === 'needs_client_trust' ? 'new_device' : 'two_factor');
+    } else {
+      setError('Your password was changed. Sign in with the new one.');
+    }
+  };
+
+  const cancelReset = async () => {
+    await signIn.reset();
+    setResetStep(null);
+    setCode('');
+    setCodeNotice('');
+    setError('');
   };
 
   // Admin (password) and student (Microsoft SSO) both drive the same shared
@@ -446,6 +514,71 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       Use a different account
                     </button>
                   </div>
+                ) : loginMode === 'admin' && resetStep ? (
+                  <div className="space-y-6">
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-100 flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-brand-green/10 text-brand-green flex items-center justify-center shrink-0">
+                        <KeyRound className="w-4 h-4" />
+                      </div>
+                      <div className="text-sm text-slate-600 leading-relaxed">
+                        <p className="font-semibold text-slate-900">Reset your password</p>
+                        <p className="mt-0.5">
+                          {resetStep === 'email'
+                            ? 'Enter your account\u2019s email. We\u2019ll send you a code to set a new password.'
+                            : <>We emailed a code to <strong>{email.trim()}</strong>. Enter it with your new password.</>}
+                        </p>
+                      </div>
+                    </div>
+
+                    {resetStep === 'email' ? (
+                      <form className="space-y-6" onSubmit={sendResetCode}>
+                        <div>
+                          <label htmlFor="reset-email" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Email</label>
+                          <input id="reset-email" type="email" autoFocus required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. staff@dlsud.edu.ph" className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all" />
+                        </div>
+                        <button type="submit" disabled={isLoading} className="w-full font-display font-bold text-xs tracking-wider text-white bg-brand-green hover:bg-[#00542c] active:scale-[0.99] py-3.5 rounded-lg transition-all duration-150 shadow-sm hover:shadow-md flex items-center justify-center gap-2 focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed uppercase">
+                          {isLoading ? 'Sending...' : 'Send reset code'}
+                        </button>
+                      </form>
+                    ) : (
+                      <form className="space-y-5" onSubmit={submitReset}>
+                        <div>
+                          <label htmlFor="reset-code" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Code</label>
+                          <input id="reset-code" type="text" inputMode="numeric" autoComplete="one-time-code" autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all tracking-[0.3em] text-center font-semibold" />
+                          {codeNotice && <p className="mt-2 text-xs font-semibold text-brand-green">{codeNotice}</p>}
+                        </div>
+                        <div>
+                          <label htmlFor="new-password" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">New password</label>
+                          <input id="new-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all" />
+                        </div>
+                        <div>
+                          <label htmlFor="confirm-password" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Confirm new password</label>
+                          <input id="confirm-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all" />
+                          <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-500">
+                            <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} className="rounded-sm border-slate-300 text-brand-green focus:ring-brand-green" />
+                            Show passwords
+                          </label>
+                        </div>
+                        <p className="text-xs text-slate-500">Saving signs you out on every other device.</p>
+                        <button type="submit" disabled={isLoading} className="w-full font-display font-bold text-xs tracking-wider text-white bg-brand-green hover:bg-[#00542c] active:scale-[0.99] py-3.5 rounded-lg transition-all duration-150 shadow-sm hover:shadow-md flex items-center justify-center gap-2 focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed uppercase">
+                          {isLoading ? 'Saving...' : 'Set new password and sign in'}
+                        </button>
+                        <button type="button" onClick={() => sendResetCode()} disabled={isLoading} className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-green hover:underline disabled:opacity-50">
+                          <RotateCw className="w-3.5 h-3.5" /> Resend code
+                        </button>
+                      </form>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={cancelReset}
+                      disabled={isLoading}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-slate-400 hover:text-brand-green transition-colors focus:outline-hidden disabled:opacity-50"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      Back to sign in
+                    </button>
+                  </div>
                 ) : loginMode === 'admin' ? (
                   <div className="space-y-6">
                     <form className="space-y-6" onSubmit={handleSubmit}>
@@ -474,9 +607,9 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                           <label htmlFor="password" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                             Password
                           </label>
-                          <a href="#" className="text-xs font-bold text-brand-green hover:underline" onClick={(e) => e.preventDefault()}>
-                            Forgot Password?
-                          </a>
+                          <button type="button" className="text-xs font-bold text-brand-green hover:underline" onClick={startReset}>
+                            Forgot password?
+                          </button>
                         </div>
                         <div className="relative rounded-lg">
                           <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -547,6 +680,12 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       )}
                       <span>{isLoading ? 'Redirecting...' : 'Sign in with Microsoft'}</span>
                     </button>
+                    <p className="text-center text-xs text-slate-400">
+                      Forgot your DLSU-D password?{' '}
+                      <a href="https://passwordreset.microsoftonline.com/" target="_blank" rel="noopener noreferrer" className="font-bold text-brand-green hover:underline">
+                        Reset it with Microsoft
+                      </a>
+                    </p>
 
                     <div className="relative py-1">
                       <div className="absolute inset-0 flex items-center">

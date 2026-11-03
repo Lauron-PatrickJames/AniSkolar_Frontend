@@ -7,7 +7,7 @@ import {
 import { Scholarship, Announcement, Application, StudentProfile } from '../../types';
 import { Holdings, getAvailableScholarships, isSfagScholar } from '../../utils/eligibility';
 import { DutySummary, formatDutyDate } from '../../utils/dutyHours';
-import { Renewal, RenewalPeriod, periodLabel } from '../../utils/renewals';
+import { Renewal, RenewalPeriod, deadlineLabel, periodLabel } from '../../utils/renewals';
 import { titleCaseName } from '../../utils/names';
 import { useUnreadMessages } from '../../layouts/StudentLayout';
 
@@ -163,7 +163,7 @@ export default function Dashboard({
             {!renewals ? <div className="mt-3 h-14 animate-pulse rounded-lg bg-slate-100" /> : renewals.available.length > 0 ? (
               <>
                 <p className="mt-3 font-display text-lg font-bold text-slate-900">Open now</p>
-                <p className="mt-1 text-xs text-slate-500">{periodLabel(renewals.available[0])}{renewals.available[0].deadline ? ` · due ${renewals.available[0].deadline}` : ''}</p>
+                <p className="mt-1 text-xs text-slate-500">{periodLabel(renewals.available[0])}{renewals.available[0].deadline ? ` · due ${deadlineLabel(renewals.available[0].deadline)}` : ''}</p>
               </>
             ) : latestRenewal ? (
               <>

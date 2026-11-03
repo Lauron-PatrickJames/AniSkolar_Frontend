@@ -63,8 +63,10 @@ function statusMessage(scholarshipName: string, status: string): string {
   }
 }
 
-export function buildNotifications(student: StudentProfile, applications: Application[], duty?: DutyNotice | null): NotificationItem[] {
-  const cleared = getIds(CLEARED_PREFIX, student.studentNumber);
+// Notifications can't be cleared any more (View all keeps every one);
+// ones cleared before stay hidden from the bell only.
+export function buildNotifications(student: StudentProfile, applications: Application[], duty?: DutyNotice | null, { includeCleared = false } = {}): NotificationItem[] {
+  const cleared = includeCleared ? new Set<string>() : getIds(CLEARED_PREFIX, student.studentNumber);
   const read = getIds(READ_PREFIX, student.studentNumber);
   const items: NotificationItem[] = [];
 
@@ -131,10 +133,4 @@ export function markRead(studentNumber: string, id: string) {
   const read = getIds(READ_PREFIX, studentNumber);
   read.add(id);
   saveIds(READ_PREFIX, studentNumber, read);
-}
-
-export function clearAll(studentNumber: string, ids: string[]) {
-  const cleared = getIds(CLEARED_PREFIX, studentNumber);
-  ids.forEach(id => cleared.add(id));
-  saveIds(CLEARED_PREFIX, studentNumber, cleared);
 }

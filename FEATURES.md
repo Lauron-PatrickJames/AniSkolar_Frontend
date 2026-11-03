@@ -51,7 +51,7 @@ SFAG scholars also have a Duty Hours page:
 - The deadline is set by the AdSO for the whole semester. Scholars see it but can't change it.
 - Their required hours depend on their grant percentage and year level. The page shows how many hours they've done, how many are left, and how many they need per week to finish on time.
 - Each duty shows whether their office head has confirmed it, is still checking it, or flagged it with a note.
-- They can claim hours for events set by the scholarship office or COSA, and the AdSO approves the claim.
+- Events set by the scholarship office or COSA count for duty hours: scholars sign the event's attendance sheet with their student number, and the hours are credited once the AdSO checks the sheet.
 
 Students can also message the AdSO directly. They can attach JPG, PNG or PDF files and link the message to one of their applications, and they get an email when the office replies.
 
@@ -76,7 +76,7 @@ The page also shows where each scholar did their duty, can email the office head
 
 This page shows every SFAG scholar for the semester along with their hours, status and pace. The AdSO assigns each scholar an office. This can be done one at a time, for several scholars at once, or randomly based on how many slots each office has. When assigning an office, the AdSO can search the office list and see how many slots are used and who the head is.
 
-The AdSO also sets the duty deadline for each semester, keeps the list of offices with their slots and heads, sets the required hours for each year level and grant percentage, and adds events that count for duty hours and approves claims for them.
+The AdSO also sets the duty deadline for each semester, keeps the list of offices with their slots and heads, sets the required hours for each year level and grant percentage, and adds events that count for duty hours. For each event the AdSO prints a blank attendance sheet for scholars to sign. After the event, the AdSO uploads photos or scans of the signed sheet and ticks who attended beside it, or pastes the student numbers. Saving credits those scholars the event's hours, and unticking someone takes the credit away.
 
 ### Statistics and reports
 
@@ -104,6 +104,8 @@ Emails are sent a few at a time to stay within the email service's limits. If on
 
 Every office that offers a scholarship has its own accounts: POLCA, Alumni, the Sports Development Office, Vicissitude, ROTC, the USG, Heraldo Filipino, and the college student governments (CICS, CBAA, COEd, CCJE, CEAT, CTHM, COS). Students apply to all of them online through AniSkolar. Each office handles its own scholarships entirely: they open and close them, edit their details, create new ones, decide the applications, run their renewals, and record when a scholar graduates or stops. The AdSO sees only their approved scholars, read-only, and can't change those scholarships or decisions. Each office only sees its own applications, renewals and documents, and has its own message templates. The statistics page is for the AdSO only.
 
+Offices with their own criteria get their own step in the application. The Sports Development Office has no applications and no renewals. Coaches pick players from the varsity tryouts, and the SDO adds each one as a scholar with the matching coach's document (the evaluation and recommendation for incoming players, or the evaluation and endorsement for current members), the grant, and the SDO Director's approval. When a player leaves the team, the SDO records that they stopped. Vicissitude asks for the board or staff position and duty hours, ROTC for the rank, the USG for its declarations, and the Heraldo Filipino for the position and published works. While reviewing, each office records what its decision rests on, and AniSkolar works out the result. That means the SDO's discount, Vicissitude's rating and discount, the ROTC amount by rank, the USG's verification and on-site schedule, and the Heraldo's points out of 20. Students never see this record. Each office posts its own announcements about its scholarships and can email those applicants or scholars. Application periods are picked from a calendar, and a scholarship closes on its own after the last day.
+
 POLCA accepts 2 scholars per college and Alumni accepts 2 for the whole campus. Neither scholarship has renewals. When a scholar graduates or stops, recording it opens the slot for someone else.
 
 
@@ -111,10 +113,13 @@ POLCA accepts 2 scholars per college and Alumni accepts 2 for the whole campus. 
 
 Office heads sign in with the school email the AdSO has listed for their office. They don't need to register separately. The portal opens with three counts: duties to check, scholars ready to evaluate, and unread messages. It shows the scholars assigned to their office, grouped by semester, with each scholar's progress toward their required hours and every duty they logged. Heads confirm or flag each duty, or confirm all of them at once. Once an office has a head in the system, only confirmed duties count toward a scholar's hours.
 
-A scholar can be evaluated once their hours for the semester are complete. At that moment the head gets an email, and the scholar moves to "Ready to evaluate" in the portal. The scholar is told too, by email, a notification and a note on their Duty Hours page, that their hours are done and their office head will evaluate them next. Once the head evaluates them, the scholar sees the evaluation on Duty Hours and on their renewal: the average and what it means, each rating, and the head's remarks. Heads fill out the 1 to 5 evaluation, which goes into the scholar's renewal for the next semester. They can message the AdSO directly.
+A scholar can be evaluated once their hours for the semester are complete. At that moment the head gets an email, and the scholar moves to "Ready to evaluate" in the portal. The scholar is told too, by email, a notification and a note on their Duty Hours page, that their hours are done and their office head will evaluate them next. Once the head evaluates them, the scholar sees the evaluation on Duty Hours and on their renewal: the average and what it means, each rating, and the head's remarks. Heads fill out the 1 to 5 evaluation, which goes into the scholar's renewal for the next semester. They can message the AdSO directly, and post announcements that only the scholars assigned to their office see, by email too if they choose. They see only their own scholars. The AdSO sees every scholar.
 
 
 ## Other things worth knowing
+
+- Office accounts can reset a forgotten password from the login page with a code sent by email. Students reset theirs through Microsoft. Everyone has an Account security page: office accounts can change their password and turn on two-step verification with an authenticator app, and everyone can see the devices they're signed in on and sign any of them out.
+- Notifications can't be cleared. "View all notifications" lists every one, read or unread.
 
 - Each office can only see its own data. Uploaded files can only be opened by the student who owns them or by the office handling them, and the server always uses the signed-in account to identify the student.
 - Messages containing explicit or offensive words, in English or Filipino, can't be sent. This includes words disguised with symbols, numbers or extra letters. The message box warns as you type, and the server rejects the message as well.

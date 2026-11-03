@@ -17,6 +17,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import GrantApplication from './GrantApplication';
 import { isGrantFormType } from '../../utils/grantForms';
 import { OFFICE_LABELS, officeOf } from '../../data/scholarships';
+import { OfficeAnswers, answerText, askedQuestions, officeFormFor } from '../../data/officeForms';
 import {
   Block, ChoicePills, FieldError, FileSlotView, Hint, Req, SubHeading, errorInputClass, inputClass, labelClass
 } from '../../components/grant-forms/fields';
@@ -278,6 +279,7 @@ interface DraftData {
   assetsExpenses: SfagAssetsExpenses;
   agreement: SfagAgreement;
   requestedGrant?: number | null;
+  officeAnswers?: OfficeAnswers;
   firstName: string;
   middleName: string;
   lastName: string;
@@ -320,7 +322,7 @@ export default function ApplyScholarship(props: ApplyScholarshipProps) {
 // Same layout as the POLCA / Alumni wizard (components/grant-forms/WizardShell).
 
 type StdSectionKey =
-  | 'profile'
+  | 'profile' | 'office'
   | 'grant' | 'personal' | 'contact' | 'parents' | 'siblings' | 'assets' | 'agreement'
   | 'documents' | 'review';
 
@@ -409,7 +411,11 @@ function StandardApplyScholarship({
   const { getToken } = useAuth();
   const isSfag = scholarship.applicationFormType === 'sfag';
   const isResubmit = !!existingApplication;
-  const sections = isSfag ? SFAG_SECTIONS : STANDARD_SECTIONS;
+  // Offices with their own criteria add a step of questions (data/officeForms.ts).
+  const officeForm = isSfag ? undefined : officeFormFor(scholarship.id);
+  const sections = isSfag ? SFAG_SECTIONS
+    : officeForm ? [STANDARD_SECTIONS[0], { key: 'office' as const, label: officeForm.stepLabel, part: 'form' as const }, ...STANDARD_SECTIONS.slice(1)]
+    : STANDARD_SECTIONS;
   const officeLabel = OFFICE_LABELS[officeOf(scholarship)];
 
   // Load any in-progress draft for this exact scholarship + student combo.
@@ -511,6 +517,16 @@ function StandardApplyScholarship({
   const [program, setProgram] = useState(asText(existingApplication?.program ?? storedStandard.program ?? savedDraft?.program ?? student.course));
   const [yearLevel, setYearLevel] = useState(asText(existingApplication?.yearLevel ?? storedStandard.yearLevel ?? savedDraft?.yearLevel ?? student.yearLevel));
   const [gpa, setGpa] = useState(asText(existingApplication?.gpa ?? storedStandard.gpa ?? savedDraft?.gpa ?? student.gpa));
+  const [officeAnswers, setOfficeAnswers] = useState<OfficeAnswers>(() =>
+    (storedStandard.officeAnswers as OfficeAnswers | undefined) ?? savedDraft?.officeAnswers ?? {}
+  );
+  const setAnswer = (key: string, value: OfficeAnswers[string]) => { setOfficeAnswers(a => ({ ...a, [key]: value })); clearFieldError(`office.${key}`); };
+  // The office's documents follow the answers (e.g. the SDO's coach's
+  // document for incoming or current players).
+  const requirements = officeForm?.documents ? officeForm.documents(officeAnswers) : scholarship.requirements;
+  const askedAnswers = (): OfficeAnswers => officeForm
+    ? Object.fromEntries(askedQuestions(officeForm, officeAnswers).map(q => [q.key, officeAnswers[q.key]]))
+    : {};
 
   const [uploads, setUploads] = useState<Record<string, UploadedFile>>({});
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
@@ -547,6 +563,7 @@ function StandardApplyScholarship({
       assetsExpenses,
       agreement,
       requestedGrant,
+      officeAnswers,
       firstName,
       middleName,
       lastName,
@@ -568,7 +585,7 @@ function StandardApplyScholarship({
     }
   }, [
     currentKey, visited, personalInfo, contactSchool, parentsGuardian, siblings,
-    assetsExpenses, agreement, requestedGrant, firstName, middleName, lastName, email, phone, program,
+    assetsExpenses, agreement, requestedGrant, officeAnswers, firstName, middleName, lastName, email, phone, program,
     yearLevel, gpa, uploads, scholarship.id, student.studentNumber, student.clerkId, isResubmit, isSuccess
   ]);
 
@@ -687,6 +704,7 @@ function StandardApplyScholarship({
     }
     if (isBlank(program)) errs.program = REQUIRED_MSG;
     if (isBlank(yearLevel)) errs.yearLevel = REQUIRED_MSG;
+    if (officeForm?.noGpa) return errs;
     if (isBlank(gpa)) {
       errs.gpa = REQUIRED_MSG;
     } else if (!isValidGpa(gpa)) {
@@ -695,9 +713,25 @@ function StandardApplyScholarship({
     return errs;
   };
 
+  const validateOffice = (): Record<string, string> => {
+    const errs: Record<string, string> = {};
+    if (!officeForm) return errs;
+    for (const q of askedQuestions(officeForm, officeAnswers)) {
+      const v = officeAnswers[q.key];
+      if (q.type === 'confirm') { if (v !== true) errs[`office.${q.key}`] = 'Tick the box to confirm.'; continue; }
+      if (v === undefined || v === '' || (typeof v === 'string' && !v.trim())) { errs[`office.${q.key}`] = REQUIRED_MSG; continue; }
+      if (q.type === 'number') {
+        const n = Number(v);
+        if (!Number.isFinite(n) || (q.min !== undefined && n < q.min) || (q.max !== undefined && n > q.max)) errs[`office.${q.key}`] = `Enter a number from ${q.min ?? 0} to ${q.max}.`;
+      }
+    }
+    return errs;
+  };
+
   const validateSection = (key: StdSectionKey): Record<string, string> => {
     switch (key) {
       case 'profile': return validateStandardFields();
+      case 'office': return validateOffice();
       case 'grant': return requestedGrant ? {} : { requestedGrant: 'Choose the grant you’re applying for.' };
       case 'personal': return validateSfagStep(1);
       case 'contact': return validateSfagStep(2);
@@ -720,7 +754,7 @@ function StandardApplyScholarship({
       case 'documents': {
         // On resubmit, a requirement already on file doesn't force a fresh upload.
         const errs: Record<string, string> = {};
-        scholarship.requirements.forEach(req => {
+        requirements.forEach(req => {
           if (!uploads[req] && !(isResubmit && previouslySubmittedDocNames.includes(req))) {
             errs[`doc:${req}`] = 'Upload a JPG file.';
           }
@@ -795,7 +829,7 @@ function StandardApplyScholarship({
     const formData = new FormData();
     const labels: string[] = [];
 
-    scholarship.requirements.forEach(req => {
+    requirements.forEach(req => {
       const entry = uploads[req];
       if (entry) {
         formData.append('documents', entry.file, entry.fileName);
@@ -818,7 +852,11 @@ function StandardApplyScholarship({
       formData.append('agreement', JSON.stringify(sfagDetails.agreement));
       if (sfagDetails.requestedGrant) formData.append('sfagPercentageRequested', String(sfagDetails.requestedGrant));
     } else {
-      formData.append('standardInfo', JSON.stringify({ firstName, middleName, lastName, email, phone, studentNumber, program, yearLevel, gpa }));
+      formData.append('standardInfo', JSON.stringify({
+        firstName, middleName, lastName, email, phone, studentNumber, program, yearLevel,
+        ...(officeForm?.noGpa ? {} : { gpa }),
+        ...(officeForm ? { officeAnswers: askedAnswers() } : {}),
+      }));
     }
 
     const token = await getToken();
@@ -879,7 +917,7 @@ function StandardApplyScholarship({
         program: isSfag ? personalInfo.course : program,
         yearLevel: isSfag ? personalInfo.yearLevel : yearLevel,
         gpa: isSfag ? student.gpa : gpa,
-        documents: scholarship.requirements.map(req => ({
+        documents: requirements.map(req => ({
           name: req,
           uploaded: true,
           fileName: uploads[req]?.fileName
@@ -978,7 +1016,7 @@ function StandardApplyScholarship({
           {textField({ key: 'studentNumber', label: 'Student Number', disabled: true, value: studentNumber, onChange: () => {} })}
           {textField({ key: 'program', label: 'Academic Program (Course)', required: true, value: program, onChange: setProgram })}
           {selectField({ key: 'yearLevel', label: 'Year Level', required: true, value: yearLevel, onChange: setYearLevel, options: YEAR_LEVEL_OPTIONS, placeholder: 'Select…' })}
-          {textField({ key: 'gpa', label: 'Cumulative GPA', kind: 'gpa', required: true, placeholder: 'e.g. 3.25', value: gpa, onChange: setGpa, hint: 'Scale: 4.00 (highest) – 0.00 (lowest)' })}
+          {!officeForm?.noGpa && textField({ key: 'gpa', label: 'Cumulative GPA', kind: 'gpa', required: true, placeholder: 'e.g. 3.25', value: gpa, onChange: setGpa, hint: 'Scale: 4.00 (highest) – 0.00 (lowest)' })}
         </div>
       </Block>
     </div>
@@ -1207,6 +1245,89 @@ function StandardApplyScholarship({
     { key: 'amortizationAuto', label: 'Amortization (Auto)' }
   ];
 
+  // The office's own questions (data/officeForms.ts).
+  const renderOffice = () => {
+    if (!officeForm) return null;
+    return (
+      <div className="space-y-6">
+        <p className="text-xs text-slate-500">{officeForm.intro}</p>
+        {askedQuestions(officeForm, officeAnswers).map(q => {
+          const key = `office.${q.key}`;
+          const error = fieldError(key);
+          const value = officeAnswers[q.key];
+          if (q.type === 'confirm') {
+            return (
+              <div key={q.key}>
+                <label className={`flex items-start gap-2.5 text-sm leading-relaxed cursor-pointer ${error ? 'text-rose-700' : 'text-slate-700'}`}>
+                  <input type="checkbox" checked={value === true} onChange={e => setAnswer(q.key, e.target.checked)} className={`mt-1 shrink-0 ${error ? 'accent-rose-500' : 'accent-brand-green'}`} />
+                  <span>{q.label}</span>
+                </label>
+                <FieldError message={error} />
+              </div>
+            );
+          }
+          if (q.type === 'choice') {
+            return (
+              <Block key={q.key}>
+                <SubHeading>{q.label} <Req /></SubHeading>
+                <div role="radiogroup" className="grid gap-3 sm:grid-cols-2">
+                  {q.options!.map(o => {
+                    const active = value === o.value;
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setAnswer(q.key, o.value)}
+                        className={`rounded-xl border p-4 text-left transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green ${active ? 'border-brand-green bg-brand-green/5 ring-1 ring-brand-green' : error ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
+                      >
+                        <span className="block text-sm font-semibold text-slate-900">{o.label}</span>
+                        {o.hint && <span className="mt-0.5 block text-xs text-slate-500">{o.hint}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <FieldError message={error} />
+              </Block>
+            );
+          }
+          if (q.type === 'select') {
+            return (
+              <div key={q.key}>
+                <label className={labelClass}>{q.label} <Req /></label>
+                <select className={fieldClass(key)} value={String(value ?? '')} onChange={e => setAnswer(q.key, e.target.value)}>
+                  <option value="">Select…</option>
+                  {q.options!.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                {error ? <FieldError message={error} /> : q.hint ? <Hint>{q.hint}</Hint> : null}
+              </div>
+            );
+          }
+          return (
+            <div key={q.key}>
+              <label className={labelClass}>{q.label} <Req /></label>
+              <input
+                type={q.type === 'number' ? 'number' : 'text'}
+                inputMode={q.type === 'number' ? 'numeric' : undefined}
+                min={q.min}
+                max={q.max}
+                className={fieldClass(key)}
+                value={value === undefined ? '' : String(value)}
+                placeholder={q.placeholder}
+                maxLength={q.type === 'text' ? 100 : undefined}
+                onChange={e => setAnswer(q.key, q.type === 'number' ? (e.target.value === '' ? undefined : Number(e.target.value)) : e.target.value)}
+                aria-invalid={!!error}
+              />
+              {error ? <FieldError message={error} /> : q.hint ? <Hint>{q.hint}</Hint> : null}
+            </div>
+          );
+        })}
+        <p className="text-xs text-slate-500">Approved by the {officeForm.approver}.</p>
+      </div>
+    );
+  };
+
   const renderGrant = () => (
     <div className="space-y-6">
       <Block>
@@ -1294,7 +1415,10 @@ function StandardApplyScholarship({
         </div>
       )}
       <div className="space-y-3">
-        {scholarship.requirements.map(req => (
+        {requirements.length === 0 && (
+          <p className="text-sm text-slate-500">{officeForm?.documents ? `Answer the ${officeForm.stepLabel} step first: your documents depend on it.` : 'No documents to upload.'}</p>
+        )}
+        {requirements.map(req => (
           <FileSlotView
             key={req}
             label={req}
@@ -1315,10 +1439,23 @@ function StandardApplyScholarship({
       <p className="text-xs text-slate-500">Review your answers below. Use the section list to go back and edit anything before submitting.</p>
       {isSfag
         ? <SfagAnswers details={buildSfagDetails()} />
-        : <StandardProfileAnswers info={{ firstName, middleName, lastName, email, phone, studentNumber, program, yearLevel, gpa }} />}
+        : <StandardProfileAnswers info={{ firstName, middleName, lastName, email, phone, studentNumber, program, yearLevel, gpa: officeForm?.noGpa ? '' : gpa }} />}
+      {officeForm && (
+        <div className="pt-6 border-t border-slate-100">
+          <h4 className="font-display font-bold text-sm text-slate-900 mb-3">{officeForm.stepLabel}</h4>
+          <dl className="grid gap-3 sm:grid-cols-2">
+            {askedQuestions(officeForm, officeAnswers).map(q => (
+              <div key={q.key} className={q.type === 'confirm' ? 'sm:col-span-2' : ''}>
+                <dt className="text-xs text-slate-500">{q.label}</dt>
+                <dd className="text-sm font-semibold text-slate-800">{answerText(q, officeAnswers[q.key])}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
       <div className="pt-6 border-t border-slate-100 space-y-2">
         <h4 className="font-display font-bold text-sm text-slate-900 mb-3">Documents</h4>
-        {scholarship.requirements.map(req => {
+        {requirements.map(req => {
           const selected = uploads[req];
           const onRecord = isResubmit && previouslySubmittedDocNames.includes(req);
           const ok = !!selected || onRecord;
@@ -1338,6 +1475,7 @@ function StandardApplyScholarship({
 
   const SECTION_RENDERERS: Record<StdSectionKey, () => React.ReactNode> = {
     profile: renderProfile,
+    office: renderOffice,
     grant: renderGrant,
     personal: renderPersonal,
     contact: renderContact,
@@ -1356,7 +1494,7 @@ function StandardApplyScholarship({
       <WizardHeader
         scholarshipName={scholarship.name}
         isResubmit={isResubmit}
-        subtitle={<>Reviewed by the {officeLabel}</>}
+        subtitle={<>Reviewed by the {officeLabel}{officeForm ? <>; approved by the {officeForm.approver}</> : null}</>}
         right={!isResubmit && <DraftIndicator status={savedAt ? 'saved' : 'idle'} savedAt={savedAt} localOnly />}
         doneCount={doneCount}
         total={countable.length}

@@ -6,7 +6,7 @@ import {
   AlertCircle, ArrowRight, Calendar, CheckCircle, Clock, FileText, Loader2, MessageSquare, RefreshCw, Upload, X, XCircle
 } from 'lucide-react';
 import {
-  NOT_CONTINUING_REASONS, NotContinuingReason, Renewal, RenewalPeriod, RenewalStatus, formatGpa, periodLabel
+  NOT_CONTINUING_REASONS, NotContinuingReason, Renewal, RenewalPeriod, RenewalStatus, deadlineLabel, formatGpa, periodLabel
 } from '../../utils/renewals';
 import { CardsSkeleton } from '../../components/Skeletons';
 
@@ -185,7 +185,7 @@ function PeriodFacts({ period }: { period: RenewalPeriod }) {
         <div className="flex items-center gap-1.5 text-slate-600">
           <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden />
           <dt className="sr-only">Deadline</dt>
-          <dd><span className="font-semibold">Deadline:</span> {period.deadline}</dd>
+          <dd><span className="font-semibold">Deadline:</span> {deadlineLabel(period.deadline)}</dd>
         </div>
       )}
       {period.minGpa !== undefined && period.minGpa !== null && (

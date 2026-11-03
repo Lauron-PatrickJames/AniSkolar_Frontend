@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Download, FileText, MessageSquare, Pencil, Printer, Users } from 'lucide-react';
+import { ChevronRight, Download, FileText, MessageSquare, Pencil, Printer, UserPlus, Users } from 'lucide-react';
 import EditProfileDialog from '../../components/profile/EditProfileDialog';
 import { StudentProfile } from '../../types';
 import { downloadZip } from '../../utils/documents';
@@ -29,6 +29,8 @@ interface AdminScholarsProps {
   onOpenApplication: (applicationId: string) => void;
   // Opens the AdSO's conversation with the student (AdSO only).
   onMessageStudent?: (studentNumber: string) => void;
+  // Offices that add their scholars themselves (the SDO): "Add scholar".
+  onAddScholar?: () => void;
 }
 
 // --- Scholar aggregation (client-side; used for the list/detail views and
@@ -354,7 +356,7 @@ const SEGMENT_TO_RENEWAL: Record<ScholarSegment, RenewalFilter> = { 'All': 'all'
 const REFETCH_AFTER_MS = 30_000;
 
 export default function AdminScholars({
-  applications, isLoading, error, getToken, apiBaseUrl, onRefresh, selectedStudentNumber, onSelectStudent, onOpenApplication, onMessageStudent
+  applications, isLoading, error, getToken, apiBaseUrl, onRefresh, selectedStudentNumber, onSelectStudent, onOpenApplication, onMessageStudent, onAddScholar
 }: AdminScholarsProps) {
   const [search, setSearch] = useState('');
   const [segment, setSegment] = useState<ScholarSegment>('All');
@@ -466,6 +468,8 @@ export default function AdminScholars({
       <PageHeader
         title="Scholars"
         actions={
+          <>
+          {onAddScholar && <Button variant="primary" icon={UserPlus} onClick={onAddScholar}>Add scholar</Button>}
           <Menu
             label={isExporting ? 'Exporting…' : 'Export'}
             icon={Download}
@@ -476,6 +480,7 @@ export default function AdminScholars({
               { key: 'print', label: 'Print / save as PDF', icon: Printer, onSelect: () => setPickerFor('print') }
             ]}
           />
+          </>
         }
       />
 

@@ -78,6 +78,7 @@ export default function AnnouncementCard({ announcement, id, isInitiallyExpanded
         <h3 className="text-sm sm:text-base font-display font-bold text-slate-900 leading-snug mb-2 hover:text-brand-green transition-colors cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
           {announcement.title}
         </h3>
+        {announcement.postedBy && <p className="-mt-1 mb-2 text-xs font-medium text-slate-500">Posted by {announcement.postedBy}</p>}
 
         <p className="text-xs sm:text-sm text-slate-600 line-clamp-2 leading-relaxed mb-4">
           {announcement.description}

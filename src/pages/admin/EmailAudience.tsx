@@ -79,12 +79,15 @@ export function describeTarget(t: EmailTarget): string {
 
 interface Found { studentNumber: string; name: string; programCode?: string; college?: string; yearLevel?: string }
 
-export default function EmailAudience({ value, onChange, relatedScholarshipId, getToken, disabled }: {
+export default function EmailAudience({ value, onChange, relatedScholarshipId, getToken, disabled, onlyScholarshipIds }: {
   value: EmailTarget;
   onChange: (next: EmailTarget) => void;
   relatedScholarshipId: string;
   getToken: () => Promise<string | null>;
   disabled?: boolean;
+  // Offices other than the AdSO: only the applicants or scholars of these
+  // (their own) scholarships.
+  onlyScholarshipIds?: string[];
 }) {
   const set = (patch: Partial<EmailTarget>) => onChange({ ...value, ...patch });
   const [preview, setPreview] = useState<{ count: number; sample: string[]; unknown: string[] } | null>(null);
@@ -96,7 +99,15 @@ export default function EmailAudience({ value, onChange, relatedScholarshipId, g
   const narrowed = value.colleges.length > 0 || value.yearLevels.length > 0;
   const [showNarrow, setShowNarrow] = useState(narrowed);
 
-  const scholarships = mockScholarships.filter(s => acceptsOnlineApplications(s));
+  const scholarships = mockScholarships.filter(s => acceptsOnlineApplications(s) && (!onlyScholarshipIds || onlyScholarshipIds.includes(s.id)));
+  const modes = onlyScholarshipIds ? MODES.filter(m => m.value === 'applicants' || m.value === 'scholars') : MODES;
+  // An office starts on its own scholars, all its scholarships ticked.
+  useEffect(() => {
+    if (onlyScholarshipIds && (!['applicants', 'scholars'].includes(value.mode) || !value.scholarshipIds.length)) {
+      onChange({ ...value, mode: ['applicants', 'scholars'].includes(value.mode) ? value.mode : 'scholars', scholarshipIds: relatedScholarshipId ? [relatedScholarshipId] : onlyScholarshipIds });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value.mode, value.scholarshipIds.length]);
 
   // Live count, a moment after the last change.
   const key = JSON.stringify(value);
@@ -160,7 +171,7 @@ export default function EmailAudience({ value, onChange, relatedScholarshipId, g
     <div className="space-y-3">
       <Field label="Email to">
         <Select value={value.mode} onChange={v => changeMode(v as EmailTarget['mode'])} disabled={disabled}>
-          {MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          {modes.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
         </Select>
       </Field>
 

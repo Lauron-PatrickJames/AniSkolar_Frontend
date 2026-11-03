@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bell, User, LogOut, Settings, Shield, ChevronDown, Menu, X, ArrowRight } from 'lucide-react';
 import { StudentProfile, Application } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { buildNotifications, markAllRead, markRead, clearAll, NotificationItem, DutyNotice } from '../utils/notifications';
+import { buildNotifications, markAllRead, markRead, NotificationItem, DutyNotice } from '../utils/notifications';
 import { displayName, nameInitials } from '../utils/names';
 
 interface NavbarProps {
@@ -66,11 +66,6 @@ export default function Navbar({
   const markAllAsRead = () => {
     markAllRead(student.studentNumber, notifications.map(n => n.id));
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-  };
-
-  const clearNotifications = () => {
-    clearAll(student.studentNumber, notifications.map(n => n.id));
-    setNotifications([]);
   };
 
   // Clicking a notification: mark it read and open its preview pop-up
@@ -209,16 +204,14 @@ export default function Navbar({
                     )}
                   </div>
 
-                  {notifications.length > 0 && (
-                    <div className="p-2 border-t border-slate-100 bg-slate-50 text-center">
-                      <button
-                        onClick={clearNotifications}
-                        className="text-xs text-slate-500 hover:text-slate-700 font-medium w-full py-1"
-                      >
-                        Clear all
-                      </button>
-                    </div>
-                  )}
+                  <div className="p-2 border-t border-slate-100 bg-slate-50 text-center">
+                    <button
+                      onClick={() => { setShowNotifications(false); onNavigate('notifications'); }}
+                      className="text-xs text-brand-green hover:underline font-semibold w-full py-1"
+                    >
+                      View all notifications
+                    </button>
+                  </div>
                 </motion.div>
               </>
             )}
@@ -297,10 +290,16 @@ export default function Navbar({
                       <User className="w-4 h-4 text-slate-400 shrink-0" />
                       <span>My Profile</span>
                     </button>
-                    <div className="w-full text-left px-4 py-2 text-xs text-slate-400 flex items-center space-x-2">
-                      <Shield className="w-4 h-4 text-slate-300 shrink-0" />
-                      <span>Security Settings</span>
-                    </div>
+                    <button
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        onNavigate('account-security');
+                      }}
+                      className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center space-x-2"
+                    >
+                      <Shield className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span>Account security</span>
+                    </button>
                   </div>
 
                   <div className="py-1">
@@ -334,7 +333,7 @@ const STATUS_STYLE: Record<string, string> = {
 
 // The pop-up a notification opens: the whole message, its status and the
 // office's note, with a button to go to what it's about.
-function NotificationPreview({ item, onClose, onOpen }: { item: NotificationItem; onClose: () => void; onOpen: () => void }) {
+export function NotificationPreview({ item, onClose, onOpen }: { item: NotificationItem; onClose: () => void; onOpen: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);

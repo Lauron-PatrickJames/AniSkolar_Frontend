@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
-import { Award, BarChart3, Building2, Calculator, ChevronRight, Clock, GraduationCap, LayoutList, LogOut, Megaphone, Menu, MessageSquare, RefreshCw, ShieldCheck, X, Zap } from 'lucide-react';
+import { Award, BarChart3, Building2, Calculator, ChevronDown, ChevronRight, Clock, GraduationCap, LayoutDashboard, LayoutList, LogOut, Megaphone, Menu, MessageSquare, RefreshCw, ShieldCheck, X, Zap } from 'lucide-react';
 import logo from '../../assets/logo.png';
-import { Avatar, Badge, IconButton } from './AdminUI';
+import { Avatar, IconButton } from './AdminUI';
 
-export type MainView = 'applications' | 'renewals' | 'dutyHours' | 'analytics' | 'fse' | 'lifecycle' | 'messages' | 'announcements' | 'scholarships' | 'automation' | 'security';
+export type MainView = 'home' | 'applications' | 'renewals' | 'dutyHours' | 'analytics' | 'fse' | 'lifecycle' | 'messages' | 'announcements' | 'scholarships' | 'automation' | 'security';
 
 export const VIEW_TITLES: Record<MainView, string> = {
+  home: 'Dashboard',
   applications: 'Applications',
   renewals: 'Renewals',
   dutyHours: 'Duty hours',
@@ -21,6 +22,7 @@ export const VIEW_TITLES: Record<MainView, string> = {
 };
 
 const SECTIONS: { title: string; items: { id: MainView; icon: React.ElementType }[] }[] = [
+  { title: '', items: [{ id: 'home', icon: LayoutDashboard }] },
   { title: 'Review', items: [{ id: 'applications', icon: LayoutList }, { id: 'renewals', icon: RefreshCw }, { id: 'lifecycle', icon: GraduationCap }, { id: 'dutyHours', icon: Clock }] },
   { title: 'Insights', items: [{ id: 'analytics', icon: BarChart3 }, { id: 'fse', icon: Calculator }] },
   { title: 'Communication', items: [{ id: 'messages', icon: MessageSquare }, { id: 'announcements', icon: Megaphone }] },
@@ -37,7 +39,12 @@ interface AdminLayoutProps {
   onNavigate: (view: MainView) => void;
   onLogout: () => void;
   adminEmail?: string;
+  // The account's name and photo in Clerk, when set.
+  adminName?: string;
+  adminAvatarUrl?: string;
   officeLabel: string;
+  // e.g. "SDO", for the account button.
+  officeShort?: string;
   pendingCount?: number;
   // Unread messages from students, shown on Messages.
   messageCount?: number;
@@ -53,7 +60,7 @@ interface AdminLayoutProps {
 // and table headers (sticky top-topbar) stay pinned while pages scroll.
 // Sidebar: full width from lg, an icon rail from md to lg, a drawer below md.
 export default function AdminLayout({
-  currentView, onNavigate, onLogout, adminEmail, officeLabel, pendingCount, messageCount, hiddenViews = [], breadcrumbs, pageKey, children
+  currentView, onNavigate, onLogout, adminEmail, adminName, adminAvatarUrl, officeLabel, officeShort, pendingCount, messageCount, hiddenViews = [], breadcrumbs, pageKey, children
 }: AdminLayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
@@ -100,7 +107,7 @@ export default function AdminLayout({
               />
               {breadcrumbs.length > 0 && <Breadcrumbs items={breadcrumbs} />}
             </div>
-            <Badge icon={Building2} className="hidden sm:inline-flex">{officeLabel}</Badge>
+            <AccountMenu adminEmail={adminEmail} adminName={adminName} avatarUrl={adminAvatarUrl} officeLabel={officeLabel} officeShort={officeShort ?? officeLabel} onSecurity={() => onNavigate('security')} onLogout={onLogout} />
           </header>
 
           <main id="admin-main" tabIndex={-1} className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8">
@@ -109,6 +116,75 @@ export default function AdminLayout({
         </div>
       </div>
     </MotionConfig>
+  );
+}
+
+// The signed-in account, top right (as in the student portal): their name
+// and office (short, so it never gets cut off), then a menu with the full
+// office, Account security and Sign out.
+function AccountMenu({ adminEmail, adminName, avatarUrl, officeLabel, officeShort, onSecurity, onLogout }: {
+  adminEmail?: string;
+  adminName?: string;
+  avatarUrl?: string;
+  officeLabel: string;
+  officeShort: string;
+  onSecurity: () => void;
+  onLogout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // The name in Clerk, else the email's name part ("maria.santos" → "Maria Santos").
+  const name = adminName?.trim() || (adminEmail?.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase())) || 'Administrator';
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!rootRef.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  const item = 'flex w-full items-center gap-3 rounded-control px-2.5 py-2 text-left text-sm hover:bg-surface-muted focus:outline-hidden focus-visible:bg-surface-muted';
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`${name}, ${officeLabel}. Account menu`}
+        className={`flex items-center gap-2.5 rounded-full py-1 pl-1 pr-2 transition-colors hover:bg-surface-muted focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent sm:pr-3 ${open ? 'bg-surface-muted' : ''}`}
+      >
+        <Avatar name={name} avatarUrl={avatarUrl} size="sm" />
+        <span className="hidden text-left leading-tight sm:block">
+          <span className="block max-w-40 truncate text-sm font-medium text-ink">{name}</span>
+          <span className="block text-xs text-ink-subtle">{officeShort}</span>
+        </span>
+        <ChevronDown className={`size-4 text-ink-subtle transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-full z-40 mt-2 w-72 rounded-card bg-surface p-1.5 shadow-overlay ring-1 ring-line">
+          <div className="flex items-center gap-3 px-2.5 pb-3 pt-2">
+            <Avatar name={name} avatarUrl={avatarUrl} size="md" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-ink">{name}</p>
+              {adminEmail && <p className="truncate text-xs text-ink-muted">{adminEmail}</p>}
+            </div>
+          </div>
+          <div className="mx-1 mb-1.5 flex items-start gap-2 rounded-control bg-surface-muted px-2.5 py-2">
+            <Building2 className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
+            <p className="text-xs leading-snug text-ink">{officeLabel}</p>
+          </div>
+          <div className="border-t border-line pt-1.5">
+            <button type="button" role="menuitem" className={`${item} text-ink`} onClick={() => { setOpen(false); onSecurity(); }}>
+              <ShieldCheck className="size-4 text-ink-subtle" aria-hidden /> Account security
+            </button>
+            <button type="button" role="menuitem" className={`${item} text-danger-fg hover:bg-danger-bg`} onClick={() => { setOpen(false); onLogout(); }}>
+              <LogOut className="size-4" aria-hidden /> Sign out
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -154,7 +230,6 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
     .map(section => ({ ...section, items: section.items.filter(item => !hiddenViews.includes(item.id)) }))
     .filter(section => section.items.length > 0);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const displayName = adminEmail?.split('@')[0].replace(/[._-]+/g, ' ') || 'Administrator';
 
   // Drawer (below md): move focus in on open, close on Escape, and hand
   // focus back to the menu button on close.
@@ -195,8 +270,8 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
 
         <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4 md:max-lg:overflow-visible md:max-lg:px-2">
           {sections.map(section => (
-            <div key={section.title}>
-              <p className="mb-1 px-2.5 text-xs font-medium text-ink-subtle md:max-lg:sr-only">{section.title}</p>
+            <div key={section.title || 'top'}>
+              {section.title && <p className="mb-1 px-2.5 text-xs font-medium text-ink-subtle md:max-lg:sr-only">{section.title}</p>}
               <ul className="space-y-0.5">
                 {section.items.map(item => {
                   const Icon = item.icon;
@@ -242,17 +317,6 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
           ))}
         </nav>
 
-        <div className="shrink-0 border-t border-line p-3 md:max-lg:px-2">
-          <div className="flex items-center gap-3 px-1 md:max-lg:justify-center md:max-lg:px-0">
-            <span className="md:max-lg:hidden"><Avatar name={displayName} size="sm" /></span>
-            <div className="min-w-0 flex-1 md:max-lg:hidden">
-              <p className="truncate text-sm font-medium capitalize text-ink">{displayName}</p>
-              <p className="truncate text-xs text-ink-subtle">{officeLabel}</p>
-            </div>
-            <IconButton icon={ShieldCheck} label="Account security" onClick={() => { onNavigate('security'); onClose(); }} />
-            <IconButton icon={LogOut} label="Sign out" onClick={onLogout} />
-          </div>
-        </div>
       </aside>
     </>
   );

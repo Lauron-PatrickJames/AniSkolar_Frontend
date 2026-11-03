@@ -680,12 +680,6 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       )}
                       <span>{isLoading ? 'Redirecting...' : 'Sign in with Microsoft'}</span>
                     </button>
-                    <p className="text-center text-xs text-slate-400">
-                      Forgot your DLSU-D password?{' '}
-                      <a href="https://passwordreset.microsoftonline.com/" target="_blank" rel="noopener noreferrer" className="font-bold text-brand-green hover:underline">
-                        Reset it with Microsoft
-                      </a>
-                    </p>
 
                     <div className="relative py-1">
                       <div className="absolute inset-0 flex items-center">

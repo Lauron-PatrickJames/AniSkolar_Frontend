@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSession, useUser } from '@clerk/react';
-import { ExternalLink, KeyRound, Laptop, LogOut, ShieldCheck, Smartphone } from 'lucide-react';
+import { KeyRound, Laptop, LogOut, Smartphone } from 'lucide-react';
 import { Alert, Badge, Button, Card, Checkbox, ConfirmDialog, Field, Skeleton, TextInput } from '../pages/admin/AdminUI';
 
 // Account security, for everyone signed in. Email + password accounts
-// (offices) change their password and can turn on two-step verification;
-// students sign in with their DLSU-D Microsoft account, so their password
-// and its security are managed at Microsoft. Everyone sees the devices
-// they're signed in on and can sign one out.
+// (offices) change their password and can turn on two-step verification.
+// Students sign in with their DLSU-D Microsoft account and Authenticator,
+// so there's no password here for them. Everyone sees the devices they're
+// signed in on and can sign one out.
 
 type SessionRow = Awaited<ReturnType<NonNullable<ReturnType<typeof useUser>['user']>['getSessions']>>[number];
 
@@ -23,26 +23,10 @@ export default function AccountSecurity() {
   if (!isLoaded || !user) return <Card><Skeleton className="h-24 w-full" /></Card>;
   return (
     <div className="space-y-6">
-      {user.passwordEnabled ? <PasswordCard /> : <MicrosoftCard />}
+      {user.passwordEnabled && <PasswordCard />}
       {user.passwordEnabled && <TwoStepCard />}
       <DevicesCard />
     </div>
-  );
-}
-
-function MicrosoftCard() {
-  return (
-    <Card title="Password" description="You sign in with your DLSU-D Microsoft account, so your password is managed by Microsoft, not AniSkolar.">
-      <div className="flex flex-wrap gap-2">
-        <a href="https://passwordreset.microsoftonline.com/" target="_blank" rel="noopener noreferrer">
-          <Button icon={KeyRound} iconRight={ExternalLink}>Reset my password</Button>
-        </a>
-        <a href="https://mysignins.microsoft.com/security-info" target="_blank" rel="noopener noreferrer">
-          <Button icon={ShieldCheck} iconRight={ExternalLink}>Microsoft security info</Button>
-        </a>
-      </div>
-      <p className="mt-3 text-sm text-ink-muted">Forgot it or locked out? The DLSU-D ICT office can also reset it.</p>
-    </Card>
   );
 }
 

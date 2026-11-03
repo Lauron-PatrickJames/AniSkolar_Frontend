@@ -452,8 +452,9 @@ other office's **approved** scholars, live and read-only.
 - **Notifications**: "Clear all" is gone; "View all notifications" opens
   a page with every notification (All / Unread, mark all as read).
 - **Forgot password** (admin login): Clerk emails a code, then a new
-  password signs them in and out of other devices. Students get a link to
-  Microsoft's reset. **Account security** (admins: sidebar shield icon;
+  password signs them in and out of other devices. Students have no
+  password in AniSkolar (DLSU-D Microsoft sign-in with the Authenticator),
+  so their page shows only signed-in devices. **Account security** (admins: sidebar shield icon;
   students: profile menu; office heads: header): change password,
   authenticator-app two-step verification with backup codes, signed-in
   devices with sign out. Two-step needs "Authenticator application"

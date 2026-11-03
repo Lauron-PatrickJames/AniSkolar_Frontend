@@ -1,26 +1,34 @@
 import React, { useState, useMemo } from 'react';
-import { Announcement } from '../../types';
+import { Announcement, Scholarship } from '../../types';
 import AnnouncementCard from '../../components/AnnouncementCard';
 import { Search, Megaphone, Bell, Calendar, SlidersHorizontal, Info } from 'lucide-react';
 
 interface AnnouncementsProps {
   announcements: Announcement[];
+  // For the scholarship filter's names.
+  scholarships?: Scholarship[];
   id?: string;
 }
 
-type AnnouncementFilter = 'All' | 'General' | 'Deadline' | 'Event' | 'Update';
+// Filter by scholarship: 'All', 'General' (not about one), or a scholarship id.
+const short = (name: string) => name.match(/\(([^)]+)\)\s*$/)?.[1] ?? name.replace(/ Scholarship( Program)?$/, '');
 
-export default function Announcements({ announcements, id }: AnnouncementsProps) {
+export default function Announcements({ announcements, scholarships = [], id }: AnnouncementsProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<AnnouncementFilter>('All');
+  const [activeCategory, setActiveCategory] = useState<string>('All');
 
-  // Filter Categories list
-  const categories: AnnouncementFilter[] = ['All', 'General', 'Deadline', 'Event', 'Update'];
+  // All, the scholarships that have announcements, then General.
+  const used = [...new Set(announcements.map(a => a.scholarshipId).filter((sid): sid is string => !!sid))];
+  const categories: { key: string; label: string }[] = [
+    { key: 'All', label: 'All' },
+    ...used.map(sid => ({ key: sid, label: short(scholarships.find(s => s.id === sid)?.name ?? sid) })),
+    ...(announcements.some(a => !a.scholarshipId) ? [{ key: 'General', label: 'General' }] : []),
+  ];
 
   // Search & Filter Logic
   const filteredAnnouncements = useMemo(() => {
     return announcements.filter(ann => {
-      const matchesCategory = activeCategory === 'All' || ann.category === activeCategory;
+      const matchesCategory = activeCategory === 'All' || (activeCategory === 'General' ? !ann.scholarshipId : ann.scholarshipId === activeCategory);
       const matchesSearch = ann.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             ann.description.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
@@ -47,7 +55,7 @@ export default function Announcements({ announcements, id }: AnnouncementsProps)
 
           <div className="flex items-center space-x-2 text-slate-400 text-xs self-start md:self-auto font-medium">
             <SlidersHorizontal className="w-4 h-4" />
-            <span>Category Filters</span>
+            <span>By scholarship</span>
           </div>
         </div>
 
@@ -55,15 +63,15 @@ export default function Announcements({ announcements, id }: AnnouncementsProps)
         <div className="flex items-center overflow-x-auto pb-2 scrollbar-none border-b border-slate-100 gap-1.5">
           {categories.map(category => (
             <button
-              key={category}
-              onClick={() => setActiveCategory(category)}
+              key={category.key}
+              onClick={() => setActiveCategory(category.key)}
               className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all focus:outline-hidden ${
-                activeCategory === category
+                activeCategory === category.key
                   ? 'bg-brand-green text-white shadow-sm'
                   : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
               }`}
             >
-              {category}
+              {category.label}
             </button>
           ))}
         </div>

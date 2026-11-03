@@ -364,7 +364,6 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
   const header = (
     <PageHeader
       title="Statistics"
-      description="Submissions, outcomes and review times for the applications your office handles."
       meta={!firstLoad && <span className="text-xs text-ink-subtle">Showing {rangeText}</span>}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -502,7 +501,6 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
         <Card
           flush
           title="By scholarship"
-          description="Applications submitted in this range. Select a scholarship to see its applications."
           actions={<Button size="sm" icon={Download} onClick={exportCsv}>Export CSV</Button>}
         >
           <Table label="Applications by scholarship" minWidth={showOffice ? '56rem' : '48rem'}>

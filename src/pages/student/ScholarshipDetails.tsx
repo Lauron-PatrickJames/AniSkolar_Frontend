@@ -3,7 +3,7 @@ import { Scholarship, Application, Announcement } from '../../types';
 import AnnouncementCard from '../../components/AnnouncementCard';
 import { ArrowLeft, ArrowRight, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info, Megaphone } from 'lucide-react';
 import { motion } from 'motion/react';
-import { OFFICE_SHORT_LABELS, acceptsOnlineApplications, officeOf } from '../../data/scholarships';
+import { OFFICE_SHORT_LABELS, acceptsOnlineApplications, handlingOffice, officeOf } from '../../data/scholarships';
 
 interface ScholarshipDetailsProps {
   scholarship: Scholarship;
@@ -168,7 +168,7 @@ export default function ScholarshipDetails({
           ) : isInfoOnly ? (
             <span className="w-full md:w-auto px-5 py-3 rounded-xl bg-slate-100 text-slate-500 border border-slate-200 font-display font-bold uppercase text-xs tracking-wider inline-flex items-center justify-center gap-2">
               <Info className="w-4 h-4" />
-              No Online Application
+              Apply through the {handlingOffice(scholarship)}
             </span>
           ) : (
             <button
@@ -199,7 +199,7 @@ export default function ScholarshipDetails({
           <Info className="w-4.5 h-4.5 text-sky-700 shrink-0 mt-0.5" />
           <div className="text-xs text-sky-900 leading-relaxed">
             <p className="font-bold mb-0.5">How this scholarship is awarded</p>
-            <p>{scholarship.availNote ?? 'This scholarship doesn\'t take online applications.'} For questions, contact the {officeShort}.</p>
+            <p>{scholarship.availNote ?? 'This scholarship isn\'t applied for online.'} Go to the <span className="font-bold">{handlingOffice(scholarship)}</span> to apply or ask about it.</p>
           </div>
         </div>
       )}

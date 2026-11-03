@@ -9,10 +9,10 @@ import { ResultDialog, Alert, Badge, Button, Card, Checkbox, ErrorState, Field, 
 // sent or changed) and run now; the timers run it on schedule once it's on.
 // Personal emails go through an outbox that sends a few a minute.
 
-type JobName = 'dutyReminders' | 'officeHeadReminders' | 'deadlineReminders' | 'adsoDigest' | 'termRollover';
+type JobName = 'dutyReminders' | 'officeHeadReminders' | 'deadlineReminders';
 interface LastRun { period: string; at: string; queued: number; summary: string; error?: string }
 interface AutomationView {
-  settings: Record<JobName | 'keepLastOffice', boolean> & { adsoDigestTo: string[]; updatedBy: string | null; updatedAt: string | null };
+  settings: Record<JobName, boolean> & { updatedBy: string | null; updatedAt: string | null };
   lastRuns: Partial<Record<JobName, LastRun>>;
   outbox: { queued: number; sentLast7Days: number; failedLast7Days: number; perMinute: number; mailEnabled: boolean };
 }
@@ -37,14 +37,6 @@ const JOBS: { name: JobName; title: string; when: string; icon: React.ElementTyp
   {
     name: 'deadlineReminders', title: 'Deadline reminders', when: 'Daily, 8:00 AM', icon: CalendarClock,
     description: '3 days and 1 day before a renewal deadline, scholars who haven’t submitted are reminded, and so are students with an unsent application draft before a scholarship’s deadline. 3 days after “Needs revision” with no resubmission, the student is reminded once. Only deadlines typed as one date (e.g. “January 20, 2027”) count.',
-  },
-  {
-    name: 'adsoDigest', title: 'Morning summary for the AdSO', when: 'Daily, 7:00 AM', icon: Sunrise,
-    description: 'One email with what’s waiting: new applications, renewals to decide, unread messages, office requests, event claims and scholars without a duty office. Not sent on days with nothing waiting.',
-  },
-  {
-    name: 'termRollover', title: 'Start-of-semester office assignment', when: 'Daily, 6:00 AM, in a semester’s first 8 weeks', icon: Shuffle,
-    description: 'SFAG scholars without a duty office get one: last semester’s office if it still has a free slot, otherwise at random by the office slots (Duty hours → Random assign). Each scholar and office head is emailed. Scholars renewed later are assigned the next morning.',
   },
 ];
 
@@ -113,7 +105,6 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
     <div className="space-y-6">
       <PageHeader
         title="Automation"
-        description="Reminders and routine work AniSkolar does on its own. Everything starts off: turn on what the office wants, and preview a job first to see who it would email."
       />
       {data && !data.outbox.mailEnabled && (
         <Alert tone="warning" title="Email isn't set up on the server">Jobs still run (the office assignment still happens), but no email goes out until ACS_EMAIL_CONNECTION_STRING and ACS_EMAIL_SENDER are in the backend .env.</Alert>
@@ -153,16 +144,6 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
                     <Badge tone={on ? 'success' : 'neutral'}>{on ? job.when : 'Off'}</Badge>
                   </div>
                   <p className="text-sm text-ink-muted">{job.description}</p>
-                  {job.name === 'adsoDigest' && data && <DigestRecipients value={data.settings.adsoDigestTo} saving={saving === 'adsoDigestTo'} onSave={list => save({ adsoDigestTo: list }, 'adsoDigestTo')} />}
-                  {job.name === 'termRollover' && data && (
-                    <Checkbox
-                      checked={data.settings.keepLastOffice}
-                      disabled={saving === 'keepLastOffice'}
-                      onChange={v => save({ keepLastOffice: v }, 'keepLastOffice')}
-                      label="Keep scholars in last semester's office when it has room"
-                      description="The office head who knows them evaluates them again. Off = everyone is assigned at random."
-                    />
-                  )}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <p className={`text-xs ${last?.error ? 'text-danger' : 'text-ink-subtle'}`}>
                       {last ? `Last run ${formatDateTime(last.at)}: ${last.error ? `failed (${last.error})` : `${last.summary}${last.queued ? ` ${last.queued} emails queued.` : ''}`}` : 'Hasn’t run yet.'}
@@ -207,21 +188,6 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
   );
 }
 
-function DigestRecipients({ value, saving, onSave }: { value: string[]; saving: boolean; onSave: (list: string[]) => Promise<boolean> }) {
-  const [text, setText] = useState(value.join(', '));
-  useEffect(() => { setText(value.join(', ')); }, [value]);
-  const list = text.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
-  const changed = list.join(',') !== value.join(',');
-  return (
-    <form className="flex flex-col gap-2 sm:flex-row sm:items-end" onSubmit={e => { e.preventDefault(); if (changed) onSave(list); }}>
-      <Field label="Send it to" helper="School emails of AdSO staff, separated by commas." className="flex-1">
-        <TextInput value={text} onChange={e => setText(e.target.value)} placeholder="name@dlsud.edu.ph" inputMode="email" />
-      </Field>
-      <Button type="submit" size="sm" loading={saving} disabled={!changed || saving} className="sm:mb-6">Save</Button>
-    </form>
-  );
-}
-
 function PreviewDialog({ job, call, onClose, onRan }: {
   job: (typeof JOBS)[number];
   call: <T>(path: string, init?: { method: string; body?: unknown }) => Promise<T>;
@@ -252,23 +218,20 @@ function PreviewDialog({ job, call, onClose, onRan }: {
     }
   };
 
-  const assignments = result?.details && 'assignments' in result.details ? (result.details.assignments as { studentNumber: string; name: string; office: string }[]) : null;
-  const changes = job.name === 'termRollover' && !!assignments?.length;
-  const nothing = result && result.emails === 0 && !changes;
+  const nothing = result && result.emails === 0;
 
   return (
     <Modal
       size="lg"
       title={`${job.title}: preview`}
-      description="What it would do right now. Nothing has been sent or changed yet."
       onClose={onClose}
       dismissible={!running}
       footer={
         <>
           <Button onClick={onClose} disabled={running}>{nothing ? 'Close' : 'Cancel'}</Button>
           {!nothing && (
-            <Button variant="primary" icon={changes ? Shuffle : Mail} onClick={run} loading={running} disabled={!result}>
-              {changes ? `Assign ${assignments!.length} and email them` : `Send ${result?.emails ?? ''} email${result?.emails === 1 ? '' : 's'}`}
+            <Button variant="primary" icon={Mail} onClick={run} loading={running} disabled={!result}>
+              {`Send ${result?.emails ?? ''} email${result?.emails === 1 ? '' : 's'}`}
             </Button>
           )}
         </>
@@ -278,19 +241,6 @@ function PreviewDialog({ job, call, onClose, onRan }: {
       {!result ? (!error && <div className="space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-1/2" /></div>) : (
         <div className="space-y-4">
           <p className="text-sm text-ink">{result.summary}</p>
-          {assignments && assignments.length > 0 && (
-            <Table label="Office assignments" minWidth="28rem">
-              <thead><tr><Th sticky={false}>Scholar</Th><Th sticky={false}>Office</Th></tr></thead>
-              <tbody>
-                {assignments.map(a => (
-                  <Tr key={a.studentNumber}>
-                    <Td><span className="font-medium text-ink">{a.name ? titleCaseName(a.name) : a.studentNumber}</span> <span className="text-xs text-ink-subtle">{a.studentNumber}</span></Td>
-                    <Td>{a.office}</Td>
-                  </Tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
           {result.emails > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-ink">{result.emails} email{result.emails === 1 ? '' : 's'}{result.emails > result.sample.length ? `, for example:` : ':'}</p>
@@ -337,7 +287,6 @@ function FailedEmailsDialog({ call, onClose, onRetried }: {
     <Modal
       size="lg"
       title="Emails that couldn't be sent"
-      description="Usually the email service's hourly limit or a wrong address."
       onClose={onClose}
       footer={<><Button onClick={onClose}>Close</Button><Button variant="primary" icon={RefreshCw} onClick={retry} loading={busy} disabled={!rows?.length}>Try them again</Button></>}
     >

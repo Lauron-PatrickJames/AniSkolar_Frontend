@@ -969,7 +969,7 @@ export default function App() {
                   />
                 );
               case 'announcements':
-                return <Announcements announcements={announcements} />;
+                return <Announcements announcements={announcements} scholarships={scholarships} />;
               case 'profile':
                 return (
                   <Profile

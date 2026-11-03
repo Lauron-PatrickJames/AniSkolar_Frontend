@@ -1,19 +1,30 @@
 import { DocumentSlot, GpaRequirement, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../types';
 import { EligibilityRules, documentTexts, ruleLines } from './requirementCatalog';
 
-// Display names for the offices that review scholarships. Scholarships
-// without an `office` belong to the LSO.
-export const OFFICE_LABELS: Record<ScholarshipOffice, string> = {
-  LSO: 'Admissions and Scholarship Office (AdSO)',
-  POLCA: 'POLCA Office',
-  ALUMNI: 'Alumni Office'
-};
+// The offices that run scholarships (mirrors the backend's data/offices.js).
+// Each has its own admin accounts and handles its scholarships entirely;
+// the AdSO sees their approved scholars. Scholarships without an `office`
+// belong to the AdSO ('LSO').
+export const OFFICES: { code: ScholarshipOffice; name: string; short: string }[] = [
+  { code: 'LSO', name: 'Admissions and Scholarship Office (AdSO)', short: 'AdSO' },
+  { code: 'POLCA', name: 'POLCA Office', short: 'POLCA' },
+  { code: 'ALUMNI', name: 'Alumni Office', short: 'Alumni Office' },
+  { code: 'SDO', name: 'Sports Development Office (SDO)', short: 'SDO' },
+  { code: 'VICISSITUDE', name: 'Vicissitude', short: 'Vicissitude' },
+  { code: 'ROTC', name: 'ROTC Office (267th NROTCU)', short: 'ROTC' },
+  { code: 'USG', name: 'University Student Government (USG)', short: 'USG' },
+  { code: 'HERALDO', name: 'Heraldo Filipino', short: 'Heraldo Filipino' },
+  { code: 'CICSSG', name: 'CICS Student Government', short: 'CICSSG' },
+  { code: 'CBAASG', name: 'CBAA Student Government', short: 'CBAASG' },
+  { code: 'COEDSG', name: 'COEd Student Government', short: 'COEDSG' },
+  { code: 'CCJESG', name: 'CCJE Student Government', short: 'CCJESG' },
+  { code: 'CEATSG', name: 'CEAT Student Government', short: 'CEATSG' },
+  { code: 'CTHMSG', name: 'CTHM Student Government', short: 'CTHMSG' },
+  { code: 'COSSG', name: 'COS Student Government', short: 'COSSG' },
+];
 
-export const OFFICE_SHORT_LABELS: Record<ScholarshipOffice, string> = {
-  LSO: 'AdSO',
-  POLCA: 'POLCA',
-  ALUMNI: 'Alumni Office'
-};
+export const OFFICE_LABELS = Object.fromEntries(OFFICES.map(o => [o.code, o.name])) as Record<ScholarshipOffice, string>;
+export const OFFICE_SHORT_LABELS = Object.fromEntries(OFFICES.map(o => [o.code, o.short])) as Record<ScholarshipOffice, string>;
 
 // Info-only scholarships are listed but can't be applied for online.
 export function acceptsOnlineApplications(scholarship: Pick<Scholarship, 'applicationMode'>): boolean {
@@ -40,6 +51,13 @@ function requirementLabels(slots: DocumentSlot[]): string[] {
 
 // Contact details from the official scholarship page
 // (dlsud.edu.ph/scholarship).
+const officeProvider = (office: string, contact?: string[]) => ({
+  name: 'De La Salle University-Dasmariñas',
+  office,
+  address: 'De La Salle University-Dasmariñas, Dasmariñas City, Cavite 4115',
+  ...(contact ? { contact } : {})
+});
+
 const SCHOLARSHIP_OFFICE_PROVIDER = {
   name: 'De La Salle University-Dasmariñas',
   office: 'Admissions and Scholarship Office (AdSO)',
@@ -299,6 +317,7 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
   },
   {
     id: 's5',
+    handledBy: 'Admissions and Scholarship Office (AdSO)',
     name: 'Academic Scholarship',
     category: 'Academic',
     provider: SCHOLARSHIP_OFFICE_PROVIDER,
@@ -377,9 +396,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     id: 's7',
     name: 'Athletic Scholarship',
     category: 'Athletic',
-    provider: SCHOLARSHIP_OFFICE_PROVIDER,
-    applicationMode: 'info',
-    availNote: 'Awarded to recruited varsity players. Players are evaluated by their coach and approved by the Sports Development Office (SDO) Director — there is no online application.',
+    office: 'SDO',
+    provider: officeProvider('Sports Development Office (SDO)'),
     targetApplicants: 'Recruited varsity players',
     description: 'The Athletic Scholarship is for recruited varsity players. It recognizes students committed to their sport while keeping a strong academic record, in basketball, volleyball, athletics (track and field), badminton, table tennis, swimming, and chess.',
     benefits: [
@@ -395,21 +413,24 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     ],
     scheduleLabel: 'Varsity tryouts',
     schedule: 'To be announced. Tryout dates are posted in Announcements.',
-    process: [
-      'Step 1: Try out for or get recruited into a DLSU-D varsity team. Tryout dates are posted in Announcements.',
-      'Step 2: Your coach evaluates you — a recommendation for incoming players, an endorsement for current members.',
-      'Step 3: The SDO Director approves the scholarship.'
+    customDocuments: [
+      'Coach\'s evaluation and recommendation (incoming players) or evaluation and endorsement (current varsity members)'
     ],
-    deadline: 'Contact the AdSO for the current schedule',
-    status: 'Open'
+    process: [
+      'Step 1: Try out for or get recruited into a varsity team. Tryout dates are posted in Announcements.',
+      'Step 2: Apply here with your coach\'s evaluation and recommendation (incoming players) or endorsement (current members).',
+      'Step 3: The Sports Development Office reviews it, and the SDO Director approves.'
+    ],
+    deadline: 'Set by the Sports Development Office',
+    status: 'Closed',
+    applicationFormType: 'standard'
   },
   {
     id: 's8',
     name: 'Vicissitude Scholarship Program',
     category: 'Leadership',
-    provider: SCHOLARSHIP_OFFICE_PROVIDER,
-    applicationMode: 'info',
-    availNote: 'Granted to members of the Vicissitude Editorial Board and Staff based on their performance rating — there is no online application.',
+    office: 'VICISSITUDE',
+    provider: officeProvider('Vicissitude'),
     targetApplicants: 'Vicissitude Editorial Board and Staff',
     description: 'The Vicissitude Scholarship Program supports the students who produce the university yearbook: members of the Vicissitude Editorial Board (EB) and Editorial Staff (ES). Discounts cover tuition only and depend on available funds.',
     benefits: [
@@ -426,22 +447,25 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Must be a member of the Vicissitude Editorial Board or Editorial Staff',
       'No major violations under the Student Handbook (2023-2027)'
     ],
-    process: [
-      'Step 1: Join the Vicissitude Editorial Board or Staff.',
-      'Step 2: Complete your duty hours: 200 for Editorial Board members, 125 for Editorial Staff members.',
-      'Step 3: Your performance is evaluated (60% by the Vicissitude Coordinator and the Graphics Design and Layout Artist, 40% by the Editorial Board). Editorial Staff members also need a good staff evaluation rating.',
-      'Step 4: Your discount is set by your rating.'
+    customDocuments: [
+      'Performance evaluation (60% from the Vicissitude Coordinator and the Graphics Design and Layout Artist, 40% from the Editorial Board)',
+      'Record of completed duty hours (200 for Editorial Board members, 125 for Editorial Staff members)'
     ],
-    deadline: 'Contact the AdSO for the current schedule',
-    status: 'Open'
+    process: [
+      'Step 1: Join the Vicissitude Editorial Board or Staff and complete your duty hours (200 for the Editorial Board, 125 for the Editorial Staff).',
+      'Step 2: Apply here with your performance evaluation and duty hours record.',
+      'Step 3: Vicissitude rates your performance and sets your discount.'
+    ],
+    deadline: 'Set by Vicissitude',
+    status: 'Closed',
+    applicationFormType: 'standard'
   },
   {
     id: 's10',
     name: '267th NROTC Scholarship',
     category: 'Leadership',
-    provider: SCHOLARSHIP_OFFICE_PROVIDER,
-    applicationMode: 'info',
-    availNote: 'Granted to officers of the 267th NROTC unit on the recommendation of the Commandant and the ROTC Coordinator — there is no online application.',
+    office: 'ROTC',
+    provider: officeProvider('ROTC Office (267th NROTCU)'),
     targetApplicants: 'Officers of the 267th NROTC unit',
     description: 'The 267th NROTC Scholarship gives financial assistance to officers of the university\'s Naval Reserve Officers Training Corps unit (NROTCU), under Student Handbook section 17.1.4, which allows tuition discounts of up to 100% for ROTC officers. Failing to meet the guidelines forfeits the benefits.',
     benefits: [
@@ -468,12 +492,17 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Actively performs assigned duties, including 20 duty hours a week in the 267th NROTCU',
       'Recommended by the Commandant and/or the ROTC Coordinator'
     ],
-    process: [
-      'Step 1: Earn your rank and stay on active duty in the 267th NROTC unit.',
-      'Step 2: The Commandant and the ROTC Coordinator recommend qualified officers.'
+    customDocuments: [
+      'Recommendation from the Commandant and/or the ROTC Coordinator'
     ],
-    deadline: 'Contact the AdSO for the current schedule',
-    status: 'Open'
+    process: [
+      'Step 1: Earn your rank and stay on active duty in the 267th NROTCU (20 duty hours a week).',
+      'Step 2: Apply here with the recommendation of the Commandant and/or the ROTC Coordinator.',
+      'Step 3: The ROTC Office reviews and approves it.'
+    ],
+    deadline: 'Set by the ROTC Office',
+    status: 'Closed',
+    applicationFormType: 'standard'
   },
   {
     // Offered by the University Student Government, separate from the
@@ -482,15 +511,10 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     id: 's11',
     name: 'USG Student Financial Aid Grant',
     category: 'Financial',
-    provider: {
-      name: 'University Student Government (USG), De La Salle University-Dasmariñas',
-      office: 'University Student Government',
-      address: 'De La Salle University-Dasmariñas, Dasmariñas City, Cavite'
-    },
-    applicationMode: 'info',
-    availNote: 'Offered by the University Student Government each semester through its own online form (bit.ly/USGSFAG) — not through AniSkolar. The USG reviews the applications.',
+    office: 'USG',
+    provider: officeProvider('University Student Government (USG)'),
     targetApplicants: 'Continuing DLSU-D students',
-    description: 'The University Student Government\'s Student Financial Aid Grant is offered each semester, separate from the SFAG of the Admissions and Scholarship Office. The latest call was for the 2nd semester of AY 2025–2026 (applications April 6–13, 2026).',
+    description: 'The University Student Government\'s Student Financial Aid Grant is offered each semester, separate from the SFAG of the Admissions and Scholarship Office. The latest call was for the 2nd semester of AY 2025–2026 (applications April 6–13, 2026). Applications are now through AniSkolar.',
     benefits: [
       'Financial aid from the University Student Government'
     ],
@@ -515,13 +539,47 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'SWAFO clearance certifying no major offense (may follow if the request for clearance is attached and dated within the application period)'
     ],
     process: [
-      'Step 1: Submit all documents through the USG\'s online form during the application period.',
+      'Step 1: Apply here during the USG\'s application period, with all the documents.',
       'Step 2: The USG verifies your documents within 72 hours. If one is inaccurate, you have two days from notification to resubmit.',
-      'Step 3: Verified applicants are told their on-site submission schedule, where the application slot is confirmed.',
+      'Step 3: Verified applicants are told their on-site submission schedule, where the slot is confirmed.',
       'Step 4: Wait for the final list of shortlisted applicants.'
     ],
-    deadline: 'Each semester; see the USG\'s announcements',
-    status: 'Open'
+    deadline: 'Each semester (latest: April 6–13, 2026)',
+    status: 'Closed',
+    applicationFormType: 'standard'
+  },
+  {
+    id: 's12',
+    name: 'Heraldo Filipino Scholarship',
+    category: 'Leadership',
+    office: 'HERALDO',
+    provider: officeProvider('Heraldo Filipino'),
+    targetApplicants: 'Heraldo Filipino Editorial Staff, from Junior Staff to Editor in Chief',
+    // From the Heraldo Filipino's scholarship guidelines (Nov 2026).
+    description: 'Service scholarships in the form of tuition discounts for the Editorial Staff of the Heraldo Filipino, the official student publication, from Junior Staff to Editor in Chief. There is no fixed discount: the amount is computed from scholarship points earned on four criteria.',
+    benefits: [
+      'Tuition discount of varying amount, based on your scholarship points',
+      'Evaluation score: 98–100 = 5 pts, 95–97 = 4, 90–94 = 3, 84–89 = 2, 75–83 = 1, 60–74 = 0',
+      'Published works: 6 or more = 5 pts, 5 = 4, 4 = 3, 3 = 2, 2 = 1, 0–1 = 0',
+      'Office hours rendered: 96–100% = 5 pts, 91–95% = 4, 86–90% = 3, 80–85% = 2, 60–79% = 1, below 60% = 0',
+      'Merit points: 3 = 5 pts, 2 = 4, 1 = 3, 0 = 2; under demerit = 0'
+    ],
+    eligibilityCriteria: { applicantType: 'any' },
+    rules: { applicantType: 'any' },
+    customEligibility: [
+      'Member of the Heraldo Filipino Editorial Staff (Junior Staff to Editor in Chief)',
+      'An evaluation score below 60 disqualifies you from the scholarship'
+    ],
+    customDocuments: [],
+    process: [
+      'Step 1: Complete all your requirements as a member of the Editorial Staff.',
+      'Step 2: The Managing Director computes your scholarship points from the table of qualifications.',
+      'Step 3: The Editor in Chief and the Publication Adviser validate the computation.',
+      'Step 4: The Managing Director releases the list of qualified scholars and each one\'s discount.'
+    ],
+    deadline: 'To be announced by the Heraldo Filipino',
+    status: 'Closed',
+    applicationFormType: 'standard'
   }
 ];
 
@@ -589,6 +647,7 @@ function customSource(o: ScholarshipOverride): ScholarshipSource {
     category: o.category ?? 'Others',
     applicationMode: o.applicationMode ?? 'online',
     availNote: o.availNote,
+    handledBy: o.handledBy,
     referenceCode: o.referenceCode,
     provider: SCHOLARSHIP_OFFICE_PROVIDER,
     description: '',
@@ -654,4 +713,9 @@ export function registerCustomScholarships(all: Scholarship[]): void {
     if (mockScholarships[i].custom) mockScholarships.splice(i, 1);
   }
   mockScholarships.push(...custom);
+}
+
+// Scholarships without an online application: the office students go to.
+export function handlingOffice(s: { handledBy?: string; office?: ScholarshipOffice }): string {
+  return s.handledBy?.trim() || OFFICE_LABELS[s.office ?? 'LSO'];
 }

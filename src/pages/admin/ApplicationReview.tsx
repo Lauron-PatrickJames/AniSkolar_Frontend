@@ -184,8 +184,9 @@ export default function ApplicationReview({
           aria-label="Review decision"
           className="min-w-0 space-y-6 lg:sticky lg:top-20 lg:-m-1 lg:max-h-[calc(100dvh-var(--spacing-topbar)-3rem)] lg:overflow-y-auto lg:p-1"
         >
+          {/* An office's scholarship: that office decides; the AdSO sees it read-only. */}
           {!adminOffice && officeApp && <PartnerDecision app={app} name={name} />}
-          <DecisionPanel
+          {!(!adminOffice && officeApp) && <DecisionPanel
             app={app}
             name={name}
             adminOffice={adminOffice}
@@ -193,16 +194,16 @@ export default function ApplicationReview({
             onDecided={(updated, status) => {
               onUpdated(updated);
               const sentToAdso = !!adminOffice && !app.forwardedAt && !!updated.forwardedAt;
-              setToast(sentToAdso ? 'Approved and sent to the AdSO.' : `${DECISIONS[status].done}.`);
+              setToast(sentToAdso ? 'Approved. The AdSO now sees this scholar.' : `${DECISIONS[status].done}.`);
             }}
-          />
+          />}
           {!adminOffice && app.scholarshipId === 's1' && app.status === 'Approved' && (
             <SfagGrantCard app={app} getToken={getToken} onSaved={updated => { onUpdated(updated); setToast('Saved the grant percentage.'); }} />
           )}
-          {app.status === 'Approved' && mockScholarships.find(s => s.id === app.scholarshipId)?.noRenewal && (
+          {app.status === 'Approved' && !(!adminOffice && officeApp) && mockScholarships.find(s => s.id === app.scholarshipId)?.noRenewal && (
             <ScholarshipEndCard app={app} getToken={getToken} onSaved={(updated, msg) => { onUpdated(updated); setToast(msg); }} />
           )}
-          {app.applicationFormType === 'polca' && (
+          {app.applicationFormType === 'polca' && !!adminOffice && (
             <PolcaAdminFieldsCard
               applicationId={app._id}
               fields={app.adminFields}
@@ -436,7 +437,6 @@ function SfagGrantCard({ app, getToken, onSaved }: {
   return (
     <Card
       title="Grant percentage"
-      description="Tuition discount granted. It sets the scholar's duty hours."
       footer={value !== saved ? <Button size="sm" variant="primary" onClick={save} loading={busy}>Save</Button> : undefined}
     >
       <div className="space-y-2">
@@ -526,7 +526,7 @@ function ScholarshipEndCard({ app, getToken, onSaved }: {
 function PartnerDecision({ app, name }: { app: AdminApplication; name: string }) {
   const decision = partnerOfficeDecision(app, name);
   return (
-    <Card title={`${officeDisplayName(app.office)} decision`}>
+    <Card title={`${officeDisplayName(app.office)} decision`} description={`The ${officeDisplayName(app.office)} handles this scholarship. Only they can change it.`}>
       {decision ? (
         <div className="space-y-2 text-sm">
           <Badge tone={STATUS_META[decision.status as AppStatus]?.tone} dot>{historyLabel(decision.status)}</Badge>
@@ -625,7 +625,7 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
     if (status === 'Approved' && asksGrant && grant) lines.push(`Grant: ${grant}% tuition discount${requestedGrant && String(requestedGrant) !== grant ? ` (they applied for ${requestedGrant}%)` : ''}. It sets their duty hours.`);
     const unfilled = unfilledParts(message);
     if (unfilled.length) lines.push(`Your message still has ${unfilled.join(', ')} to fill in.`);
-    if (adminOffice && status === 'Approved' && !app.forwardedAt) lines.push('It is sent to the AdSO automatically.');
+    if (adminOffice && status === 'Approved') lines.push('The AdSO sees approved scholars.');
     if (!adminOffice && officeApp) lines.push(`This replaces the ${officeDisplayName(app.office)}'s decision; they can no longer change it.`);
     return lines;
   };
@@ -706,7 +706,7 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
               </Field>
             )}
             {adminOffice && !app.forwardedAt && (
-              <p className="text-xs text-ink-subtle">Approving also sends this application to the AdSO.</p>
+              <p className="text-xs text-ink-subtle">The AdSO sees approved scholars.</p>
             )}
             <div className="space-y-2">
               {DECISION_ORDER.filter(status => status !== app.status || !decided).map(status => {

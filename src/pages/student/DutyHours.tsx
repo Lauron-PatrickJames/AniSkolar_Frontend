@@ -165,9 +165,6 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h2 className="font-display font-extrabold text-xl sm:text-2xl text-slate-900">Duty Hours</h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
-            Log each duty with its time in and time out. Your hours, weekly totals and what's left are worked out for you, and the scholarship office can see your progress.
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <select

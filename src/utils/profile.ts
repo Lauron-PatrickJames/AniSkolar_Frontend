@@ -1,4 +1,5 @@
 import { GuardianType, StudentProfile, VerificationGroup, CorrectionGroup } from '../types';
+import { OFFICE_LABELS } from '../data/scholarships';
 import { collegeName, findProgram } from '../data/programs';
 
 // Display and validation helpers for the student profile. The backend
@@ -89,7 +90,7 @@ export const VERIFICATION_GROUP_LABELS: Record<VerificationGroup, string> = {
   gpa: 'GPA',
 };
 
-export const OFFICE_NAMES: Record<string, string> = { LSO: 'AdSO', POLCA: 'POLCA Office', ALUMNI: 'Alumni Office' };
+export const OFFICE_NAMES: Record<string, string> = { ...OFFICE_LABELS, LSO: 'AdSO' };
 
 export function verificationOf(s: StudentProfile, group: VerificationGroup) {
   const v = s.verification?.[group];

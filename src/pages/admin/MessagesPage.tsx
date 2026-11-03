@@ -225,7 +225,6 @@ export default function MessagesPage({ getToken, selectedStudent, onSelectStuden
     <div className="space-y-6">
       <PageHeader
         title="Messages"
-        description="Conversations with students. Students can attach JPG, PNG or PDF files; new messages are also emailed to their school Outlook."
         actions={<Button icon={PenSquare} onClick={() => setNewOpen(true)}>New message</Button>}
       />
       <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
@@ -503,7 +502,6 @@ function NewMessageDialog({ getToken, onClose, onOpen }: { getToken: () => Promi
     <Modal
       size="sm"
       title="New message"
-      description="Write to a student by their student number, or to a duty office's head. You can also use Message student on an application or a scholar."
       onClose={onClose}
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={open}>Open conversation</Button></>}
     >

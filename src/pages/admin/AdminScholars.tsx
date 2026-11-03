@@ -465,7 +465,6 @@ export default function AdminScholars({
     <>
       <PageHeader
         title="Scholars"
-        description="Every student who has applied, with their applications and outcomes across cycles."
         actions={
           <Menu
             label={isExporting ? 'Exporting…' : 'Export'}

@@ -18,8 +18,6 @@ interface Props {
   // Where attachments are served from (office heads have their own path).
   filesPath?: string;
   getToken: GetToken;
-  // The student's applications, to say which one a message is about.
-  applications?: { id: string; label: string }[];
   onSend: (data: { body: string; files: File[]; applicationId?: string }) => Promise<void>;
   emptyText: string;
   placeholder?: string;
@@ -33,10 +31,9 @@ const dayLabel = (iso: string) => new Date(iso).toLocaleDateString('en-PH', { we
 const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 const sizeLabel = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-export default function Conversation({ messages, viewer, filesPath, getToken, applications = [], onSend, emptyText, placeholder, className = '', composerTools }: Props) {
+export default function Conversation({ messages, viewer, filesPath, getToken, onSend, emptyText, placeholder, className = '', composerTools }: Props) {
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const [applicationId, setApplicationId] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
@@ -70,10 +67,9 @@ export default function Conversation({ messages, viewer, filesPath, getToken, ap
     setSending(true);
     setError('');
     try {
-      await onSend({ body: body.trim(), files, applicationId: applicationId || undefined });
+      await onSend({ body: body.trim(), files });
       setBody('');
       setFiles([]);
-      setApplicationId('');
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send the message.");
     } finally {
@@ -135,55 +131,47 @@ export default function Conversation({ messages, viewer, filesPath, getToken, ap
             ))}
           </ul>
         )}
+        <div className={`rounded-xl border bg-white focus-within:ring-2 ${explicit.length ? 'border-amber-400 ring-2 ring-amber-200' : 'border-slate-200 focus-within:border-brand-green focus-within:ring-brand-green/20'}`}>
         <textarea
           value={body}
           onChange={e => setBody(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } }}
           maxLength={MAX_MESSAGE_LENGTH}
-          rows={3}
+          rows={2}
           placeholder={placeholder || 'Write a message…'}
           aria-label="Message"
           aria-invalid={explicit.length > 0 || undefined}
           aria-describedby={explicit.length ? 'message-explicit-warning' : undefined}
-          className="w-full resize-y rounded-xl border border-slate-200 px-3.5 py-2.5 text-base sm:text-sm focus:border-brand-green focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 aria-[invalid=true]:border-amber-400 aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-amber-200"
+          className="block w-full resize-none rounded-t-xl border-0 bg-transparent px-3.5 pt-3 pb-1 text-base sm:text-sm focus:outline-hidden"
         />
-        {explicit.length > 0 && (
-          <p id="message-explicit-warning" role="alert" className="text-xs font-semibold text-amber-700">
-            Please remove inappropriate language ({explicit.join(', ')}). Messages with it can't be sent. If you're reporting something someone said, describe it without the word.
-          </p>
-        )}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1 px-2 pb-2">
           <input ref={fileRef} type="file" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" className="hidden" onChange={e => addFiles(e.target.files)} />
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={files.length >= MAX_ATTACHMENTS || sending}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            title={`Attach JPG, PNG or PDF (up to ${MAX_ATTACHMENTS} files, 10 MB each)`}
+            aria-label="Attach files"
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
           >
-            <Paperclip className="h-4 w-4" /> Attach
+            <Paperclip className="h-4 w-4" />
           </button>
           {composerTools?.(body, setBody)}
-          {applications.length > 0 && (
-            <select
-              value={applicationId}
-              onChange={e => setApplicationId(e.target.value)}
-              aria-label="Which application this is about"
-              className="min-w-0 max-w-full flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 sm:flex-none"
-            >
-              <option value="">Not about a specific application</option>
-              {applications.map(a => <option key={a.id} value={a.id}>About {a.label}</option>)}
-            </select>
-          )}
-          <span className="ml-auto hidden text-[11px] text-slate-400 sm:inline">Ctrl+Enter to send</span>
           <button
             type="submit"
             disabled={sending || explicit.length > 0}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-brand-green px-4 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-brand-green-dark disabled:opacity-60"
+            title="Send (Ctrl+Enter)"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-brand-green px-3.5 py-2 text-xs font-bold text-white hover:bg-brand-green-dark disabled:opacity-60"
           >
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send
           </button>
         </div>
-        <p className="text-[11px] text-slate-400">JPG, PNG or PDF, up to {MAX_ATTACHMENTS} files of 10 MB each.</p>
+        </div>
+        {explicit.length > 0 && (
+          <p id="message-explicit-warning" role="alert" className="text-xs font-semibold text-amber-700">
+            Please remove inappropriate language ({explicit.join(', ')}). Messages with it can't be sent. If you're reporting something someone said, describe it without the word.
+          </p>
+        )}
       </form>
     </div>
   );

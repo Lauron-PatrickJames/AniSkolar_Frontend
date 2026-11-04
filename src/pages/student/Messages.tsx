@@ -75,10 +75,6 @@ export default function Messages({ applications }: { applications: Application[]
             messages={messages}
             viewer="student"
             getToken={getToken}
-            applications={applications.map(a => {
-              const ref = (a as Application & { referenceCode?: string }).referenceCode;
-              return { id: a.id, label: ref ? `${ref} · ${a.scholarshipName}` : a.scholarshipName };
-            })}
             onSend={send}
             emptyText="No messages yet. Write to the scholarship office below."
             placeholder="Write to the scholarship office…"

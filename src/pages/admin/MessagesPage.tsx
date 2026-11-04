@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, ArrowLeft, Building2, ExternalLink, Mail, MailOpen, MessageSquare, PenSquare, Pin, PinOff, Trash2, UserRound } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, Building2, ExternalLink, FileText, Mail, MailOpen, MessageSquare, PenSquare, Pin, PinOff, Trash2, UserRound } from 'lucide-react';
 import { StudentProfile } from '../../types';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
 import { collegeName } from '../../data/programs';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
-import { ResultDialog, Alert, Avatar, Button, Card, ConfirmDialog, DropdownMenu, DropdownMenuItem, EmptyState, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, TableSkeleton, TextInput, Toast } from './AdminUI';
+import { ResultDialog, Alert, Avatar, Button, Card, ConfirmDialog, DropdownMenu, DropdownMenuItem, EmptyState, Menu, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, TableSkeleton, TextInput, Toast } from './AdminUI';
 import { TemplatePicker, UnfilledHint, firstNameOf } from './ReplyTemplates';
 
 // AdSO: conversations with students (backend routes/messages.js), one per
@@ -333,11 +333,18 @@ function ThreadView({ studentNumber, getToken, onBack, onOpenApplication, onOpen
         <Avatar name={s.name || s.studentNumber} avatarUrl={s.avatarUrl} size="sm" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{s.name ? titleCaseName(s.name) : s.studentNumber}</p>
-          <p className="truncate text-xs text-ink-subtle">
-            {[s.studentNumber, s.college && collegeName(s.college), s.programCode, s.yearLevel].filter(Boolean).join(' · ')}{s.email ? ` · ${s.email}` : ''}
+          <p className="truncate text-xs text-ink-subtle" title={[s.college && collegeName(s.college), s.email].filter(Boolean).join(' · ')}>
+            {[s.studentNumber, [s.programCode, s.yearLevel].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}
           </p>
         </div>
-        <Button size="sm" icon={UserRound} onClick={() => setProfileOpen(true)}>View profile</Button>
+        {data.applications.length > 0 && (
+          <Menu
+            label={`Applications (${data.applications.length})`}
+            icon={FileText}
+            items={data.applications.map(a => ({ key: a._id, label: `${a.scholarshipName} · ${a.status}`, icon: ExternalLink, onSelect: () => onOpenApplication(a._id) }))}
+          />
+        )}
+        <Button size="sm" variant="ghost" icon={UserRound} onClick={() => setProfileOpen(true)}>Profile</Button>
         {menu}
       </div>
       {profileOpen && (
@@ -348,21 +355,11 @@ function ThreadView({ studentNumber, getToken, onBack, onOpenApplication, onOpen
           onOpenRecord={onOpenScholar && data.applications.length > 0 ? () => { setProfileOpen(false); onOpenScholar(s.studentNumber); } : undefined}
         />
       )}
-      {data.applications.length > 0 && (
-        <div className="flex flex-wrap gap-2 border-b border-line px-3 py-2">
-          {data.applications.map(a => (
-            <button key={a._id} type="button" onClick={() => onOpenApplication(a._id)} className="rounded-badge bg-surface-muted px-2 py-1 text-xs text-ink-muted hover:text-ink" title="Open the application">
-              <span className="font-mono">{a.referenceCode}</span> · {a.scholarshipName} · {a.status}
-            </button>
-          ))}
-        </div>
-      )}
       <Conversation
         className="h-[min(62vh,600px)]"
         messages={data.messages}
         viewer="adso"
         getToken={getToken}
-        applications={data.applications.map(a => ({ id: a._id, label: `${a.referenceCode} · ${a.scholarshipName}` }))}
         onSend={send}
         emptyText="No messages yet. Write the first one below — the student is also emailed."
         placeholder="Write to the student…"

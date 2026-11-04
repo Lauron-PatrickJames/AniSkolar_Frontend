@@ -15,6 +15,7 @@ import MessagesPage from './MessagesPage';
 import AccountSecurity from '../../components/AccountSecurity';
 import AddScholarDialog from './AddScholarDialog';
 import AdminHome from './AdminHome';
+import { TemplatesPage } from './ReplyTemplates';
 import { officeFormFor } from '../../data/officeForms';
 import { PageHeader, ResultDialog } from './AdminUI';
 import { MESSAGES_READ_EVENT } from '../../utils/messages';
@@ -341,6 +342,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onAddScholar={directAward.length ? () => setAddScholarFor(directAward[0].id) : undefined}
       />
     );
+  } else if (mainView === 'templates') {
+    page = <TemplatesPage getToken={getToken} />;
   } else if (mainView === 'security') {
     page = (
       <div className="max-w-3xl space-y-6">

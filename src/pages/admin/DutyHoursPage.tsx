@@ -259,7 +259,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
           <EmptyState title="No scholars match" />
         ) : (
           <>
-            <div className="hidden md:block">
+            <div className="hidden xl:block">
               <Table label="Duty hours by scholar" minWidth="56rem">
                 <thead>
                   <tr>

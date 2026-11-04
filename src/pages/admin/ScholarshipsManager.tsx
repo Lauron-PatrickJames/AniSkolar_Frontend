@@ -10,7 +10,7 @@ import ScholarshipMatrix, { MatrixPatch } from './ScholarshipMatrix';
 import { API_BASE_URL, AppStatus, STATUS_OPTIONS, authHeaders, formatDateTime } from './adminData';
 import {
   Alert, Badge, Button, Card, ConfirmDialog, DatePicker, DropdownMenu, DropdownMenuItem, EmptyState, ErrorState, Field, Modal, PageHeader,
-  RowLink, SearchInput, SegmentedControl, Select, Skeleton, Table, TableSkeleton, Tabs, Td, TextInput, Textarea, Th,
+  MobileList, RowLink, SearchInput, SegmentedControl, Select, Skeleton, Table, TableSkeleton, Tabs, Td, TextInput, Textarea, Th,
   Toolbar, Tone, Tooltip, Tr
 } from './AdminUI';
 import ScholarshipStatusDialog, { StatusDialogResult } from './ScholarshipStatusDialog';
@@ -593,6 +593,8 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
             onOpen={onSelect}
           />
         ) : (
+          <>
+          <div className="hidden xl:block">
           <Table label="Scholarships" minWidth="54rem">
             <thead>
               <tr>
@@ -638,6 +640,23 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
               })}
             </tbody>
           </Table>
+          </div>
+          <MobileList>
+            {visible.map(row => {
+              const s = row.scholarship;
+              return (
+                <li key={s.id} className={`flex items-center gap-2 px-4 py-3 ${s.status === 'Closed' ? 'opacity-70' : ''}`}>
+                  <button type="button" onClick={() => onSelect(s.id)} className="min-w-0 flex-1 text-left">
+                    <span className="block truncate text-sm font-medium text-ink">{s.name}</span>
+                    <span className="block truncate text-xs text-ink-subtle">{shortSchedule(s.deadline)}</span>
+                  </button>
+                  <ScholarshipStatusBadge status={s.status} />
+                  <DropdownMenu label={`Actions for ${s.name}`} items={menuItems(row)} />
+                </li>
+              );
+            })}
+          </MobileList>
+          </>
         )}
       </Card>
 

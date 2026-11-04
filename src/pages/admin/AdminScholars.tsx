@@ -8,7 +8,7 @@ import {
   applicantProgram, applicantYearLevel, formatDate, isReturningScholar, plural, shortAcademicYear, titleCaseName
 } from './adminData';
 import {
-  Alert, Avatar, Badge, Button, Card, Checkbox, CopyButton, DropdownMenu, EmptyState, ErrorState, Menu, Modal, PageHeader,
+  Alert, Avatar, Badge, Button, Card, Checkbox, CopyButton, DropdownMenu, EmptyState, ErrorState, Menu, MobileList, Modal, PageHeader,
   Pagination, RowLink, SearchInput, SegmentedControl, Select, StatusBadge, STATUS_META, Table, TableSkeleton, Td, Th,
   Toolbar, Tooltip, Tr, Truncate, usePagination
 } from './AdminUI';
@@ -516,7 +516,8 @@ export default function AdminScholars({
           )
         ) : (
           <>
-            <Table label="Scholars" minWidth="66rem">
+            <div className="hidden xl:block">
+            <Table label="Scholars" minWidth="58rem">
               <thead>
                 <tr>
                   <Th sticky={false}>Scholar</Th>
@@ -566,6 +567,21 @@ export default function AdminScholars({
                 ))}
               </tbody>
             </Table>
+            </div>
+            <MobileList>
+              {pager.pageItems.map(scholar => (
+                <li key={scholar.studentNumber}>
+                  <button type="button" onClick={() => onSelectStudent(scholar.studentNumber)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-muted">
+                    <Avatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="sm" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-ink">{scholar.name}</span>
+                      <span className="block truncate text-xs text-ink-subtle">{[scholar.studentNumber, scholar.college, scholar.program].filter(Boolean).join(' · ')}</span>
+                    </span>
+                    <StatusBadge status={scholar.latestStatus} />
+                  </button>
+                </li>
+              ))}
+            </MobileList>
 
             <Pagination page={pager.page} pageCount={pager.pageCount} total={pager.total} pageSize={pager.pageSize} onChange={pager.setPage} noun="scholars" />
           </>

@@ -373,7 +373,7 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
               <EmptyState title="No scholars match" />
             ) : period && (
               <>
-                <div className="hidden md:block">
+                <div className="hidden xl:block">
                   <Table label="Scholars and their renewals" minWidth="56rem">
                     <thead>
                       <tr>

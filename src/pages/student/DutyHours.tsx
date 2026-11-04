@@ -446,7 +446,33 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
       {entries.length === 0 ? (
         <p className="px-6 py-8 text-center text-xs text-slate-400">No duty logged for this term yet.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <ul className="divide-y divide-slate-100 lg:hidden">
+          {entries.map(entry => {
+            const day = weekday(entry.date);
+            return (
+              <li key={entry._id ?? `${entry.date}-${entry.timeIn}`} className="flex items-center gap-3 px-5 py-3">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${DAY_COLORS[day]}`} aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-800">{formatDutyDate(entry.date)} · {day}</p>
+                  <p className="text-xs text-slate-500">
+                    {format12h(entry.timeIn)} – {format12h(entry.timeOut)}
+                    {confirmationRequired && (
+                      <> · {entry.status === 'confirmed' ? <span className="font-bold text-emerald-700">Confirmed</span>
+                        : entry.status === 'flagged' ? <span className="font-bold text-rose-700">Flagged{entry.note ? `: ${entry.note}` : ''}</span>
+                          : <span className="font-bold text-amber-700">Waiting</span>}</>
+                    )}
+                  </p>
+                </div>
+                <span className="shrink-0 text-sm font-bold text-slate-800">{formatHours(entryHours(entry))} h</span>
+                <button type="button" onClick={() => remove(entry)} aria-label={`Delete duty on ${formatDutyDate(entry.date)} ${format12h(entry.timeIn)}`} className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[34rem] text-sm">
             <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               <tr>
@@ -489,6 +515,7 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

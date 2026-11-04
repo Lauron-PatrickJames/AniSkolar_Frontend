@@ -168,8 +168,8 @@ export default function ApplicationReview({
         </dl>
       </section>
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-        <Card flush className="min-w-0 lg:col-span-2" headerSlot={<Tabs<ReviewTab> tabs={tabs} value={activeTab} onChange={setActiveTab} label="Application sections" />}>
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-3">
+        <Card flush className="min-w-0 xl:col-span-2" headerSlot={<Tabs<ReviewTab> tabs={tabs} value={activeTab} onChange={setActiveTab} label="Application sections" />}>
           <div role="tabpanel" aria-label={tabs.find(t => t.key === activeTab)?.label} className="p-5 sm:p-6">
             {activeTab === 'form' && <FormTab app={app} scholarship={scholarship} grantDetails={grantDetails} />}
             {activeTab === 'documents' && <DocumentsTab appId={app._id} docs={app.documents} missing={missing} getToken={getToken} />}
@@ -181,7 +181,7 @@ export default function ApplicationReview({
             the tabs on smaller screens. */}
         <aside
           aria-label="Review decision"
-          className="min-w-0 space-y-6 lg:sticky lg:top-20 lg:-m-1 lg:max-h-[calc(100dvh-var(--spacing-topbar)-3rem)] lg:overflow-y-auto lg:p-1"
+          className="min-w-0 space-y-6 xl:sticky xl:top-20 xl:-m-1 xl:max-h-[calc(100dvh-var(--spacing-topbar)-3rem)] xl:overflow-y-auto xl:p-1"
         >
           {/* An office's scholarship: that office decides; the AdSO sees it read-only. */}
           {!adminOffice && officeApp && <PartnerDecision app={app} name={name} />}

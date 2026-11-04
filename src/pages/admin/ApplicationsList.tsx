@@ -5,7 +5,7 @@ import {
   AdminApplication, STATUS_OPTIONS, applicantName, formatDateTime, isOfficeApp, titleCaseName
 } from './adminData';
 import {
-  Alert, Avatar, Badge, Button, Card, CopyButton, EmptyState, ErrorState, PageHeader, Pagination, RowLink,
+  Alert, Avatar, Badge, Button, Card, CopyButton, EmptyState, ErrorState, MobileList, PageHeader, Pagination, RowLink,
   SearchInput, Select, StatusBadge, Table, TableSkeleton, Tabs, Td, Th, Toolbar, Tooltip, Tr, Truncate, paginate
 } from './AdminUI';
 import {
@@ -146,7 +146,8 @@ export default function ApplicationsList({
           )
         ) : (
           <>
-            <Table label="Applications" minWidth={showWaiting ? '66rem' : '60rem'}>
+            <div className="hidden xl:block">
+            <Table label="Applications" minWidth={showWaiting ? '60rem' : '56rem'}>
               <thead>
                 <tr>
                   <Th sticky={false}>Applicant</Th>
@@ -221,6 +222,26 @@ export default function ApplicationsList({
                 })}
               </tbody>
             </Table>
+            </div>
+            <MobileList>
+              {pager.pageItems.map(app => {
+                const name = titleCaseName(applicantName(app));
+                const days = waitingDays(app, now);
+                return (
+                  <li key={app._id}>
+                    <button type="button" onClick={() => onOpen(app)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-muted">
+                      <Avatar name={name} avatarUrl={app.avatarUrl} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-ink">{name}</span>
+                        <span className="block truncate text-xs text-ink-subtle">{app.scholarshipName}</span>
+                        <span className="block text-xs text-ink-subtle tabular-nums">{relativeTime(app.createdAt, now)}{showWaiting && days >= WAITING_HIGHLIGHT_DAYS ? ` · waiting ${days} days` : ''}</span>
+                      </span>
+                      <StatusBadge status={app.status} />
+                    </button>
+                  </li>
+                );
+              })}
+            </MobileList>
 
             <Pagination
               page={pager.page}

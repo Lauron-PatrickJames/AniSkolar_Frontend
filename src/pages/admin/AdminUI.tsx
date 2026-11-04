@@ -312,7 +312,7 @@ export function KpiCard({ label, value, hint, icon: Icon, tone = 'neutral', acti
       } ${interactive ? 'hover:-translate-y-px hover:shadow-overlay active:translate-y-0' : ''}`}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="truncate text-xs font-medium text-ink-muted">{label}</p>
+        <p className="min-w-0 text-xs font-medium leading-snug text-ink-muted sm:truncate">{label}</p>
         {Icon && (
           <span className={`flex size-7 shrink-0 items-center justify-center rounded-control ${TONE_ICON_CHIP[tone]}`}>
             <Icon className="size-3.5" aria-hidden />
@@ -1081,7 +1081,7 @@ export function Tr({ children, onClick, className = '' }: { children: React.Reac
 
 // Stacked list used in place of a table on phones.
 export function MobileList({ children }: { children: React.ReactNode }) {
-  return <ul className="divide-y divide-line md:hidden">{children}</ul>;
+  return <ul className="divide-y divide-line xl:hidden">{children}</ul>;
 }
 
 export function RowLink({ children, onClick, className = '' }: { children: React.ReactNode; onClick: () => void; className?: string }) {

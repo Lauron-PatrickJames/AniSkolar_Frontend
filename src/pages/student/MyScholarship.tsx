@@ -73,7 +73,7 @@ export default function MyScholarship({ holdings, scholarships, applications, on
               <Stat icon={Hash} label="Reference" value={d?.referenceCode ?? '—'} mono />
             </dl>
 
-            <div className="grid gap-6 border-t border-slate-100 p-6 md:grid-cols-2">
+            <div className="grid gap-6 border-t border-slate-100 p-6 lg:grid-cols-2 [&>*]:min-w-0">
               <div className="space-y-3">
                 <h3 className="text-sm font-bold text-slate-900">To keep your scholarship</h3>
                 {keep.length ? (

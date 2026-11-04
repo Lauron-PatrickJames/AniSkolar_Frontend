@@ -9,7 +9,7 @@ import { DutyTerm, format12h, formatDutyDate, formatHours, termLabel, weekday } 
 import { EVALUATION_ITEMS, PASSING_AVERAGE, RATING_LABELS, ratingLabel } from '../../utils/renewals';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from '../admin/adminData';
 import { ResultDialog,
-  Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, EmptyState, ErrorState, Field, KpiCard, KpiGrid, Modal, PageHeader, SegmentedControl, Select, Table,
+  Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, EmptyState, MobileList, ErrorState, Field, KpiCard, KpiGrid, Modal, PageHeader, SegmentedControl, Select, Table,
   TableSkeleton, Tabs, Td, TextInput, Textarea, Th, Toast, Tr
 } from '../admin/AdminUI';
 
@@ -221,6 +221,24 @@ function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head:
                   description={g.rows.length ? `${g.rows.length} scholar${g.rows.length === 1 ? '' : 's'}${waiting ? ` · ${waiting} dut${waiting === 1 ? 'y' : 'ies'} to check` : ' · all duties checked'}` : undefined}
                 >
                   {g.rows.length === 0 ? <EmptyState icon={Users} title="No scholars this semester" /> : (
+                    <>
+                    <MobileList>
+                      {g.rows.map(r => (
+                        <li key={r.studentNumber}>
+                          <button type="button" onClick={() => setOpen(r)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-muted">
+                            <Avatar name={r.name || r.studentNumber} avatarUrl={r.avatarUrl} size="sm" />
+                            <span className="min-w-0 flex-1 space-y-1.5">
+                              <span className="block truncate text-sm font-medium text-ink">{r.name ? titleCaseName(r.name) : r.studentNumber}</span>
+                              <HoursBar completed={r.completedHours} required={r.requiredHours} />
+                            </span>
+                            {r.waitingCount ? <Badge tone="warning">{r.waitingCount} to check</Badge>
+                              : r.evaluationState === 'ready' ? <Badge tone="info">Evaluate</Badge>
+                              : <EvalBadge state={r.evaluationState} />}
+                          </button>
+                        </li>
+                      ))}
+                    </MobileList>
+                    <div className="hidden xl:block">
                     <Table label={`Your scholars, ${termLabel(g.term)}`} minWidth="56rem">
                       <thead>
                         <tr>
@@ -258,6 +276,8 @@ function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head:
                         ))}
                       </tbody>
                     </Table>
+                    </div>
+                    </>
                   )}
                 </Card>
               );

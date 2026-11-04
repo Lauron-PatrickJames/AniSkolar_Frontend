@@ -126,7 +126,6 @@ function TwoStepCard() {
   return (
     <Card
       title="Two-step verification"
-      description="After your password, signing in also asks for a code from an authenticator app on your phone."
       actions={user.totpEnabled ? <Badge tone="success" dot>On</Badge> : <Badge>Off</Badge>}
     >
       <div className="space-y-4">
@@ -204,7 +203,7 @@ function DevicesCard() {
   };
 
   return (
-    <Card title="Where you’re signed in" description="Don’t recognize one? Sign it out, then change your password.">
+    <Card title="Where you’re signed in">
       {error && <div className="mb-3"><Alert tone="danger">{error}</Alert></div>}
       {!sessions ? <Skeleton className="h-16 w-full" /> : (
         <ul className="divide-y divide-line">

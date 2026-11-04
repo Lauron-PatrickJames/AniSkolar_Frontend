@@ -580,11 +580,11 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
           filtersActive ? (
             <EmptyState
               title="No scholarships match"
-              description="Try a different name or status."
+             
               action={<Button onClick={() => { setFilter('all'); setSearch(''); }}>Clear filters</Button>}
             />
           ) : (
-            <EmptyState title="No scholarships" description="Create one to get started." action={<Button icon={Plus} onClick={() => setCreating(true)}>New scholarship</Button>} />
+            <EmptyState title="No scholarships" action={<Button icon={Plus} onClick={() => setCreating(true)}>New scholarship</Button>} />
           )
         ) : view === 'Matrix' ? (
           <ScholarshipMatrix
@@ -838,7 +838,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </Select>
                 </Field>
-                <Field label="How students get it" className="sm:col-span-2" helper={form.applicationMode === 'online' ? 'Students apply in AniSkolar with the standard form and upload the documents below.' : 'Listed for information only, with no Apply button.'}>
+                <Field label="How students get it" className="sm:col-span-2">
                   <SegmentedControl<'online' | 'info'>
                     options={['online', 'info']}
                     value={form.applicationMode}
@@ -857,7 +857,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
                     <TextInput value={form.availNote} onChange={e => set('availNote', e.target.value)} maxLength={500} disabled={isSaving} placeholder="e.g. Nominated by the department chair each semester." />
                   </Field>
                 )}
-                <Field label="Reference code" error={shown.referenceCode} helper={`Application numbers start with it, e.g. ${(form.referenceCode.trim().toUpperCase() || 'CODE')}-2026-0001.`}>
+                <Field label="Reference code" error={shown.referenceCode} helper={`e.g. ${(form.referenceCode.trim().toUpperCase() || 'CODE')}-2026-0001`}>
                   <TextInput value={form.referenceCode} onChange={e => set('referenceCode', e.target.value.toUpperCase())} maxLength={8} disabled={isSaving || row.applications.total > 0} />
                 </Field>
               </div>
@@ -866,7 +866,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
 
           <Card title="Basic info">
             <div className="space-y-5">
-              <Field label="Status" helper="Closed scholarships are hidden from students' Explore list and can't be applied to.">
+              <Field label="Status">
                 <SegmentedControl<ScholarshipStatus>
                   options={STATUSES}
                   value={form.status}
@@ -891,7 +891,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
           >
             <div className="space-y-5">
               <RulesEditor rules={form.rules} onChange={v => set('rules', v)} locked={locked} disabled={isSaving} />
-              <Field label="Other conditions" optional helper="Shown to students as written; not checked." error={shown.customEligibility}>
+              <Field label="Other conditions" optional error={shown.customEligibility}>
                 <ListEditor items={form.customEligibility} onChange={v => set('customEligibility', v)} label="Condition" addLabel="Add condition" placeholder="e.g. Must be a member of the Vicissitude Editorial Board" disabled={isSaving} />
               </Field>
             </div>
@@ -899,9 +899,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
 
           <Card
             title="Documents"
-            description={slotBased
-              ? `Set by the ${s.name} application form.`
-              : online ? 'Tick the documents students upload. Each one becomes an upload slot on the application form.' : 'Students apply through another office, so nothing is uploaded here.'}
+            description={slotBased ? `Set by the ${s.name} form.` : undefined}
           >
             <div className="space-y-5">
               {slotBased ? (
@@ -924,7 +922,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
               <Field label="Application process">
                 <ListEditor items={form.process} onChange={v => set('process', v)} label="Step" addLabel="Add step" placeholder="e.g. Upload the required documents as JPG files." disabled={isSaving} numbered />
               </Field>
-              <Field label="Submission note" optional helper="Shown on the details page and after a student submits.">
+              <Field label="Submission note" optional>
                 <TextInput value={form.submissionNote} onChange={e => set('submissionNote', e.target.value)} maxLength={500} disabled={isSaving} placeholder="e.g. Submit complete requirements to the Alumni Office." />
               </Field>
             </div>
@@ -1049,7 +1047,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
       {confirmDelete && (
         <ConfirmDialog
           title={`Delete ${s.name}?`}
-          description="It's removed from AniSkolar for good. This can't be undone."
+          description="This can't be undone."
           confirmLabel="Delete scholarship"
           confirmIcon={Trash2}
           tone="danger"
@@ -1167,7 +1165,7 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated, ownOffice }: {
             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </Select>
         </Field>
-        <Field label="How students get it" className="sm:col-span-2" helper={mode === 'online' ? 'Students apply in AniSkolar and upload their documents.' : 'Students only read about it here; they apply through the office.'}>
+        <Field label="How students get it" className="sm:col-span-2">
           <SegmentedControl<'online' | 'info'>
             options={['online', 'info']}
             value={mode}
@@ -1176,7 +1174,7 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated, ownOffice }: {
             renderLabel={o => (o === 'online' ? 'Online application' : 'Through another office')}
           />
         </Field>
-        <Field label="Reference code" error={errors.code} helper={!errors.code ? `Application numbers start with it: ${shownCode || 'CODE'}-2026-0001.` : undefined}>
+        <Field label="Reference code" error={errors.code} helper={!errors.code ? `e.g. ${shownCode || 'CODE'}-2026-0001` : undefined}>
           <TextInput
             value={shownCode}
             onChange={ev => { setCodeTouched(true); setCode(ev.target.value.toUpperCase().replace(/[^A-Z]/g, '')); }}
@@ -1189,7 +1187,7 @@ function CreateScholarshipDialog({ getToken, onClose, onCreated, ownOffice }: {
         <Field label="Description" error={errors.description} className="sm:col-span-2" labelAside={`${description.length}/4000`}>
           <Textarea value={description} onChange={ev => setDescription(ev.target.value)} rows={4} maxLength={4000} disabled={busy} placeholder="Who it's for and what it supports, in a few sentences." className="resize-y" />
         </Field>
-        <Field label="Benefits" error={errors.benefits} className="sm:col-span-2" helper={!errors.benefits ? 'One per line, e.g. “100% tuition discount”.' : undefined}>
+        <Field label="Benefits" error={errors.benefits} className="sm:col-span-2" helper={!errors.benefits ? 'One per line' : undefined}>
           <Textarea value={benefits} onChange={ev => setBenefits(ev.target.value)} rows={3} disabled={busy} placeholder={'100% tuition discount\nMonthly book allowance'} className="resize-y" />
         </Field>
         {mode === 'online' && (

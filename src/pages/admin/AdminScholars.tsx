@@ -8,7 +8,7 @@ import {
   applicantProgram, applicantYearLevel, formatDate, isReturningScholar, plural, shortAcademicYear, titleCaseName
 } from './adminData';
 import {
-  Alert, Avatar, Badge, Button, Card, Checkbox, DropdownMenu, EmptyState, ErrorState, Menu, Modal, PageHeader,
+  Alert, Avatar, Badge, Button, Card, Checkbox, CopyButton, DropdownMenu, EmptyState, ErrorState, Menu, Modal, PageHeader,
   Pagination, RowLink, SearchInput, SegmentedControl, Select, StatusBadge, STATUS_META, Table, TableSkeleton, Td, Th,
   Toolbar, Tooltip, Tr, Truncate, usePagination
 } from './AdminUI';
@@ -291,7 +291,7 @@ function ColumnPickerModal({ kind, selected, rows, onChange, onConfirm, onCancel
     <Modal
       size="xl"
       title={kind === 'print' ? 'Print preview' : 'Export preview'}
-      description={`${rows.length} ${rows.length === 1 ? 'scholar' : 'scholars'} · choose the columns and check the rows before you ${kind === 'print' ? 'print' : 'download the file (opens in Excel)'}.`}
+      description={`${rows.length} ${rows.length === 1 ? 'scholar' : 'scholars'}`}
       onClose={onCancel}
       footer={
         <>
@@ -508,11 +508,11 @@ export default function AdminScholars({
             <EmptyState
               icon={Users}
               title="No scholars match"
-              description="Try a different search."
+             
               action={<Button onClick={clearFilters}>Clear filters</Button>}
             />
           ) : (
-            <EmptyState icon={Users} title="No scholars yet" description="Students appear here once they submit an application." />
+            <EmptyState icon={Users} title="No scholars yet" />
           )
         ) : (
           <>
@@ -626,12 +626,11 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
 
   const combined = useMemo(() => buildCombinedHistory(scholar.applications, scholar.name), [scholar.applications, scholar.name]);
 
-  const summary = [
-    plural(scholar.totalApplications, 'application'),
-    `${scholar.approvedCount} approved`,
-    `${scholar.rejectedCount} rejected`,
-    plural(scholar.cycles.length, 'cycle')
-  ].join(' · ');
+  // What they hold now: approved and not ended. "Student Financial Aid
+  // Grant (SFAG)" shows as "SFAG".
+  const holding = scholar.applications.filter(a => a.status === 'Approved' && !a.endedAt);
+  const shortName = (name: string) => name.match(/\(([^)]+)\)\s*$/)?.[1] ?? name;
+  const manyApps = scholar.applications.length > 1;
 
   const print = () => {
     onExportError('');
@@ -674,10 +673,14 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
     }
   };
 
+  const copyable = (value: string, label: string) => (value
+    ? <span className="flex min-w-0 items-center gap-1"><span className="truncate">{value}</span><CopyButton value={value} label={`Copy ${label}`} /></span>
+    : '—');
   const profile: [string, React.ReactNode][] = [
-    ['Email', scholar.email || '—'],
-    ['Mobile', scholar.phone || '—'],
-    ['First submission', formatDate(scholar.firstSubmission)]
+    ['Program', scholar.program || '—'],
+    ['Email', copyable(scholar.email, 'email')],
+    ['Mobile', copyable(scholar.phone, 'mobile number')],
+    ['First applied', formatDate(scholar.firstSubmission)]
   ];
 
   return (
@@ -685,11 +688,17 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
       <PageHeader
         leading={<Avatar name={scholar.name} avatarUrl={scholar.avatarUrl} size="lg" />}
         title={scholar.name}
-        description={[scholar.studentNumber, [scholar.college && collegeName(scholar.college), scholar.program, scholar.yearLevel].filter(Boolean).join(' · ')].filter(Boolean).join(' · ')}
+        description={
+          <span className="tabular-nums">
+            {[scholar.studentNumber, scholar.yearLevel].filter(Boolean).join(' · ')}
+            {scholar.college && <> · <Tooltip content={collegeName(scholar.college)} asChild><span tabIndex={0} className="rounded-badge">{scholar.college}</span></Tooltip></>}
+          </span>
+        }
         meta={
           <>
-            <span className="text-xs text-ink-subtle tabular-nums">{summary}</span>
-            <Badge tone={STATUS_META[scholar.latestStatus]?.tone} dot>Latest: {scholar.latestStatus}</Badge>
+            {holding.length > 0
+              ? holding.map(a => <Badge key={a._id} tone="success" dot>Scholar · {shortName(a.scholarshipName)}</Badge>)
+              : <Badge tone={STATUS_META[scholar.latestStatus]?.tone} dot>{scholar.latestStatus}</Badge>}
             {scholar.isReturning && <Badge tone="accent">Returning</Badge>}
           </>
         }
@@ -736,20 +745,21 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
       )}
       {exportError && <Alert tone="danger" onDismiss={() => onExportError('')}>{exportError}</Alert>}
 
-      <dl className="grid grid-cols-1 gap-x-8 gap-y-3 border-y border-line py-4 sm:grid-cols-3">
-        {profile.map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <dt className="text-xs text-ink-subtle">{label}</dt>
-            <dd className="mt-0.5 truncate text-sm text-ink">{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <Card>
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-5">
+          {profile.map(([label, value]) => (
+            <div key={label} className={`min-w-0 ${label === 'Program' ? 'sm:col-span-2' : ''}`}>
+              <dt className="text-xs text-ink-subtle">{label}</dt>
+              <dd className={`mt-0.5 text-sm text-ink ${label === 'Program' ? 'wrap-break-word' : 'min-w-0'}`}>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
 
       <Card
         flush
-        title="Applications"
-        description={view === 'By application' ? 'Grouped by cycle, newest first. Open one to see its history.' : 'Every event across all applications, newest first.'}
-        actions={
+        title={manyApps ? `Applications (${scholar.applications.length})` : 'Application'}
+        actions={manyApps ? (
           <SegmentedControl<HistoryView>
             options={HISTORY_VIEWS}
             value={view}
@@ -757,7 +767,7 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
             label="History view"
             className="w-auto"
           />
-        }
+        ) : undefined}
       >
         {view === 'All activity' ? (
           <div className="px-5 py-1">
@@ -766,9 +776,11 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
         ) : (
           byCycle.map(([cycle, apps]) => (
             <section key={cycle} aria-label={cycle}>
-              <h3 className="border-y border-line bg-surface-muted px-5 py-2 text-xs font-medium text-ink-muted first:border-t-0">
-                {cycle} <span className="font-normal text-ink-subtle">· {plural(apps.length, 'application')}</span>
-              </h3>
+              {byCycle.length > 1 && (
+                <h3 className="border-y border-line bg-surface-muted px-5 py-2 text-xs font-medium text-ink-muted first:border-t-0">
+                  {cycle}
+                </h3>
+              )}
               <ul className="divide-y divide-line">
                 {apps.map(app => (
                   <ApplicationRow

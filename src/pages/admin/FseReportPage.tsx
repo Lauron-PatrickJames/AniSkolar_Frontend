@@ -135,7 +135,7 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
           <EmptyState
             icon={Calculator}
             title="No FSE reports yet"
-            description="Upload the registrar's scholarship export (.xls) for a term to compute its FSE."
+            description="Upload the registrar's scholarship export (.xls)."
             action={<Button variant="primary" icon={Upload} onClick={() => setUploading(true)}>Upload term</Button>}
           />
         </Card>
@@ -175,7 +175,7 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
       {deleting && report && (
         <ConfirmDialog
           title={`Delete ${termLabel(report)}?`}
-          description="The saved FSE report for this term is removed. You can upload the export again later."
+          description="You can upload it again later."
           confirmLabel="Delete"
           confirmIcon={Trash2}
           tone="danger"
@@ -397,7 +397,7 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
               <Field label="As of" optional>
                 <TextInput type="date" value={asOf} onChange={e => setAsOf(e.target.value)} />
               </Field>
-              <Field label="Lasallian SPOON recipients" optional helper="Shown in the exported FSE sheet." error={attempted && errors.spoon ? errors.spoon : undefined}>
+              <Field label="Lasallian SPOON recipients" optional error={attempted && errors.spoon ? errors.spoon : undefined}>
                 <TextInput type="number" min={0} inputMode="numeric" value={spoon} onChange={e => setSpoon(e.target.value)} placeholder="e.g. 18" />
               </Field>
             </div>

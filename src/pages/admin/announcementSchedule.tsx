@@ -66,7 +66,7 @@ export function ScheduleFields({ value, onChange, disabled, error, nowLabel = 'N
           <Field label="Date" error={error}>
             <DatePicker value={value.date} onChange={date => onChange({ ...value, date })} min={today} disabled={disabled} />
           </Field>
-          <Field label="Time" helper="Your computer's time zone.">
+          <Field label="Time">
             <TextInput type="time" value={value.time} onChange={e => onChange({ ...value, time: e.target.value })} disabled={disabled} />
           </Field>
         </div>

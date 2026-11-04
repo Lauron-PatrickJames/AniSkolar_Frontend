@@ -157,10 +157,7 @@ export default function ApplicationReview({
       />
 
       <section aria-label="Applicant details as submitted" className="border-y border-line py-4">
-        <p className="mb-3 text-xs text-ink-subtle">
-          As submitted {formatDate(app.createdAt)}
-          {profileChanged && ' · the student’s profile has changed since'}
-        </p>
+        {profileChanged && <p className="mb-3 text-xs text-warning-fg">The student’s profile has changed since they applied.</p>}
         <dl className="grid grid-cols-2 gap-x-8 gap-y-3 md:grid-cols-4">
           {summary.map(([label, value]) => (
             <div key={label} className="min-w-0">
@@ -259,7 +256,7 @@ function FormTab({ app, scholarship, grantDetails }: {
         )}
       </div>
     ) : (
-      <EmptyState title="Form unavailable" description="This scholarship is no longer in the registry, so its form can't be displayed." />
+      <EmptyState title="Form unavailable" />
     );
   } else if (app.applicationFormType === 'sfag' && app.personalInfo) {
     content = (
@@ -295,7 +292,7 @@ function FormTab({ app, scholarship, grantDetails }: {
       </div>
     );
   } else {
-    content = <EmptyState title="No form answers on file" description="This application was saved without form answers." />;
+    content = <EmptyState title="No form answers on file" />;
   }
   return <AnswersStyleProvider variant="admin" hideSummary>{content}</AnswersStyleProvider>;
 }
@@ -361,7 +358,7 @@ function DocumentsTab({ appId, docs, missing, getToken }: { appId: string; docs:
       )}
 
       {docs.length === 0 ? (
-        <EmptyState icon={FileText} title="No documents uploaded" description="The applicant didn't attach any files to this application." />
+        <EmptyState icon={FileText} title="No documents uploaded" />
       ) : (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
           <ul className="space-y-1 xl:col-span-2" aria-label="Documents">
@@ -527,7 +524,7 @@ function ScholarshipEndCard({ app, getToken, onSaved }: {
   return (
     <Card
       title="Scholarship status"
-      description={`No renewals: it continues until the scholar graduates or stops.${scholarship?.slotsPerCollege ? ` ${scholarship.slotsPerCollege} slots per college.` : scholarship?.totalSlots ? ` ${scholarship.totalSlots} slots in all.` : ''}`}
+      description={`Kept until they graduate or stop.${scholarship?.slotsPerCollege ? ` ${scholarship.slotsPerCollege} slots per college.` : scholarship?.totalSlots ? ` ${scholarship.totalSlots} slots in all.` : ''}`}
     >
       <div className="space-y-3">
         {error && <Alert tone="danger">{error}</Alert>}
@@ -559,7 +556,7 @@ function ScholarshipEndCard({ app, getToken, onSaved }: {
 function PartnerDecision({ app, name }: { app: AdminApplication; name: string }) {
   const decision = partnerOfficeDecision(app, name);
   return (
-    <Card title={`${officeDisplayName(app.office)} decision`} description={`The ${officeDisplayName(app.office)} handles this scholarship. Only they can change it.`}>
+    <Card title={`${officeDisplayName(app.office)} decision`} >
       {decision ? (
         <div className="space-y-2 text-sm">
           <Badge tone={STATUS_META[decision.status as AppStatus]?.tone} dot>{historyLabel(decision.status)}</Badge>
@@ -710,7 +707,7 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
                 />
               }
               optional={!changing}
-              helper={noteError ? undefined : changing ? 'Required: explain why the decision changed. The applicant will see this.' : 'The applicant will see this.'}
+              helper={noteError ? undefined : changing ? 'Required: say why the decision changed.' : undefined}
               error={noteError || undefined}
             >
               <Textarea
@@ -728,9 +725,7 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
               <Field
                 label="Grant percentage"
                 error={grantError || undefined}
-                helper={!grantError ? (requestedGrant
-                  ? (grant === String(requestedGrant) ? `What the student applied for. Change it if you’re granting a different one.` : `The student applied for ${requestedGrant}%.`)
-                  : 'Needed to approve. It sets the scholar’s duty hours.') : undefined}
+                helper={!grantError && requestedGrant && grant !== String(requestedGrant) ? `Applied for ${requestedGrant}%` : undefined}
               >
                 <Select value={grant} onChange={v => { setGrant(v); setGrantError(''); }} disabled={busy} label="Grant percentage">
                   <option value="">Choose…</option>

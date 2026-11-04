@@ -88,7 +88,7 @@ export default function OfficeAssessmentCard({ app, form, getToken, readOnly, on
   return (
     <Card
       title={form.assessmentTitle}
-      description={readOnly ? undefined : `Approved by the ${form.approver}. Only your office sees this; tell the student what they got in your decision message.`}
+      description={readOnly ? undefined : 'Only your office sees this.'}
       footer={!readOnly && dirty ? <Button size="sm" variant="primary" onClick={save} loading={busy}>Save</Button> : undefined}
     >
       <div className="space-y-4">

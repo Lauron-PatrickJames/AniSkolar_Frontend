@@ -307,9 +307,9 @@ export function KpiCard({ label, value, hint, icon: Icon, tone = 'neutral', acti
       type={interactive ? 'button' : undefined}
       onClick={interactive ? onClick : undefined}
       aria-pressed={interactive ? !!active : undefined}
-      className={`flex h-full min-w-0 flex-col rounded-card bg-surface p-4 text-left shadow-card ring-1 transition-colors sm:p-5 ${
-        active ? 'ring-2 ring-accent' : 'ring-line'
-      } ${interactive ? 'hover:bg-surface-muted' : ''}`}
+      className={`flex h-full min-w-0 flex-col rounded-card bg-surface p-4 text-left shadow-card ring-1 transition sm:p-5 ${
+        active ? 'ring-2 ring-accent bg-accent-subtle/40' : 'ring-line'
+      } ${interactive ? 'hover:-translate-y-px hover:shadow-overlay active:translate-y-0' : ''}`}
     >
       <div className="flex items-center justify-between gap-2">
         <p className="truncate text-xs font-medium text-ink-muted">{label}</p>

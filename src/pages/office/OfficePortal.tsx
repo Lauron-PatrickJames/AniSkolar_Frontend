@@ -97,9 +97,9 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
           title={head.office}
         />
         <KpiGrid columns={3}>
-          <KpiCard label="Duties to check" value={counts.waiting} icon={Clock} tone={counts.waiting ? 'warning' : 'neutral'} active={tab === 'scholars'} onClick={() => setTab('scholars')} hint="Logged by your scholars, waiting for you" />
-          <KpiCard label="Ready to evaluate" value={counts.evaluations} icon={ClipboardCheck} tone={counts.evaluations ? 'info' : 'neutral'} active={tab === 'evaluations'} onClick={() => setTab('evaluations')} hint="Finished their duty hours" />
-          <KpiCard label="Unread messages" value={counts.unread} icon={MessageSquare} tone={counts.unread ? 'info' : 'neutral'} active={tab === 'messages'} onClick={() => setTab('messages')} hint="From the scholarship office" />
+          <KpiCard label="Duties to check" value={counts.waiting} icon={Clock} tone={counts.waiting ? 'warning' : 'neutral'} active={tab === 'scholars'} onClick={() => setTab('scholars')} />
+          <KpiCard label="Ready to evaluate" value={counts.evaluations} icon={ClipboardCheck} tone={counts.evaluations ? 'info' : 'neutral'} active={tab === 'evaluations'} onClick={() => setTab('evaluations')} />
+          <KpiCard label="Unread messages" value={counts.unread} icon={MessageSquare} tone={counts.unread ? 'info' : 'neutral'} active={tab === 'messages'} onClick={() => setTab('messages')} />
         </KpiGrid>
         <Tabs<Tab>
           label="Office portal sections"
@@ -220,7 +220,7 @@ function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head:
                   title={`${termLabel(g.term)}${termKey(g.term) === termKey(head.current) ? ' · current' : ''}`}
                   description={g.rows.length ? `${g.rows.length} scholar${g.rows.length === 1 ? '' : 's'}${waiting ? ` · ${waiting} dut${waiting === 1 ? 'y' : 'ies'} to check` : ' · all duties checked'}` : undefined}
                 >
-                  {g.rows.length === 0 ? <EmptyState icon={Users} title="No scholars this semester" description="SFAG scholars assigned to your office by the scholarship office appear here." /> : (
+                  {g.rows.length === 0 ? <EmptyState icon={Users} title="No scholars this semester" /> : (
                     <Table label={`Your scholars, ${termLabel(g.term)}`} minWidth="56rem">
                       <thead>
                         <tr>
@@ -423,7 +423,7 @@ function DutiesModal({ studentNumber, term, getToken, onClose, onChanged, onToas
             )}
           </div>
 
-          {entries.length === 0 && <EmptyState icon={Clock} title="No duties logged" description="The scholar hasn't logged any duty this term." />}
+          {entries.length === 0 && <EmptyState icon={Clock} title="No duties logged" />}
 
           {/* Waiting: the part that needs the head */}
           {waiting.length > 0 && (
@@ -526,7 +526,7 @@ function EvaluationsTab({ getToken, onChanged, onToast }: { getToken: GetToken; 
   if (error && !terms) return <Card><ErrorState title="Couldn't load the evaluations" message={error} onRetry={load} /></Card>;
   if (!terms) return <Card flush><TableSkeleton rows={4} label="Loading evaluations" /></Card>;
   const withScholars = terms.filter(t => t.scholars.length);
-  if (!withScholars.length) return <Card><EmptyState icon={ClipboardCheck} title="No scholars to evaluate yet" description="Your SFAG scholars appear here. Each one opens for evaluation as soon as they complete their duty hours, and you'll get an email." /></Card>;
+  if (!withScholars.length) return <Card><EmptyState icon={ClipboardCheck} title="No scholars to evaluate yet" /></Card>;
 
   const row = (term: TermKey, s: EvalScholar) => (
     <li key={s.studentNumber} className="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -610,7 +610,7 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
       size="lg"
       sheet
       title={`Evaluate ${scholar.name ? titleCaseName(scholar.name) : scholar.studentNumber}`}
-      description={`Their duty in your office during the ${termLabel(term)}. ${Object.entries(RATING_LABELS).reverse().map(([n, l]) => `${n} ${l}`).join(', ')}.`}
+      description={termLabel(term)}
       onClose={onClose}
       dismissible={!busy}
       footer={(
@@ -641,7 +641,7 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
         ))}
       </div>
       <div className="mt-4">
-        <Field label="Remarks" optional helper="The scholar and the scholarship office see this, along with your ratings.">
+        <Field label="Remarks" optional helper="The scholar sees this.">
           <Textarea rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} maxLength={2000} disabled={busy} />
         </Field>
       </div>
@@ -723,7 +723,7 @@ function AnnouncementsTab({ head, getToken, onToast }: { head: OfficeHeadInfo; g
 
   return (
     <div className="grid gap-6 lg:grid-cols-5">
-      <Card title="New announcement" description={`To the scholars assigned to you for the ${termLabel(head.current)}.`} className="lg:col-span-2">
+      <Card title="New announcement" description={termLabel(head.current)} className="lg:col-span-2">
         <form onSubmit={post} className="space-y-4">
           {formError && <Alert tone="danger">{formError}</Alert>}
           <Field label="Title"><TextInput value={title} onChange={e => setTitle(e.target.value)} maxLength={150} disabled={busy} placeholder="e.g. No duty on Friday" /></Field>
@@ -735,7 +735,7 @@ function AnnouncementsTab({ head, getToken, onToast }: { head: OfficeHeadInfo; g
       <Card flush title="Posted" className="lg:col-span-3">
         {error && !items ? <ErrorState title="Couldn't load your announcements" message={error} onRetry={load} />
           : !items ? <TableSkeleton rows={3} label="Loading announcements" />
-          : !items.length ? <EmptyState icon={Megaphone} title="Nothing posted yet" description="Your scholars see what you post here with their announcements." />
+          : !items.length ? <EmptyState icon={Megaphone} title="Nothing posted yet" />
           : (
             <ul className="divide-y divide-line">
               {items.map(a => (
@@ -757,7 +757,7 @@ function AnnouncementsTab({ head, getToken, onToast }: { head: OfficeHeadInfo; g
       {deleting && (
         <ConfirmDialog
           title="Delete this announcement?"
-          description="Your scholars won't see it any more. An email already sent stays in their inbox."
+          description="Your scholars won't see it any more."
           confirmLabel="Delete"
           tone="danger"
           busy={busy}

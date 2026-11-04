@@ -28,15 +28,15 @@ interface OutboxRow { _id: string; kind: string; to: string; subject: string; at
 const JOBS: { name: JobName; title: string; when: string; icon: React.ElementType; description: string }[] = [
   {
     name: 'dutyReminders', title: 'Duty hours reminders', when: 'Mondays, 8:00 AM', icon: Clock,
-    description: 'SFAG scholars who are behind on their duty hours, or haven’t started by week 3, get their numbers: hours done, hours left and the weekly pace to finish by their deadline. Scholars on track get nothing.',
+    description: 'Emails SFAG scholars who are behind on their hours.',
   },
   {
     name: 'officeHeadReminders', title: 'Office head reminders', when: 'Mondays, 8:00 AM', icon: Building2,
-    description: 'Each office head with duties to confirm or scholars to evaluate gets one email listing them. Heads with nothing waiting get nothing.',
+    description: 'Emails office heads with duties to confirm or scholars to evaluate.',
   },
   {
     name: 'deadlineReminders', title: 'Deadline reminders', when: 'Daily, 8:00 AM', icon: CalendarClock,
-    description: '3 days and 1 day before a renewal deadline, scholars who haven’t submitted are reminded, and so are students with an unsent application draft before a scholarship’s deadline. 3 days after “Needs revision” with no resubmission, the student is reminded once. Only deadlines typed as one date (e.g. “January 20, 2027”) count.',
+    description: 'Reminds students 3 days and 1 day before a deadline, and once after “Needs revision”.',
   },
 ];
 
@@ -112,7 +112,6 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
 
       <Card
         title="Email outbox"
-        description={data ? `Personal emails go out ${data.outbox.perMinute} a minute (EMAIL_SENDS_PER_MINUTE), so a big batch takes a while. Nobody gets the same reminder twice.` : undefined}
         actions={data && data.outbox.failedLast7Days > 0 ? <Button size="sm" onClick={() => setOutboxOpen(true)}>View failed</Button> : undefined}
       >
         {!data ? <Skeleton className="h-10 w-full" /> : (

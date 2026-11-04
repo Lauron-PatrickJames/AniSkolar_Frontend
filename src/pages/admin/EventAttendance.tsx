@@ -262,7 +262,7 @@ export default function AttendanceDialog({ event: initialEvent, term, getToken, 
               </div>
             </div>
             {event.sheets.length === 0 ? (
-              <EmptyState icon={FileText} title="No sheets uploaded" description="After the event, upload photos or scans of the signed sheets (JPG, PNG or PDF)." />
+              <EmptyState icon={FileText} title="No sheets uploaded" />
             ) : (
               <>
                 <ul className="flex flex-wrap gap-2">

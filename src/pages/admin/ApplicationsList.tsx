@@ -93,9 +93,6 @@ export default function ApplicationsList({
     <>
       <PageHeader
         title="Applications"
-        description={adminOffice
-          ? `Applications for the ${officeLabel}. Approving one sends it to the AdSO automatically.`
-          : 'Review submissions and record a decision for each applicant.'}
       />
 
       {loadError && hasData && (
@@ -142,11 +139,10 @@ export default function ApplicationsList({
           listFiltersActive ? (
             <EmptyState
               title="No applications match"
-              description="Try a different search or scholarship."
               action={<Button onClick={clearListFilters}>Clear filters</Button>}
             />
           ) : (
-            <EmptyState icon={Inbox} title={EMPTY_TABS[filters.status].title} description={EMPTY_TABS[filters.status].description} />
+            <EmptyState icon={Inbox} title={EMPTY_TABS[filters.status].title} />
           )
         ) : (
           <>

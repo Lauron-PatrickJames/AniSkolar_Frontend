@@ -6,7 +6,7 @@ import { DutySummary } from '../../utils/dutyHours';
 import { API_BASE_URL, AdminApplication, AppStatus, applicantName, authHeaders, titleCaseName } from './adminData';
 import { relativeTime } from './history';
 import { MainView } from './AdminLayout';
-import { Badge, Button, Card, EmptyState, KpiCard, KpiGrid, Skeleton, Tone } from './AdminUI';
+import { Avatar, Badge, Button, Card, EmptyState, KpiCard, KpiGrid, Skeleton, Tone } from './AdminUI';
 
 // The admin console's home: the signed-in office at a glance. Built from what the console already loads (applications) plus the
 // office's scholarships, renewal periods and, for the AdSO, this term's
@@ -31,6 +31,16 @@ const STATUS_TONE: Record<string, Tone> = { Open: 'success', 'Closing Soon': 'wa
 const EVENT_TEXT: Partial<Record<string, string>> = {
   Submitted: 'applied for', Resubmitted: 'resubmitted', Approved: 'approved for', Rejected: 'not approved for', 'Needs Revision': 'asked to revise',
 };
+// How each event shows in Recent activity.
+const EVENT_BADGE: Record<string, { label: string; tone: Tone }> = {
+  Submitted: { label: 'Applied', tone: 'info' },
+  Resubmitted: { label: 'Resubmitted', tone: 'info' },
+  Approved: { label: 'Approved', tone: 'success' },
+  Rejected: { label: 'Rejected', tone: 'danger' },
+  'Needs Revision': { label: 'Revise', tone: 'warning' },
+};
+// "Student Financial Aid Grant (SFAG)" → "SFAG".
+const shortName = (name: string) => name.match(/\(([^)]+)\)\s*$/)?.[1] ?? name;
 
 export default function AdminHome({ applications, isLoading, getToken, isAdso, adminName, officeLabel, messageCount, hasRenewals, onlyDirect, onNavigate, onOpenStatus, onOpenApplication, onAddScholar }: {
   applications: AdminApplication[];
@@ -118,9 +128,8 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm text-ink-muted">{today}</p>
-          <h1 className="text-title font-semibold tracking-tight text-ink">{greeting()}, <span className="capitalize">{adminName}</span></h1>
-          <p className="mt-1 text-sm text-ink-muted">{officeLabel}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-subtle">{today}</p>
+          <h1 className="mt-1 text-title font-semibold tracking-tight text-ink">{greeting()}, <span className="capitalize">{adminName}</span></h1>
         </div>
         <div className="flex flex-wrap gap-2">
           {onAddScholar && <Button variant="primary" icon={UserPlus} onClick={onAddScholar}>Add scholar</Button>}
@@ -130,37 +139,41 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
 
       <KpiGrid columns={4}>
         {onlyDirect ? (
-          <KpiCard label="Current scholars" value={counts.scholars} icon={GraduationCap} onClick={() => onNavigate('lifecycle')} loading={isLoading} hint="Players you’ve added" />
+          <KpiCard label="Current scholars" value={counts.scholars} icon={GraduationCap} onClick={() => onNavigate('lifecycle')} loading={isLoading} />
         ) : (
           <>
-            <KpiCard label="To review" value={counts.waiting} icon={Hourglass} tone={counts.waiting ? 'warning' : 'neutral'} onClick={() => onOpenStatus('Under Evaluation')} loading={isLoading} hint="New and resubmitted" />
-            <KpiCard label="Waiting on students" value={counts.revision} icon={Clock} onClick={() => onOpenStatus('Needs Revision')} loading={isLoading} hint="Asked to revise" />
+            <KpiCard label="To review" value={counts.waiting} icon={Hourglass} tone={counts.waiting ? 'warning' : 'neutral'} onClick={() => onOpenStatus('Under Evaluation')} loading={isLoading} />
+            <KpiCard label="Waiting on students" value={counts.revision} icon={Clock} onClick={() => onOpenStatus('Needs Revision')} loading={isLoading} />
             <KpiCard label="Current scholars" value={counts.scholars} icon={GraduationCap} tone="success" onClick={() => onNavigate('lifecycle')} loading={isLoading} />
           </>
         )}
         {hasRenewals ? (
           <KpiCard label="Renewals to decide" value={renewalsWaiting} icon={RefreshCw} tone={renewalsWaiting ? 'warning' : 'neutral'} onClick={() => onNavigate('renewals')} loading={!periods} hint={openPeriods.length ? `${plural(openPeriods.length, 'period')} open` : 'No period open'} />
         ) : isAdso ? null : (
-          <KpiCard label="Scholarships" value={scholarships?.length ?? 0} icon={Award} onClick={() => onNavigate('scholarships')} loading={!scholarships} hint="You manage" />
+          <KpiCard label="Scholarships" value={scholarships?.length ?? 0} icon={Award} onClick={() => onNavigate('scholarships')} loading={!scholarships} />
         )}
       </KpiGrid>
 
       <div className="grid gap-6 lg:grid-cols-5">
         <Card title="Recent activity" className="lg:col-span-3" flush>
           {isLoading ? <div className="space-y-3 p-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-8 w-full" />)}</div>
-            : activity.length === 0 ? <EmptyState icon={Clock} title="Nothing yet" description="Applications and decisions show up here." />
+            : activity.length === 0 ? <EmptyState icon={Clock} title="Nothing yet" />
             : (
               <ul className="divide-y divide-line">
                 {activity.map((e, i) => (
                   <li key={`${e.app._id}-${i}`}>
                     <button type="button" onClick={() => onOpenApplication(e.app._id)} className="flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-surface-muted focus:outline-hidden focus-visible:bg-surface-muted">
-                      <span className="min-w-0 flex-1 text-sm text-ink">
-                        <span className="font-medium">{titleCaseName(applicantName(e.app))}</span>{' '}
-                        <span className="text-ink-muted">{EVENT_TEXT[e.status]}</span>{' '}
-                        {e.app.scholarshipName}
-                        {e.by && <span className="text-ink-subtle"> · by {e.by}</span>}
+                      <Avatar name={titleCaseName(applicantName(e.app))} avatarUrl={e.app.avatarUrl} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-ink">{titleCaseName(applicantName(e.app))}</span>
+                        <span className="block truncate text-xs text-ink-muted" title={e.app.scholarshipName}>
+                          {shortName(e.app.scholarshipName)}{e.by ? ` · ${e.by}` : ''}
+                        </span>
                       </span>
-                      <span className="shrink-0 text-xs text-ink-subtle">{relativeTime(e.at)}</span>
+                      <span className="flex shrink-0 flex-col items-end gap-1">
+                        <Badge tone={EVENT_BADGE[e.status]?.tone ?? 'neutral'}>{EVENT_BADGE[e.status]?.label ?? e.status}</Badge>
+                        <span className="text-xs text-ink-subtle">{relativeTime(e.at)}</span>
+                      </span>
                     </button>
                   </li>
                 ))}
@@ -170,22 +183,31 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
 
         <Card title="Your scholarships" className="lg:col-span-2" flush actions={<Button size="sm" variant="ghost" onClick={() => onNavigate('scholarships')}>Manage</Button>}>
           {!scholarships ? <div className="space-y-3 p-5">{[0, 1, 2].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
-            : scholarships.length === 0 ? <EmptyState icon={Award} title="No scholarships yet" description="Create one from Scholarships." />
+            : scholarships.length === 0 ? <EmptyState icon={Award} title="No scholarships yet" />
             : (
               <ul className="divide-y divide-line">
                 {scholarships.map(s => {
                   const online = acceptsOnlineApplications(s);
                   const approved = s.counts.byStatus.Approved ?? 0;
                   return (
-                    <li key={s.id} className="flex items-start justify-between gap-3 px-5 py-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-ink">{s.name}</p>
-                        <p className="truncate text-xs text-ink-muted">
-                          {online ? s.deadline : s.directAward ? 'Scholars added by your office' : 'No online application'}
-                          {' · '}{online ? `${plural(s.counts.total, 'application')}, ${approved} approved` : plural(approved, 'scholar')}
-                        </p>
+                    <li key={s.id} className="space-y-2 px-5 py-3.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-ink" title={s.name}>{s.name}</p>
+                          <p className="truncate text-xs text-ink-muted">{online ? s.deadline : s.directAward ? 'Added by your office' : 'No online application'}</p>
+                        </div>
+                        {online && <Badge tone={STATUS_TONE[s.status] ?? 'neutral'} dot>{s.status}</Badge>}
                       </div>
-                      {online && <Badge tone={STATUS_TONE[s.status] ?? 'neutral'} dot>{s.status}</Badge>}
+                      {online && s.counts.total > 0 ? (
+                        <div className="flex items-center gap-3">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-muted" role="img" aria-label={`${approved} of ${s.counts.total} approved`}>
+                            <div className="h-full rounded-full bg-success-solid" style={{ width: `${Math.round((approved / s.counts.total) * 100)}%` }} />
+                          </div>
+                          <span className="shrink-0 text-xs tabular-nums text-ink-muted">{approved}/{s.counts.total} approved</span>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-ink-subtle">{online ? 'No applications yet' : plural(approved, 'scholar')}</p>
+                      )}
                     </li>
                   );
                 })}

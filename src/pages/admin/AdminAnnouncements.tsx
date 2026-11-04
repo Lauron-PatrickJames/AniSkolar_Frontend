@@ -336,7 +336,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
             />
           </Field>
 
-          <Field label="Summary" helper="Shown on the collapsed card in the student portal." error={errors.description} labelAside={counter('description')}>
+          <Field label="Summary" error={errors.description} labelAside={counter('description')}>
             <Textarea
               ref={refs.description}
               value={form.description}
@@ -349,7 +349,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
             />
           </Field>
 
-          <Field label="Body" helper="Shown when a student expands the announcement, and posted to Facebook under the title." error={errors.content} labelAside={counter('content')}>
+          <Field label="Body" error={errors.content} labelAside={counter('content')}>
             <Textarea
               ref={refs.content}
               value={form.content}
@@ -365,7 +365,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
           <Field
             label="Images"
             optional
-            helper={`Up to ${MAX_IMAGES} JPG or PNG images, 10MB each, shown in this order. Changing the images replaces the Facebook post.`}
+            helper={`Up to ${MAX_IMAGES} JPG or PNG images, 10MB each.`}
             error={imageError || undefined}
             labelAside={images.length > 0 ? `${images.length}/${MAX_IMAGES}` : undefined}
           >
@@ -405,7 +405,6 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
                 onChange={v => set('isPinned', v)}
                 disabled={isSaving}
                 label="Pin to top of feed"
-                description="Pinned announcements stay above newer ones."
               />
             </div>
           </div>
@@ -414,7 +413,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
             <ScheduleFields value={form.schedule} onChange={v => set('schedule', v)} disabled={isSaving} error={scheduleError} />
           )}
 
-          <Field label="Related scholarship" optional helper="The announcement also shows on that scholarship's page, e.g. varsity tryout dates on the Athletic Scholarship.">
+          <Field label="Related scholarship" optional>
             <Select value={form.scholarshipId} onChange={v => set('scholarshipId', v)} disabled={isSaving}>
               <option value="">None</option>
               {scholarshipOptions.map(sch => <option key={sch.id} value={sch.id}>{sch.name}</option>)}
@@ -810,11 +809,11 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
             <EmptyState
               icon={Megaphone}
               title="No announcements match"
-              description="Try a different search or filter."
+             
               action={<Button onClick={() => { setSearch(''); setCategoryFilter('All'); setScholarshipFilter('All'); }}>Clear filters</Button>}
             />
           ) : (
-            <EmptyState icon={tab === 'pinned' ? Pin : Megaphone} title={EMPTY_TABS[tab].title} description={EMPTY_TABS[tab].description} action={newButton} />
+            <EmptyState icon={tab === 'pinned' ? Pin : Megaphone} title={EMPTY_TABS[tab].title} action={newButton} />
           )
         ) : (
           <ul className="divide-y divide-line" aria-label="Announcements">
@@ -852,7 +851,7 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
         <ConfirmDialog
           tone="danger"
           title="Delete announcement?"
-          description={<>"{pendingDelete.title}" will be permanently removed from the student portal. This can't be undone.</>}
+          description="This can't be undone."
           confirmLabel={pendingDelete.fbPostId ? 'Delete here and on Facebook' : 'Delete'}
           confirmIcon={Trash2}
           onConfirm={confirmDelete}

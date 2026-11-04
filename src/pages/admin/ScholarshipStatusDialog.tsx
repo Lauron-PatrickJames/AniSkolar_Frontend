@@ -213,7 +213,6 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
             onChange={setAnnounce}
             disabled={busy}
             label="Post an announcement"
-            description="Shows on every student's dashboard and on this scholarship's page. You can still edit it later in Announcements."
           />
         </div>}
         {announce && (
@@ -221,7 +220,7 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
             <Field label="Title" error={shown.title || undefined} labelAside={`${draft.title.length}/150`}>
               <TextInput value={draft.title} onChange={e => set('title', e.target.value)} maxLength={150} disabled={busy} />
             </Field>
-            <Field label="Summary" helper="Shown on the collapsed card in the student portal." error={shown.description || undefined} labelAside={`${draft.description.length}/500`}>
+            <Field label="Summary" error={shown.description || undefined} labelAside={`${draft.description.length}/500`}>
               <Textarea value={draft.description} onChange={e => set('description', e.target.value)} rows={2} maxLength={500} disabled={busy} className="resize-none" />
             </Field>
             <Field label="Body" error={shown.content || undefined}>
@@ -238,14 +237,12 @@ export default function ScholarshipStatusDialog({ scholarship, next, mode, getTo
                   onChange={setFbEnabled}
                   disabled={busy}
                   label="Also post to Facebook"
-                  description={scheduling ? 'Posts to the Page when it publishes.' : 'Posts to the Page right away.'}
                 />
                 <Checkbox
                   checked={emailEnabled}
                   onChange={setEmailEnabled}
                   disabled={busy}
                   label="Also email all students (Outlook)"
-                  description={scheduling ? 'Emails their school address when it publishes.' : 'Emails their school address right away, a few batches a minute.'}
                 />
               </>
             )}

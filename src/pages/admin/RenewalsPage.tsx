@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  BadgeCheck, CalendarClock, CheckCircle2, ChevronDown, CircleAlert, CircleDashed, ClipboardCheck, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, XCircle
+  BadgeCheck, CheckCircle2, ChevronDown, CircleAlert, CircleDashed, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, XCircle
 } from 'lucide-react';
 import { mockScholarships, acceptsOnlineApplications, applyScholarshipOverrides } from '../../data/scholarships';
 import { retentionMinGpa } from '../../utils/eligibility';
@@ -12,8 +12,8 @@ import {
 import { downloadZip, openDocument } from '../../utils/documents';
 import { API_BASE_URL, authHeaders, formatDate, formatDateTime, officeName, titleCaseName } from './adminData';
 import { ResultDialog,
-  Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, DatePicker, DetailField, DropdownMenu, EmptyState, ErrorState, Field, KpiCard, KpiGrid,
-  MobileList, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table, TableSkeleton, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
+  Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, DatePicker, DetailField, DropdownMenu, EmptyState, ErrorState, Field,
+  MobileList, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table, TableSkeleton, Tabs, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
 import { TemplatePicker, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
 
@@ -311,7 +311,7 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
           <EmptyState
             icon={RefreshCw}
             title="No renewal periods yet"
-            description="Open a renewal period for a scholarship and term. Scholars who hold it can then submit."
+           
             action={<Button variant="primary" icon={Plus} onClick={() => setEditingPeriod('new')}>Open renewal period</Button>}
           />
         </Card>
@@ -326,13 +326,6 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
             {period && <PeriodSummary period={period} />}
           </div>
 
-          <KpiGrid columns={4}>
-            <KpiCard label="Scholars" value={rows.length} icon={Users} active={filter === 'All'} onClick={() => setFilter('All')} loading={rowsLoading && rows.length === 0} hint="Hold the scholarship this term" />
-            <KpiCard label="Not submitted" value={counts['Not submitted']} icon={CalendarClock} tone="warning" active={filter === 'Not submitted'} onClick={() => setFilter('Not submitted')} loading={rowsLoading && rows.length === 0} />
-            <KpiCard label="To review" value={counts['Under Evaluation']} icon={ClipboardCheck} tone="info" active={filter === 'Under Evaluation'} onClick={() => setFilter('Under Evaluation')} loading={rowsLoading && rows.length === 0} hint={counts['Needs Revision'] ? `${counts['Needs Revision']} waiting on a revision` : undefined} />
-            <KpiCard label="Renewed" value={counts.Renewed} icon={CheckCircle2} tone="success" active={filter === 'Renewed'} onClick={() => setFilter('Renewed')} loading={rowsLoading && rows.length === 0} hint={counts['Not Renewed'] + counts['Not Continuing'] ? `${counts['Not Renewed']} not renewed · ${counts['Not Continuing']} not continuing` : undefined} />
-          </KpiGrid>
-
           {eligibleRows.length > 0 && (
             <Alert
               tone="success"
@@ -340,24 +333,30 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
               title={`${eligibleRows.length} renewal${eligibleRows.length === 1 ? ' passes' : 's pass'} every check`}
               action={<Button size="sm" variant="primary" onClick={() => setBulkOpen(true)}>Renew {eligibleRows.length}</Button>}
             >
-              GPA, no failing grade, documents{period?.scholarshipId === 's1' ? ', duty hours' : ''}{period?.requiresEvaluation ? ' and an evaluation of 4 or higher' : ''}. Renew them together; decide the rest one by one.
+              GPA, no failing grade, documents{period?.scholarshipId === 's1' ? ', duty hours' : ''}{period?.requiresEvaluation ? ', evaluation 4+' : ''}.
             </Alert>
           )}
 
           <Card
             flush
             headerSlot={
-              <div className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:items-center">
-                <SearchInput value={search} onChange={setSearch} label="Search scholars" placeholder="Search name, student number or program…" className="lg:w-80" />
-                <SegmentedControl<Filter>
-                  label="Status"
-                  options={['All', 'Not submitted', 'Under Evaluation', 'Needs Revision', 'Renewed', 'Not Renewed', 'Not Continuing']}
+              <>
+                <Tabs<Filter>
+                  label="Filter by status"
                   value={filter}
-                  onChange={v => setFilter((v || 'All') as Filter)}
-                  className="overflow-x-auto lg:w-auto"
-                  renderLabel={option => option === 'Under Evaluation' ? 'To review' : option}
+                  onChange={setFilter}
+                  tabs={(['All', 'Not submitted', 'Under Evaluation', 'Needs Revision', 'Renewed', 'Not Renewed', 'Not Continuing'] as Filter[])
+                    .filter(k => k === 'All' || k === 'Not submitted' || k === 'Under Evaluation' || k === 'Renewed' || (counts[k as RowState] ?? 0) > 0)
+                    .map(k => ({
+                      key: k,
+                      label: k === 'All' ? 'All scholars' : k === 'Under Evaluation' ? 'To review' : k,
+                      count: rowsLoading && rows.length === 0 ? undefined : k === 'All' ? rows.length : counts[k as RowState],
+                    }))}
                 />
-              </div>
+                <div className="border-b border-line p-4">
+                  <SearchInput value={search} onChange={setSearch} label="Search scholars" placeholder="Search name, student number or program…" className="lg:w-80" />
+                </div>
+              </>
             }
           >
             {rowsError ? (
@@ -368,10 +367,10 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
               <EmptyState
                 icon={Users}
                 title="No scholars hold this scholarship for the term"
-                description="Scholars count once their application for the academic year is approved, or once they were renewed last term."
+               
               />
             ) : visibleRows.length === 0 ? (
-              <EmptyState title="No scholars match" description="Try another status or search." />
+              <EmptyState title="No scholars match" />
             ) : period && (
               <>
                 <div className="hidden md:block">
@@ -467,7 +466,7 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
       {bulkOpen && period && (
         <ConfirmDialog
           title={`Renew ${eligibleRows.length} scholar${eligibleRows.length === 1 ? '' : 's'}?`}
-          description={`${period.scholarshipName}, ${periodLabel(period)}. Each passes every check; AniSkolar checks again before renewing, and the history notes it was renewed in bulk.`}
+          description={`${period.scholarshipName}, ${periodLabel(period)}`}
           confirmLabel={`Renew ${eligibleRows.length}`}
           confirmIcon={CheckCircle2}
           onConfirm={renewEligible}
@@ -607,7 +606,7 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
   return (
     <Modal
       title={isNew ? 'Open renewal period' : 'Edit renewal period'}
-      description={isNew ? 'Scholars who hold the scholarship can submit their renewal while the period is open.' : `${period!.scholarshipName} · ${periodLabel(period!)}`}
+      description={isNew ? undefined : `${period!.scholarshipName} · ${periodLabel(period!)}`}
       onClose={onClose}
       dismissible={!saving}
       footer={
@@ -636,10 +635,10 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
           </div>
         )}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Field label="Deadline" optional helper={period?.deadline && !isIsoDate(period.deadline) ? `Was typed as “${period.deadline}”. Pick it from the calendar.` : 'Scholars are reminded 3 days and 1 day before.'}>
+          <Field label="Deadline" optional helper={period?.deadline && !isIsoDate(period.deadline) ? `Was typed as “${period.deadline}”. Pick it from the calendar.` : undefined}>
             <DatePicker value={deadline} onChange={setDeadline} disabled={saving} placeholder="Pick the last day" />
           </Field>
-          <Field label="Minimum GPA" optional helper="0.00–4.00. Lower GPAs are flagged for review.">
+          <Field label="Minimum GPA" optional helper="0.00–4.00">
             <TextInput type="number" inputMode="decimal" step="0.01" min={0} max={4} value={minGpa} onChange={e => setMinGpa(e.target.value)} placeholder="e.g. 2.50" disabled={saving} />
           </Field>
         </div>
@@ -654,10 +653,10 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
           onChange={setRequiresEvaluation}
           disabled={saving}
           label="Requires the department head's evaluation"
-          description={`Staff enter the head's 1–5 ratings. An average below ${PASSING_AVERAGE} (Very satisfactory) means an interview before deciding.`}
+          description={`Below ${PASSING_AVERAGE} average means an interview.`}
         />
         {!isNew && (
-          <Checkbox checked={open} onChange={setOpenState} disabled={saving} label="Open for submissions" description="When closed, only scholars asked to revise can resubmit." />
+          <Checkbox checked={open} onChange={setOpenState} disabled={saving} label="Open for submissions" />
         )}
         {error && <Alert tone="danger">{error}</Alert>}
       </div>
@@ -681,125 +680,114 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
 
   return (
     <Modal
-      size="lg"
+      size="xl"
       title={name}
       description={`${row.studentNumber} · ${renewal.scholarshipName} · ${periodLabel(period)}`}
       icon={<Avatar name={row.name || row.studentNumber} avatarUrl={row.avatarUrl} />}
       onClose={onClose}
     >
-      <div className="space-y-6">
-        {/* At a glance: what the decision rests on */}
-        {renewal.continuing ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <GlanceTile
-              label={period.minGpa !== undefined && period.minGpa !== null ? `GPA · min. ${formatGpa(period.minGpa)}` : 'GPA'}
-              value={formatGpa(renewal.gpa)}
-              tone={meets === false ? 'danger' : meets ? 'success' : 'neutral'}
-              note={meets === false ? 'Below the minimum' : meets ? 'Meets the minimum' : undefined}
-            />
-            <GlanceTile label="Failing grade" value={renewal.hasFailingGrade ? 'Yes' : 'None'} tone={renewal.hasFailingGrade ? 'danger' : 'success'} />
-            <GlanceTile
-              label="Grades (TCG)"
-              value={renewal.documents.length ? 'Uploaded' : 'Missing'}
-              tone={renewal.documents.length ? 'success' : 'danger'}
-              action={renewal.documents[0] ? { label: 'View', onClick: () => openDocument(renewal.documents[0].fileId, getToken).catch(err => window.alert(err instanceof Error ? err.message : "Couldn't open the file.")) } : undefined}
-            />
-            <GlanceTile
-              label="Office evaluation"
-              value={renewal.evaluation ? `${renewal.evaluation.average.toFixed(2)} / 5` : period.requiresEvaluation ? 'Not in yet' : 'Not needed'}
-              tone={renewal.evaluation ? (renewal.evaluation.average >= PASSING_AVERAGE ? 'success' : 'warning') : period.requiresEvaluation ? 'warning' : 'neutral'}
-              note={renewal.evaluation ? ratingLabel(renewal.evaluation.average) : undefined}
-            />
-          </div>
-        ) : (
-          <Alert tone="neutral" title={`Not continuing · ${renewal.notContinuingReason ?? ''}`}>{renewal.notContinuingDetails || 'The scholar told the office they are not continuing.'}</Alert>
-        )}
-
-        {row.check && renewal.continuing && (
-          <section className="space-y-2">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-ink">Renewal check</h3>
-              <Badge tone={CHECK_META[row.check.result].tone}>{CHECK_META[row.check.result].label}</Badge>
-            </div>
-            <CheckList check={row.check} />
-          </section>
-        )}
-
-        {renewal.continuing && <DecisionPanel renewal={renewal} period={period} studentName={row.name} check={row.check ?? null} getToken={getToken} onUpdated={onUpdated} />}
-
-        <dl className="grid grid-cols-2 gap-4 border-t border-line pt-5 sm:grid-cols-4">
-          <DetailField label="Status" value={<Badge tone={STATE_TONE[renewal.status]} dot>{renewal.status}</Badge>} />
-          <DetailField label="Program" value={row.program} />
-          <DetailField label="Holds it through" value={row.holder?.renewedFrom ? `Renewed ${row.holder.renewedFrom}` : row.holder?.referenceCode ? `Application ${row.holder.referenceCode}` : 'No longer counted as a holder'} />
-          <DetailField label="Submitted" value={formatDateTime(renewal.createdAt)} />
-        </dl>
-
-        {renewal.continuing && (
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-ink">Documents</h3>
-            <ul className="space-y-1.5">
-              {period.requirements.map(requirement => {
-                const doc = renewal.documents.find(d => d.docType === requirement);
-                return (
-                  <li key={requirement} className="flex items-center justify-between gap-3 rounded-control px-3 py-2 ring-1 ring-line">
-                    <span className="flex min-w-0 items-center gap-2 text-sm text-ink">
-                      <FileText className="size-4 shrink-0 text-ink-subtle" aria-hidden />
-                      <span className="truncate">{requirement}</span>
-                    </span>
-                    {doc
-                      ? (
-                        <button
-                          type="button"
-                          onClick={() => openDocument(doc.fileId, getToken).catch(err => window.alert(err instanceof Error ? err.message : "Couldn't open the file."))}
-                          className="shrink-0 text-sm font-medium text-accent hover:underline"
-                        >
-                          View
-                        </button>
-                      )
-                      : <Badge tone="warning">Missing</Badge>}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
-
-        {renewal.continuing && (period.requiresEvaluation || renewal.evaluation) && (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-ink">Department head's evaluation</h3>
-              {renewal.evaluation && !editingEvaluation && (
-                <Button size="sm" icon={Pencil} onClick={() => setEditingEvaluation(true)}>Edit</Button>
-              )}
-            </div>
-            {renewal.evaluation && !editingEvaluation ? (
-              <EvaluationSummary renewal={renewal} />
-            ) : editingEvaluation || !renewal.evaluation ? (
-              <EvaluationForm
-                renewal={renewal}
-                dutyOffice={row.dutyOffice ?? null}
-                getToken={getToken}
-                onCancel={renewal.evaluation ? () => setEditingEvaluation(false) : undefined}
-                onSaved={updated => { setEditingEvaluation(false); onUpdated(updated); }}
+      <div className="grid gap-6 lg:grid-cols-5">
+        {/* What the decision rests on */}
+        <div className="min-w-0 space-y-6 lg:col-span-3">
+          {!renewal.continuing ? (
+            <Alert tone="neutral" title={`Not continuing · ${renewal.notContinuingReason ?? ''}`}>{renewal.notContinuingDetails || 'The scholar told the office they are not continuing.'}</Alert>
+          ) : row.check ? (
+            <section className="space-y-3 rounded-card p-4 ring-1 ring-line">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-ink">Renewal check</h3>
+                <Badge tone={CHECK_META[row.check.result].tone} dot>{CHECK_META[row.check.result].label}</Badge>
+              </div>
+              <CheckList check={row.check} />
+            </section>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <GlanceTile
+                label={period.minGpa !== undefined && period.minGpa !== null ? `GPA · min. ${formatGpa(period.minGpa)}` : 'GPA'}
+                value={formatGpa(renewal.gpa)}
+                tone={meets === false ? 'danger' : meets ? 'success' : 'neutral'}
               />
-            ) : null}
-          </section>
-        )}
+              <GlanceTile label="Failing grade" value={renewal.hasFailingGrade ? 'Yes' : 'None'} tone={renewal.hasFailingGrade ? 'danger' : 'success'} />
+            </div>
+          )}
 
-        {renewal.history.length > 0 && (
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-ink">History</h3>
-            <ol className="space-y-2">
-              {[...renewal.history].reverse().map((h, i) => (
-                <li key={`${h.changedAt}-${i}`} className="text-sm">
-                  <span className="font-medium text-ink">{h.status}</span>
-                  <span className="text-ink-subtle"> · {formatDateTime(h.changedAt)} · {h.changedBy === 'student' ? 'Scholar' : h.changedByName || h.changedBy}{h.changedByOffice ? ` (${officeName(h.changedByOffice)})` : ''}</span>
-                  {h.note && h.changedBy !== 'student' && <p className="mt-0.5 whitespace-pre-line text-ink-muted">{h.note}</p>}
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
+          {renewal.continuing && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-ink">Documents</h3>
+              <ul className="space-y-1.5">
+                {period.requirements.map(requirement => {
+                  const doc = renewal.documents.find(d => d.docType === requirement);
+                  return (
+                    <li key={requirement} className="flex items-center justify-between gap-3 rounded-control px-3 py-2 ring-1 ring-line">
+                      <span className="flex min-w-0 items-center gap-2 text-sm text-ink">
+                        <FileText className="size-4 shrink-0 text-ink-subtle" aria-hidden />
+                        <span className="truncate">{requirement}</span>
+                      </span>
+                      {doc
+                        ? (
+                          <Button size="sm" variant="ghost" onClick={() => openDocument(doc.fileId, getToken).catch(err => window.alert(err instanceof Error ? err.message : "Couldn't open the file."))}>
+                            View
+                          </Button>
+                        )
+                        : <Badge tone="warning">Missing</Badge>}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+
+          {renewal.continuing && (period.requiresEvaluation || renewal.evaluation) && (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-ink">Office evaluation</h3>
+                {renewal.evaluation && !editingEvaluation && (
+                  <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setEditingEvaluation(true)}>Edit</Button>
+                )}
+              </div>
+              {renewal.evaluation && !editingEvaluation ? (
+                <EvaluationSummary renewal={renewal} />
+              ) : editingEvaluation || !renewal.evaluation ? (
+                <EvaluationForm
+                  renewal={renewal}
+                  dutyOffice={row.dutyOffice ?? null}
+                  getToken={getToken}
+                  onCancel={renewal.evaluation ? () => setEditingEvaluation(false) : undefined}
+                  onSaved={updated => { setEditingEvaluation(false); onUpdated(updated); }}
+                />
+              ) : null}
+            </section>
+          )}
+
+          {renewal.history.length > 0 && (
+            <details className="group rounded-card ring-1 ring-line">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-ink">
+                History ({renewal.history.length})
+                <ChevronDown className="size-4 text-ink-subtle transition-transform group-open:rotate-180" aria-hidden />
+              </summary>
+              <ol className="space-y-2 border-t border-line px-4 py-3">
+                {[...renewal.history].reverse().map((h, i) => (
+                  <li key={`${h.changedAt}-${i}`} className="text-sm">
+                    <span className="font-medium text-ink">{h.status}</span>
+                    <span className="text-ink-subtle"> · {formatDateTime(h.changedAt)} · {h.changedBy === 'student' ? 'Scholar' : h.changedByName || h.changedBy}{h.changedByOffice ? ` (${officeName(h.changedByOffice)})` : ''}</span>
+                    {h.note && h.changedBy !== 'student' && <p className="mt-0.5 whitespace-pre-line text-ink-muted">{h.note}</p>}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+        </div>
+
+        {/* The decision, in view while reading */}
+        <div className="min-w-0 space-y-5 lg:col-span-2 lg:sticky lg:top-0 lg:self-start">
+          {renewal.continuing
+            ? <DecisionPanel renewal={renewal} period={period} studentName={row.name} check={row.check ?? null} getToken={getToken} onUpdated={onUpdated} />
+            : <Badge tone={STATE_TONE[renewal.status]} dot>{renewal.status}</Badge>}
+          <dl className="space-y-3 rounded-card bg-surface-muted p-4">
+            <DetailField label="Program" value={row.program} />
+            <DetailField label="Holds it through" value={row.holder?.renewedFrom ? `Renewed ${row.holder.renewedFrom}` : row.holder?.referenceCode ? row.holder.referenceCode : 'No longer counted as a holder'} />
+            <DetailField label="Submitted" value={formatDateTime(renewal.createdAt)} />
+          </dl>
+        </div>
       </div>
     </Modal>
   );
@@ -922,7 +910,7 @@ function EvaluationForm({ renewal, dutyOffice, getToken, onCancel, onSaved }: {
           <TextInput value={assignedOffice} onChange={e => setAssignedOffice(e.target.value)} disabled={saving} maxLength={200} />
         </Field>
       </div>
-      <Field label="Remarks" optional helper="Staff only. Not shown to the scholar.">
+      <Field label="Remarks" optional helper="Staff only.">
         <Textarea rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} disabled={saving} maxLength={2000} />
       </Field>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1086,7 +1074,7 @@ function DecisionPanel({ renewal, period, studentName, check, getToken, onUpdate
                   />
                 }
                 optional={!noteRequired}
-                helper="The scholar sees this on their Renewal page."
+                helper="Shown to the scholar."
               >
                 <Textarea rows={3} value={note} onChange={e => { setNote(e.target.value); setError(''); }} disabled={saving} maxLength={2000} />
               </Field>

@@ -5,7 +5,7 @@ import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
 import { collegeName } from '../../data/programs';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
-import { ResultDialog, Alert, Avatar, Button, Card, ConfirmDialog, DropdownMenu, DropdownMenuItem, EmptyState, Menu, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, TableSkeleton, TextInput, Toast } from './AdminUI';
+import { ResultDialog, Alert, Avatar, Button, Card, ConfirmDialog, DropdownMenu, DropdownMenuItem, EmptyState, Menu, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, Skeleton, TableSkeleton, TextInput, Toast } from './AdminUI';
 import { TemplatePicker, UnfilledHint, firstNameOf } from './ReplyTemplates';
 
 // AdSO: conversations with students (backend routes/messages.js), one per
@@ -178,7 +178,7 @@ export default function MessagesPage({ getToken, selectedStudent, onSelectStuden
         <EmptyState
           icon={inboxView === 'Archived' ? Archive : MessageSquare}
           title={search ? 'No conversations match' : inboxView === 'Archived' ? 'Nothing archived' : inboxView === 'Unread' ? 'All caught up' : threads.length ? 'Inbox is empty' : 'No messages yet'}
-          description={search ? 'Try another search.' : inboxView === 'Archived' ? 'Archived conversations show here until the student or office writes again.' : inboxView === 'Unread' ? 'No unread conversations.' : 'Messages from students appear here. You can also start one.'}
+         
         />
       ) : (
         <ul className="max-h-[70vh] divide-y divide-line overflow-y-auto">
@@ -251,7 +251,7 @@ export default function MessagesPage({ getToken, selectedStudent, onSelectStuden
           />
         ) : (
           <Card className="hidden lg:block">
-            <EmptyState icon={MessageSquare} title="Choose a conversation" description="Or start one with New message." />
+            <EmptyState icon={MessageSquare} title="Choose a conversation" />
           </Card>
         )}
       </div>
@@ -260,7 +260,7 @@ export default function MessagesPage({ getToken, selectedStudent, onSelectStuden
         <ConfirmDialog
           tone="danger"
           title="Delete this conversation?"
-          description={`It's removed from your inbox. ${deleting.kind === 'office' ? 'The office' : 'The student'} keeps their copy, and if they write again, a new conversation starts here with only the new messages.`}
+          description={`Removed from your inbox only. ${deleting.kind === 'office' ? 'The office' : 'The student'} keeps their copy.`}
           confirmLabel="Delete"
           confirmIcon={Trash2}
           busy={deleteBusy}
@@ -478,10 +478,13 @@ function StudentProfileDialog({ studentNumber, getToken, onClose, onOpenRecord }
   );
 }
 
+// New message: pick who from a live search (students by name or student
+// number) or the list of duty offices with a head; picking opens the chat.
 function NewMessageDialog({ getToken, onClose, onOpen }: { getToken: () => Promise<string | null>; onClose: () => void; onOpen: (key: string) => void }) {
-  const [to, setTo] = useState<'student' | 'office'>('student');
-  const [value, setValue] = useState('');
-  const [office, setOffice] = useState('');
+  const [to, setTo] = useState<'Student' | 'Office'>('Student');
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState<{ studentNumber: string; name: string; programCode?: string; college?: string; yearLevel?: string }[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const [offices, setOffices] = useState<{ office: string; headName?: string; headEmail?: string }[]>([]);
   useEffect(() => {
     (async () => {
@@ -493,38 +496,93 @@ function NewMessageDialog({ getToken, onClose, onOpen }: { getToken: () => Promi
       }
     })();
   }, [getToken]);
-  const valid = to === 'student' ? /^\d{9}$/.test(value.trim()) : !!office;
-  const open = () => { if (valid) onOpen(to === 'student' ? value.trim() : `${OFFICE_PREFIX}${office}`); };
+
+  // Students, a moment after typing.
+  useEffect(() => {
+    if (to !== 'Student' || query.trim().length < 2) { setFound(null); return; }
+    let cancelled = false;
+    setSearching(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/announcements/email/students?q=${encodeURIComponent(query.trim())}`, { headers: await authHeaders(getToken) });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled) setFound(res.ok ? body.students ?? [] : []);
+      } catch {
+        if (!cancelled) setFound([]);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [query, to, getToken]);
+
+  const q = query.trim().toLowerCase();
+  const officeList = offices.filter(o => !q || o.office.toLowerCase().includes(q) || (o.headName ?? '').toLowerCase().includes(q));
+  const typedNumber = /^\d{9}$/.test(query.trim()) ? query.trim() : null;
+  const row = 'flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left hover:bg-surface-muted focus:outline-hidden focus-visible:bg-surface-muted';
+
   return (
-    <Modal
-      size="sm"
-      title="New message"
-      onClose={onClose}
-      footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={open}>Open conversation</Button></>}
-    >
-      <form className="space-y-3" onSubmit={e => { e.preventDefault(); open(); }}>
-        <Field label="To">
-          <Select value={to} onChange={v => setTo(v as 'student' | 'office')}>
-            <option value="student">A student</option>
-            <option value="office" disabled={!offices.length}>A duty office{offices.length ? '' : ' (no office heads yet)'}</option>
-          </Select>
-        </Field>
-        {to === 'student' ? (
-          <>
-            <Field label="Student number">
-              <TextInput value={value} onChange={e => setValue(e.target.value.replace(/\D/g, '').slice(0, 9))} inputMode="numeric" placeholder="e.g. 202330864" autoFocus />
-            </Field>
-            {value && !/^\d{9}$/.test(value.trim()) && <Alert tone="info">Student numbers have 9 digits.</Alert>}
-          </>
-        ) : (
-          <Field label="Office">
-            <Select value={office} onChange={setOffice}>
-              <option value="">Choose an office</option>
-              {offices.map(o => <option key={o.office} value={o.office}>{o.office}{o.headName ? ` — ${o.headName}` : ''}</option>)}
-            </Select>
-          </Field>
-        )}
-      </form>
+    <Modal size="md" title="New message" onClose={onClose} footer={<Button onClick={onClose}>Cancel</Button>}>
+      <div className="space-y-4">
+        <SegmentedControl<'Student' | 'Office'>
+          label="Write to"
+          options={offices.length ? ['Student', 'Office'] : ['Student']}
+          value={to}
+          onChange={v => { if (v) { setTo(v); setQuery(''); } }}
+          renderLabel={o => (o === 'Student' ? 'A student' : 'A duty office')}
+        />
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          label={to === 'Student' ? 'Search students' : 'Search offices'}
+          placeholder={to === 'Student' ? 'Name or student number…' : 'Office or head’s name…'}
+        />
+        <div className="max-h-80 min-h-40 overflow-y-auto">
+          {to === 'Student' ? (
+            query.trim().length < 2 ? (
+              <p className="py-10 text-center text-sm text-ink-subtle">Type a name or student number.</p>
+            ) : searching && !found ? (
+              <div className="space-y-2">{[0, 1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+            ) : (
+              <ul className="space-y-0.5">
+                {(found ?? []).map(st => (
+                  <li key={st.studentNumber}>
+                    <button type="button" onClick={() => onOpen(st.studentNumber)} className={row}>
+                      <Avatar name={titleCaseName(st.name)} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-ink">{titleCaseName(st.name)}</span>
+                        <span className="block truncate text-xs text-ink-muted">{[st.studentNumber, st.programCode, st.yearLevel].filter(Boolean).join(' · ')}</span>
+                      </span>
+                      <MessageSquare className="size-4 text-ink-subtle" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+                {found && found.length === 0 && (
+                  typedNumber
+                    ? <li><button type="button" onClick={() => onOpen(typedNumber)} className={row}><MessageSquare className="size-4 text-ink-subtle" aria-hidden /><span className="text-sm text-ink">Write to <span className="font-medium tabular-nums">{typedNumber}</span></span></button></li>
+                    : <li className="py-10 text-center text-sm text-ink-subtle">No student found.</li>
+                )}
+              </ul>
+            )
+          ) : (
+            <ul className="space-y-0.5">
+              {officeList.map(o => (
+                <li key={o.office}>
+                  <button type="button" onClick={() => onOpen(`${OFFICE_PREFIX}${o.office}`)} className={row}>
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-muted text-ink-muted"><Building2 className="size-4" aria-hidden /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-ink">{o.office}</span>
+                      {o.headName && <span className="block truncate text-xs text-ink-muted">{o.headName}</span>}
+                    </span>
+                    <MessageSquare className="size-4 text-ink-subtle" aria-hidden />
+                  </button>
+                </li>
+              ))}
+              {officeList.length === 0 && <li className="py-10 text-center text-sm text-ink-subtle">No office found.</li>}
+            </ul>
+          )}
+        </div>
+      </div>
     </Modal>
   );
 }

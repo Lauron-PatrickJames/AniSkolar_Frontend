@@ -7,7 +7,7 @@ import {
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
 import AttendanceDialog, { AttendanceEvent, printAttendanceSheet } from './EventAttendance';
 import { ResultDialog,
-  Alert, Avatar, Badge, Button, Card, DatePicker, DetailField, EmptyState, ErrorState, Field, KpiCard, KpiGrid, MobileList, Modal, PageHeader,
+  Alert, Avatar, Badge, Button, Card, DatePicker, Menu, DetailField, EmptyState, ErrorState, Field, KpiCard, KpiGrid, MobileList, Modal, PageHeader,
   SearchInput, SegmentedControl, Select, Table, TableSkeleton, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
 
@@ -186,11 +186,17 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
         title="Duty hours"
         actions={
           <>
-            <Button icon={Building2} onClick={() => setOfficesOpen(true)}>Offices</Button>
-            <Button icon={CalendarCheck} onClick={() => setEventsOpen(true)} disabled={!term}>Events{pendingClaimCount ? ` (${pendingClaimCount} to review)` : ''}</Button>
-            <Button icon={Shuffle} onClick={() => setRandomOpen(true)} disabled={!term || unassignedCount === 0}>Random assign</Button>
-            <Button icon={SlidersHorizontal} onClick={() => setHoursOpen(true)}>Hours per grant</Button>
-            <Button icon={Download} onClick={exportCsv} disabled={rows.length === 0}>Export CSV</Button>
+            <Menu
+              label="Setup"
+              icon={SlidersHorizontal}
+              items={[
+                { key: 'offices', label: 'Offices and heads', icon: Building2, onSelect: () => setOfficesOpen(true) },
+                { key: 'hours', label: 'Hours per grant', icon: Clock, onSelect: () => setHoursOpen(true) },
+                ...(rows.length ? [{ key: 'export', label: 'Export CSV', icon: Download, onSelect: exportCsv }] : []),
+              ]}
+            />
+            {unassignedCount > 0 && <Button icon={Shuffle} onClick={() => setRandomOpen(true)} disabled={!term}>Random assign</Button>}
+            <Button variant="primary" icon={CalendarCheck} onClick={() => setEventsOpen(true)} disabled={!term}>Events{pendingClaimCount ? ` (${pendingClaimCount})` : ''}</Button>
           </>
         }
       />
@@ -248,9 +254,9 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
         ) : loading && rows.length === 0 ? (
           <TableSkeleton rows={6} label="Loading duty hours" />
         ) : rows.length === 0 ? (
-          <EmptyState icon={Clock} title="No scholars for this term" description="SFAG holders for this term appear here." />
+          <EmptyState icon={Clock} title="No scholars for this term" />
         ) : visible.length === 0 ? (
-          <EmptyState title="No scholars match" description="Try another status or search." />
+          <EmptyState title="No scholars match" />
         ) : (
           <>
             <div className="hidden md:block">
@@ -628,7 +634,7 @@ function RandomAssignDialog({ rows, term, offices, officeCounts, getToken, onClo
     <Modal
       size="lg"
       title="Random assign"
-      description={`${termLabel(term)} · ${who(unassigned.length)} without an office. Set how many scholars each office takes, then shuffle. Nothing is saved until you assign.`}
+      description={`${termLabel(term)} · ${who(unassigned.length)} without an office`}
       onClose={onClose}
       dismissible={!busy}
       footer={preview ? (
@@ -770,7 +776,7 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
     <Modal
       size="lg"
       title="Events"
-      description={`${termLabel(term)} · Events credited as duty hours. Print each event’s attendance sheet for scholars to sign, then upload it and tick who attended.`}
+      description={termLabel(term)}
       onClose={close}
       dismissible={!busy}
       footer={<Button onClick={close} disabled={!!busy}>Done</Button>}
@@ -1088,9 +1094,7 @@ function AssignOfficeDialog({ scholars, term, offices, officeCounts, getToken, o
         <Field
           label="Office"
           error={error || undefined}
-          helper={replacing > 0 && !single
-            ? `${replacing} of them already have a different office; it will be replaced.`
-            : `Where ${single ? 'the scholar renders' : 'these scholars render'} duty hours this term. They see it on their Duty Hours page.`}
+          helper={replacing > 0 && !single ? `${replacing} of them already have an office; it will be replaced.` : undefined}
         >
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-subtle" aria-hidden />
@@ -1310,7 +1314,7 @@ function DeadlineDialog({ term, deadline, getToken, onClose, onSaved }: {
   return (
     <Modal
       title="Duty hours deadline"
-      description={`${termLabel(term)} · applies to every SFAG scholar. Scholars see it but can't change it.`}
+      description={termLabel(term)}
       onClose={onClose}
       dismissible={!busy}
       footer={(
@@ -1323,7 +1327,7 @@ function DeadlineDialog({ term, deadline, getToken, onClose, onSaved }: {
         </div>
       )}
     >
-      <Field label="Last day to complete duty hours" error={error || undefined} helper={!error ? 'Usually the last day of classes. Reminders and each scholar’s “hours a week” count down to it.' : undefined}>
+      <Field label="Last day to complete duty hours" error={error || undefined}>
         <DatePicker value={value} onChange={setValue} placeholder="Select the deadline" />
       </Field>
     </Modal>

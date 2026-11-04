@@ -295,7 +295,6 @@ export function TemplatesPage({ getToken }: { getToken: GetToken }) {
     <div className="space-y-6">
       <PageHeader
         title="Message templates"
-        description="Ready-made replies for your office. Pick one from Templates when writing, and it fills in the student’s details for you."
         actions={<Button variant="primary" icon={Plus} onClick={() => setEditing({ template: null, draft: { context: tab, decision: null, body: '' } })}>New template</Button>}
       />
 
@@ -369,7 +368,7 @@ export function TemplatesPage({ getToken }: { getToken: GetToken }) {
       {deleting && (
         <ConfirmDialog
           title={`Delete “${deleting.title}”?`}
-          description="It’s removed for everyone in your office. Messages already sent aren’t changed."
+          description="It’s removed for everyone in your office."
           confirmLabel="Delete"
           tone="danger"
           busy={busy}
@@ -430,7 +429,6 @@ function ManageTemplates({ getToken, templates, start, draft, onChanged, onClose
     <Modal
       size="lg"
       title="Message templates"
-      description="Shared with everyone in your office. {firstName}, {scholarship}, {referenceCode} and {term} are filled in when you insert one; [brackets] are for you to fill."
       onClose={onClose}
       footer={<><Button onClick={onClose}>Done</Button><Button variant="primary" icon={Plus} onClick={() => setEditing('new')}>New template</Button></>}
     >
@@ -520,7 +518,7 @@ function TemplateForm({ getToken, template, draft, onCancel, onSaved }: {
       <form className="grid gap-6 lg:grid-cols-2" onSubmit={e => { e.preventDefault(); if (!missing) save(); }}>
         <div className="space-y-4">
           {error && <Alert tone="danger">{error}</Alert>}
-          <Field label="Name" helper="Short, so it’s easy to pick, e.g. “Blurry document”.">
+          <Field label="Name">
             <TextInput value={title} onChange={e => setTitle(e.target.value)} maxLength={80} autoFocus={!template} placeholder="e.g. Blurry document" />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">

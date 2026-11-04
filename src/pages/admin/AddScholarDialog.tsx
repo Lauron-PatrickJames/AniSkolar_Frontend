@@ -178,7 +178,7 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
     <Modal
       size="lg"
       title="Add a scholar"
-      description={`${scholarship.name} · a player picked from the varsity tryouts. They’re a scholar as soon as you add them, and they’re emailed.`}
+      description={scholarship.name}
       onClose={onClose}
       dismissible={!busy}
       footer={
@@ -347,9 +347,9 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
         <Step n={5} title="Approval" done={approved}>
           <div className="space-y-4">
             <div className={`rounded-control p-3.5 ring-1 ring-inset ${approved ? 'bg-success-bg ring-success-fg/30' : attempted ? 'ring-danger-fg/40' : 'ring-line'}`}>
-              <Checkbox checked={approved} onChange={setApproved} label={`Approved by the ${form.approver}`} description="Tick once the Director has signed off on this scholarship." disabled={busy} />
+              <Checkbox checked={approved} onChange={setApproved} label={`Approved by the ${form.approver}`} disabled={busy} />
             </div>
-            <Field label="Message to the player" optional helper="In their email and with their scholarship, e.g. when the discount starts.">
+            <Field label="Message to the player" optional>
               <Textarea value={note} onChange={e => setNote(e.target.value)} rows={3} maxLength={2000} disabled={busy} placeholder="e.g. Welcome to the team! Your discount starts this semester." />
             </Field>
           </div>

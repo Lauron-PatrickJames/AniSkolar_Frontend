@@ -419,7 +419,6 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
         <EmptyState
           icon={BarChart3}
           title={hasData ? 'No submissions in this range' : 'No applications yet'}
-          description={hasData ? `No applications were submitted in this range (${rangeText}). Try a longer range.` : 'Statistics appear once students start applying.'}
           action={hasData && rangeKey !== 'schoolYear'
             ? <Button onClick={() => changeRange('schoolYear')}>Show this school year</Button>
             : undefined}
@@ -444,7 +443,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
             )}
             hint={decided === 0 ? 'No decisions yet' : decided < SMALL_SAMPLE ? 'Small sample — read with care' : 'Of decided applications'}
           />
-          <KpiCard label="Avg. time to decision" value={formatDays(avgDecision)} hint="Submission to final decision" />
+          <KpiCard label="Avg. time to decision" value={formatDays(avgDecision)} />
         </KpiGrid>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
@@ -518,7 +517,6 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
                   onSort={toggleSort}
                   numeric
                   className="w-24"
-                  hint="Under evaluation or needs revision"
                 />
                 <SortTh label="Avg. decision" sortKey="avgDecisionDays" sort={sort} onSort={toggleSort} numeric className="w-32" />
                 <SortTh label="Avg. revisions" sortKey="avgRevisionCycles" sort={sort} onSort={toggleSort} numeric className="w-32" />

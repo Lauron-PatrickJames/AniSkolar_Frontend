@@ -207,7 +207,7 @@ export default function MessagesPage({ getToken, selectedStudent, onSelectStuden
                     </span>
                     <span className="block truncate text-xs text-ink-subtle">{t.kind === 'office' ? ['Office', t.headName].filter(Boolean).join(' · ') : [t.studentNumber, t.college].filter(Boolean).join(' · ')}</span>
                     <span className={`block truncate text-xs ${unread ? 'text-ink' : 'text-ink-muted'}`}>{t.last.from === 'adso' ? 'You: ' : ''}{preview}</span>
-                    <span className="block text-[11px] text-ink-subtle">{formatDateTime(t.last.createdAt)}</span>
+                    <span className="block text-xs text-ink-subtle tabular-nums">{formatDateTime(t.last.createdAt)}</span>
                   </span>
                 </button>
                 <div className="absolute right-1.5 top-2.5 opacity-100 lg:opacity-0 lg:focus-within:opacity-100 lg:group-hover:opacity-100">
@@ -461,7 +461,7 @@ function StudentProfileDialog({ studentNumber, getToken, onClose, onOpenRecord }
           </div>
           {sections.map(([title, rows]) => (
             <section key={title}>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-subtle">{title}</h3>
+              <h3 className="mb-2 text-sm font-semibold text-ink-muted">{title}</h3>
               <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
                 {rows.map(([label, value]) => (
                   <div key={label} className="min-w-0">

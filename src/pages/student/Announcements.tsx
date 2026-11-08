@@ -53,7 +53,7 @@ export default function Announcements({ announcements, scholarships = [], id }: 
             />
           </div>
 
-          <div className="flex items-center space-x-2 text-slate-400 text-xs self-start md:self-auto font-medium">
+          <div className="flex items-center space-x-2 text-slate-500 text-xs self-start md:self-auto font-medium">
             <SlidersHorizontal className="w-4 h-4" />
             <span>By scholarship</span>
           </div>
@@ -78,7 +78,7 @@ export default function Announcements({ announcements, scholarships = [], id }: 
       </div>
 
       {/* Announcements Count Notice */}
-      <div className="text-xs text-slate-400 font-bold uppercase tracking-wider pl-1">
+      <div className="text-xs text-slate-500 font-semibold pl-1">
         Showing {filteredAnnouncements.length} of {announcements.length} Announcements
       </div>
 
@@ -87,7 +87,7 @@ export default function Announcements({ announcements, scholarships = [], id }: 
         <div className="text-center py-16 bg-white border border-slate-200 rounded-xl">
           <Info className="w-12 h-12 text-slate-300 mx-auto mb-4" />
           <h3 className="font-display font-bold text-lg text-slate-700">No Announcements Found</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
             Try adjusting your search filters or check back later for updates from the Admissions and Scholarship Office (AdSO).
           </p>
         </div>

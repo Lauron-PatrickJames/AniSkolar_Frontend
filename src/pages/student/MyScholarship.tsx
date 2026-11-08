@@ -101,7 +101,7 @@ export default function MyScholarship({ holdings, scholarships, applications, on
       })}
 
       {!mustChoose && (
-        <p className="text-center text-xs text-slate-400">
+        <p className="text-center text-xs text-slate-500">
           Only one internally funded scholarship can be credited at a time. To look at other scholarships, use{' '}
           <button type="button" onClick={() => onNavigate('explore')} className="font-semibold text-brand-green underline hover:text-brand-green-dark">Explore scholarships</button>.
         </p>

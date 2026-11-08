@@ -1162,9 +1162,9 @@ function StandardApplyScholarship({
             return (
               <div key={parentKey} className="p-4 border border-slate-200 rounded-xl bg-slate-50/40 space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{parentKey}</p>
+                  <p className="text-xs font-bold text-slate-500 capitalize">{parentKey}</p>
                   {isDisabled && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">N/A (solo parent)</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">N/A (solo parent)</span>
                   )}
                 </div>
                 {textField({ key: fk('fullName'), label: 'Full Name', required: true, disabled: isDisabled, value: parent.fullName, onChange: v => setParent({ fullName: v }) })}
@@ -1201,7 +1201,7 @@ function StandardApplyScholarship({
     <div className="space-y-4">
       <SubHeading note="List all your brothers and sisters. Fill in the school if they are studying, or the employer if working.">Brothers & Sisters</SubHeading>
       {siblings.length === 0 && (
-        <p className="text-xs text-slate-400 italic px-1">No siblings added. Skip this step if you are an only child.</p>
+        <p className="text-xs text-slate-500 italic px-1">No siblings added. Skip this step if you are an only child.</p>
       )}
       <AnimatePresence initial={false}>
         {siblings.map((sib, i) => (
@@ -1214,11 +1214,11 @@ function StandardApplyScholarship({
             className="p-4 border border-slate-200 rounded-xl bg-slate-50/40 space-y-4"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Sibling {i + 1}</span>
+              <span className="text-xs font-bold text-slate-500">Sibling {i + 1}</span>
               <button
                 type="button"
                 onClick={() => removeSibling(sib.id)}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-500 hover:bg-rose-50 px-2 py-1 rounded-md transition-colors focus:outline-hidden"
+                className="inline-flex items-center gap-1 text-xs font-bold text-rose-500 hover:bg-rose-50 px-2 py-1 rounded-md transition-colors focus:outline-hidden"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Remove

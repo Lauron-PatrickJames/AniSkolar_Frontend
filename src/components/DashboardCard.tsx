@@ -36,7 +36,7 @@ export default function DashboardCard({
     >
       <div className="flex justify-between items-start mb-2.5 sm:mb-3 gap-2">
         <div className="min-w-0">
-          <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{title}</p>
+          <p className="text-xs sm:text-xs font-semibold text-slate-500 truncate">{title}</p>
           <h3 className="text-2xl sm:text-3xl font-display font-extrabold text-brand-green mt-1 sm:mt-1.5">{value}</h3>
         </div>
         <div className="p-2 sm:p-2.5 bg-slate-50 rounded-lg text-slate-500 shrink-0">
@@ -44,10 +44,10 @@ export default function DashboardCard({
         </div>
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] sm:text-xs text-slate-600 font-medium truncate">{description}</p>
+        <p className="text-xs sm:text-xs text-slate-600 font-medium truncate">{description}</p>
         {trend && (
           <span
-            className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${
+            className={`inline-block mt-2 px-2 py-0.5 rounded text-xs font-semibold   ${
               trend.type === 'positive'
                 ? 'bg-emerald-100 text-emerald-800'
                 : trend.type === 'negative'

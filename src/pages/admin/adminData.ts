@@ -184,6 +184,11 @@ function usesSectionForm(app: AdminApplication): boolean {
 // raw value, for search and exports; display it with titleCaseName().
 export function applicantName(app: AdminApplication): string {
   const join = (...parts: (string | undefined)[]) => parts.map(p => (p ?? '').trim()).filter(Boolean).join(' ');
+  // The student's profile name (full middle name, corrected by the AdSO),
+  // so every application of a student shows the same name. The name on the
+  // form as submitted is used when there's no profile.
+  const now = app.currentProfile;
+  if (now?.firstName || now?.lastName) return join(now.firstName, now.middleName, now.lastName);
   if (usesSectionForm(app) && app.personalInfo) {
     const p = app.personalInfo as SfagPersonalInfo & { middleName?: string };
     return join(p.firstName, p.middleName || p.middleInitial, p.lastName) || 'Unknown applicant';

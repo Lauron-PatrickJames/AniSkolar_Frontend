@@ -94,7 +94,7 @@ export default function ScholarshipCard({
             {getCategoryIcon(scholarship.category)}
             {scholarship.category}
           </span>
-          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase ${getStatusBadgeColor(scholarship.status)}`}>
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold   ${getStatusBadgeColor(scholarship.status)}`}>
             {scholarship.status}
           </span>
         </div>
@@ -105,7 +105,7 @@ export default function ScholarshipCard({
         </h3>
 
         {applicationStatus && (
-          <p className={`mb-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold ${APPLICATION_STATUS_STYLES[applicationStatus]}`}>
+          <p className={`mb-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold ${APPLICATION_STATUS_STYLES[applicationStatus]}`}>
             <CheckCircle className="w-3.5 h-3.5" aria-hidden />
             Your application: {applicationStatus === 'Under Evaluation' ? 'Under evaluation' : applicationStatus === 'Needs Revision' ? 'Needs revision' : applicationStatus}
           </p>
@@ -138,7 +138,7 @@ export default function ScholarshipCard({
 
         {/* Eligibility Preview */}
         <div className="space-y-2 mb-4">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{showsRequirements ? 'Quick Requirements' : 'Who Qualifies'}</p>
+          <p className="text-xs font-semibold text-slate-500">{showsRequirements ? 'Quick Requirements' : 'Who Qualifies'}</p>
           <ul className="space-y-1.5">
             {preview.slice(0, 2).map((req, idx) => (
               <li key={idx} className="flex items-start text-xs text-slate-600">
@@ -161,7 +161,7 @@ export default function ScholarshipCard({
         <div className="flex items-center space-x-1.5 self-start min-w-0">
           <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
           <div className="text-left">
-            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wide">Deadline</p>
+            <p className="text-xs text-slate-500 font-bold ">Deadline</p>
             <p className="text-xs text-slate-700 font-semibold">{scholarship.deadline}</p>
           </div>
         </div>

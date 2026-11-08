@@ -3,7 +3,7 @@ import { mockScholarships } from '../data/scholarships';
 import { Announcement, Scholarship } from '../types';
 import ScholarshipCard from '../components/ScholarshipCard';
 import { Bone } from '../components/Skeletons';
-import { ArrowRight, BookOpen, ShieldCheck, HelpCircle, ChevronDown, ChevronUp, Star, Users, DollarSign, Calendar, Info, AlertCircle, X } from 'lucide-react';
+import { ArrowRight, BookOpen, ShieldCheck, ChevronDown, Star, Users, DollarSign, Calendar, AlertCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Use the DLSUD background image for the hero section
@@ -84,12 +84,12 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 text-rose-800">
                 <AlertCircle className="w-4 h-4 shrink-0" />
-                <p className="text-xs sm:text-sm font-semibold">{authError}</p>
+                <p className="text-sm font-semibold">{authError}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setAuthError(null)}
-                className="shrink-0 text-rose-400 hover:text-rose-600 focus:outline-hidden"
+                className="shrink-0 text-rose-500 hover:text-rose-700 focus:outline-hidden"
                 aria-label="Dismiss"
               >
                 <X className="w-4 h-4" />
@@ -103,39 +103,37 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       <section
         id="hero"
         className="relative min-h-[95vh] flex items-center justify-center bg-cover bg-center text-white"
-      style={{ backgroundImage: `linear-gradient(135deg, rgba(0, 112, 60, 0.3), rgba(0, 112, 60, 0.7)), url(${heroImage})` }}
+      style={{ backgroundImage: `linear-gradient(135deg, rgba(0, 60, 32, 0.55), rgba(0, 80, 42, 0.85)), url(${heroImage})` }}
       >
         {/* Decorative Grid Accent */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-24 text-center">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-24 text-center">
           <div className="space-y-6">
 
             {/* Title & Slogan */}
-            <h1 className="font-display font-extrabold text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-tight text-white">
-            Fulfill Your Dreams with <span className="text-[#00703C] bg-white px-7 py-0.5 rounded-lg">AniSkolar</span>
+            <h1 className="font-display font-extrabold text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.08] text-white text-balance">
+              Fulfill Your Dreams with <span className="text-emerald-200">AniSkolar</span>
             </h1>
             
-            <p className="text-lg text-white font-normal leading-relaxed max-w-2xl mx-auto">
+            <p className="text-lg text-emerald-50 leading-relaxed max-w-2xl mx-auto text-pretty">
               The centralized scholarship portal of DLSU-D. Discover, apply, and manage your university grants effortlessly, empowering Lasallians to create a lasting global impact.
             </p>
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
               <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ duration: 0.15, ease: 'easeOut' }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ duration: 0.12, ease: 'easeOut' }}
                 onClick={onExploreClick}
-                className="w-full sm:w-auto sm:min-w-60 font-display font-bold uppercase text-xs tracking-wider text-white bg-[#00703C]/80 hover:bg-[#005c30] px-8 py-4 rounded-xl transition-colors duration-200 flex items-center justify-center space-x-2 shadow-lg shadow-white/10"
+                className="w-full sm:w-auto sm:min-w-60 inline-flex items-center justify-center gap-2 rounded-xl bg-white px-7 py-3.5 text-base font-semibold text-brand-green shadow-lg shadow-black/20 hover:bg-emerald-50 transition-colors focus:outline-hidden focus-visible:ring-4 focus-visible:ring-white/40"
               >
                 <span>Explore Scholarships</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4" aria-hidden />
               </motion.button>
               <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ duration: 0.15, ease: 'easeOut' }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ duration: 0.12, ease: 'easeOut' }}
                 onClick={onLoginClick}
-                className="w-full sm:w-auto sm:min-w-60 font-display font-bold uppercase text-xs tracking-wider text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 px-8 py-4 rounded-xl transition-colors duration-200 flex items-center justify-center space-x-2"
+                className="w-full sm:w-auto sm:min-w-60 inline-flex items-center justify-center rounded-xl px-7 py-3.5 text-base font-semibold text-white ring-1 ring-inset ring-white/50 hover:bg-white/10 transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
               >
                 <span>Login to Access More</span>
               </motion.button>
@@ -147,20 +145,19 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       {/* 2. About AniSkolar */}
       <section id="about" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="font-display font-black text-3xl sm:text-4xl text-slate-950 tracking-tight mb-4">
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <h2 className="font-display font-extrabold text-3xl sm:text-4xl text-slate-950 tracking-tight mb-4 text-balance">
               About AniSkolar Portal
             </h2>
-            <div className="w-16 h-1 bg-brand-green mx-auto mb-6 rounded-full"></div>
-            <p className="text-base text-slate-600 leading-relaxed">
+            <p className="text-base text-slate-600 leading-relaxed text-pretty">
               AniSkolar is the official, student-centered digital scholarship solution of De La Salle University–Dasmariñas. Managed by the Admissions and Scholarship Office (AdSO), AniSkolar replaces traditional paperwork with a simple, secure, and modern online environment designed specifically for the Lasallian community.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-8 rounded-2xl border border-slate-100 bg-slate-50/50 hover:shadow-lg transition-all duration-300">
-              <div className="w-12 h-12 bg-emerald-100 text-brand-green rounded-xl flex items-center justify-center mb-6">
-                <BookOpen className="w-6 h-6" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="p-6 rounded-2xl bg-slate-50 ring-1 ring-slate-200/70">
+              <div className="size-10 bg-emerald-50 text-brand-green rounded-lg flex items-center justify-center mb-4">
+                <BookOpen className="size-5" aria-hidden />
               </div>
               <h3 className="font-display font-bold text-lg text-slate-900 mb-2">Centralized Exploration</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
@@ -168,9 +165,9 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               </p>
             </div>
 
-            <div className="p-8 rounded-2xl border border-slate-100 bg-slate-50/50 hover:shadow-lg transition-all duration-300">
-              <div className="w-12 h-12 bg-emerald-100 text-brand-green rounded-xl flex items-center justify-center mb-6">
-                <ShieldCheck className="w-6 h-6" />
+            <div className="p-6 rounded-2xl bg-slate-50 ring-1 ring-slate-200/70">
+              <div className="size-10 bg-emerald-50 text-brand-green rounded-lg flex items-center justify-center mb-4">
+                <ShieldCheck className="size-5" aria-hidden />
               </div>
               <h3 className="font-display font-bold text-lg text-slate-900 mb-2">Transparent Evaluations</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
@@ -178,9 +175,9 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               </p>
             </div>
 
-            <div className="p-8 rounded-2xl border border-slate-100 bg-slate-50/50 hover:shadow-lg transition-all duration-300">
-              <div className="w-12 h-12 bg-emerald-100 text-brand-green rounded-xl flex items-center justify-center mb-6">
-                <Star className="w-6 h-6" />
+            <div className="p-6 rounded-2xl bg-slate-50 ring-1 ring-slate-200/70">
+              <div className="size-10 bg-emerald-50 text-brand-green rounded-lg flex items-center justify-center mb-4">
+                <Star className="size-5" aria-hidden />
               </div>
               <h3 className="font-display font-bold text-lg text-slate-900 mb-2">Lasallian Excellence</h3>
               <p className="text-sm text-slate-600 leading-relaxed">
@@ -194,22 +191,22 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       {/* 3. Available Scholarships Preview */}
       <section id="scholarships" className="py-20 bg-slate-50 border-t border-slate-200/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-12 gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-10 gap-4">
             <div>
-              <h2 className="font-display font-black text-3xl text-slate-950 tracking-tight">Available Scholarships</h2>
-              <p className="text-sm text-slate-500 mt-2">Explore active grants. Log in to start your online application.</p>
+              <h2 className="font-display font-extrabold text-3xl text-slate-950 tracking-tight text-balance">Available Scholarships</h2>
+              <p className="text-base text-slate-600 mt-2">Explore active grants. Log in to start your online application.</p>
             </div>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
+            <button
+              type="button"
               onClick={onExploreClick}
-              className="font-display font-bold text-xs uppercase tracking-wider text-brand-green hover:text-brand-green-dark flex items-center space-x-1.5 shrink-0"
+              className="group inline-flex items-center gap-1.5 shrink-0 rounded-lg px-1 text-sm font-semibold text-brand-green hover:text-brand-green-dark focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green"
             >
               <span>View All Scholarships</span>
-              <ArrowRight className="w-4 h-4" />
-            </motion.button>
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+            </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {scholarships.slice(0, 3).map((scholarship) => (
               <ScholarshipCard
                 key={scholarship.id}
@@ -225,28 +222,27 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       {/* 4. How to Apply Section */}
       <section id="how-to-apply" className="py-20 bg-white border-t border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="font-display font-black text-3xl text-slate-950 tracking-tight mb-4">Simple Application Process</h2>
-            <div className="w-16 h-1 bg-brand-green mx-auto mb-6 rounded-full"></div>
-            <p className="text-sm text-slate-600">
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <h2 className="font-display font-extrabold text-3xl text-slate-950 tracking-tight mb-4 text-balance">Simple Application Process</h2>
+            <p className="text-base text-slate-600">
               Applying for financial support at DLSU-D is straightforward. Follow these four straightforward milestones:
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               { step: '01', title: 'Explore Grants', desc: 'Browse and search our categorized scholarships and find the perfect match.' },
               { step: '02', title: 'Check Eligibility', desc: 'Review required grade averages and necessary documentation rules.' },
               { step: '03', title: 'Submit Requirements', desc: 'Log in and upload scanned digital copies of your credentials directly.' },
               { step: '04', title: 'Wait for Evaluation', desc: 'The AdSO evaluates submissions; receive real-time notifications on outcomes.' }
             ].map((item, idx) => (
-              <div key={idx} className="relative p-6 rounded-xl border border-slate-100 bg-slate-50/30">
-                <span className="text-5xl font-display font-black text-emerald-100 block mb-4">{item.step}</span>
+              <li key={idx} className="rounded-2xl bg-slate-50 p-6 ring-1 ring-slate-200/70">
+                <span className="mb-4 block font-display text-3xl font-extrabold text-brand-green tabular-nums">{item.step}</span>
                 <h3 className="font-display font-bold text-base text-slate-900 mb-2">{item.title}</h3>
-                <p className="text-xs text-slate-500 leading-relaxed">{item.desc}</p>
-              </div>
+                <p className="text-sm text-slate-600 leading-relaxed">{item.desc}</p>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
       </section>
 
@@ -254,15 +250,14 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       {(!announcementsLoaded || announcements.length > 0) && (
       <section id="announcements" className="py-20 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="font-display font-black text-3xl text-slate-950 tracking-tight mb-4">Latest Scholarship Announcements</h2>
-            <div className="w-16 h-1 bg-brand-green mx-auto mb-6 rounded-full"></div>
-            <p className="text-sm text-slate-600">Stay up to date with key scholarship announcements, deadlines, and requirements.</p>
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <h2 className="font-display font-extrabold text-3xl text-slate-950 tracking-tight mb-4 text-balance">Latest Scholarship Announcements</h2>
+            <p className="text-base text-slate-600">Stay up to date with key scholarship announcements, deadlines, and requirements.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
             {!announcementsLoaded && [0, 1].map(i => (
-              <div key={i} role="status" className="bg-white p-6 rounded-xl border border-slate-100 card-shadow space-y-3">
+              <div key={i} role="status" className="bg-white p-6 rounded-2xl ring-1 ring-slate-200/70 space-y-3">
                 <span className="sr-only">Loading announcements…</span>
                 <div className="flex justify-between"><Bone className="h-5 w-20 rounded-full" /><Bone className="h-4 w-24" /></div>
                 <Bone className="h-5 w-3/4" />
@@ -271,24 +266,24 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
               </div>
             ))}
             {announcements.slice(0, 2).map((ann) => (
-              <div key={ann.id} className="bg-white p-6 rounded-xl border border-slate-100 card-shadow">
-                <div className="flex items-center justify-between text-xs text-slate-400 mb-3">
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-brand-green border border-emerald-100 font-bold">{ann.category}</span>
-                  <div className="flex items-center space-x-1">
-                    <Calendar className="w-3.5 h-3.5" />
+              <div key={ann.id} className="bg-white p-6 rounded-2xl ring-1 ring-slate-200/70">
+                <div className="flex items-center justify-between gap-3 text-sm text-slate-500 mb-3">
+                  <span className="font-semibold text-brand-green">{ann.category}</span>
+                  <div className="flex items-center gap-1.5 tabular-nums">
+                    <Calendar className="w-4 h-4" aria-hidden />
                     <span>{ann.date}</span>
                   </div>
                 </div>
-                <h3 className="font-display font-bold text-base text-slate-900 mb-2">{ann.title}</h3>
-                <p className="text-xs text-slate-500 line-clamp-3 mb-4 leading-relaxed">{ann.description}</p>
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
+                <h3 className="font-display font-bold text-lg text-slate-900 mb-2 text-balance">{ann.title}</h3>
+                <p className="text-sm text-slate-600 line-clamp-3 mb-4 leading-relaxed">{ann.description}</p>
+                <button
+                  type="button"
                   onClick={onLoginClick}
-                  className="text-xs font-semibold text-brand-green hover:text-brand-green-dark flex items-center space-x-1.5 focus:outline-hidden"
+                  className="group inline-flex items-center gap-1.5 rounded text-sm font-semibold text-brand-green hover:text-brand-green-dark focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green"
                 >
                   <span>Read details</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </motion.button>
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" aria-hidden />
+                </button>
               </div>
             ))}
           </div>
@@ -300,35 +295,27 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
       <section id="faqs" className="py-20 bg-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-12">
-            <h2 className="font-display font-black text-3xl text-slate-950 tracking-tight mb-4 flex items-center justify-center gap-2">
-              <HelpCircle className="w-8 h-8 text-brand-green" />
-              <span>Frequently Asked Questions</span>
+            <h2 className="font-display font-extrabold text-3xl text-slate-950 tracking-tight mb-4 text-balance">
+              Frequently Asked Questions
             </h2>
-            <p className="text-sm text-slate-500">Quick answers to common questions about scholarships and AniSkolar portal.</p>
+            <p className="text-base text-slate-600">Quick answers to common questions about scholarships and AniSkolar portal.</p>
           </div>
 
-          <div className="space-y-4">
+          <div className="divide-y divide-slate-200 rounded-2xl bg-white ring-1 ring-slate-200/70">
             {faqs.map((faq, idx) => {
               const isOpen = openFaqIdx === idx;
               return (
-                <div
-                  key={idx}
-                  className={`rounded-xl border border-slate-100 card-shadow transition-colors overflow-hidden ${
-                    isOpen ? 'border-brand-green/30 bg-slate-50/50' : 'hover:border-slate-200'
-                  }`}
-                >
+                <div key={idx}>
                   <button
+                    type="button"
                     onClick={() => setOpenFaqIdx(isOpen ? null : idx)}
-                    className="w-full text-left p-5 flex justify-between items-center focus:outline-hidden"
+                    aria-expanded={isOpen}
+                    className="w-full text-left px-5 py-4 flex justify-between items-center gap-4 focus:outline-hidden focus-visible:bg-slate-50"
                   >
-                    <span className="font-display font-bold text-sm sm:text-base text-slate-800 leading-snug">
+                    <span className="font-display font-bold text-base text-slate-900 leading-snug">
                       {faq.q}
                     </span>
-                    {isOpen ? (
-                      <ChevronUp className="w-5 h-5 text-brand-green shrink-0 ml-4" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5 text-slate-400 shrink-0 ml-4" />
-                    )}
+                    <ChevronDown className={`w-5 h-5 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-brand-green' : 'text-slate-400'}`} aria-hidden />
                   </button>
 
                   <AnimatePresence initial={false}>
@@ -338,10 +325,11 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
                       >
-                        <div className="p-5 pt-0 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100">
+                        <p className="px-5 pb-5 text-sm text-slate-600 leading-relaxed">
                           {faq.a}
-                        </div>
+                        </p>
                       </motion.div>
                     )}
                   </AnimatePresence>

@@ -41,7 +41,7 @@ export default function EvaluationSummary({ evaluation, title = 'Your office’s
           )}
         </div>
         <div className="text-right">
-          <p className="font-display font-black text-3xl text-slate-900 leading-none">{evaluation.average.toFixed(2)}<span className="text-base font-bold text-slate-400"> / 5</span></p>
+          <p className="font-display font-black text-3xl text-slate-900 leading-none">{evaluation.average.toFixed(2)}<span className="text-base font-semibold text-slate-500"> / 5</span></p>
           <p className={`mt-1 text-xs font-bold ${passed ? 'text-brand-green' : 'text-amber-700'}`}>{ratingLabel(evaluation.average)}</p>
         </div>
       </div>
@@ -54,7 +54,7 @@ export default function EvaluationSummary({ evaluation, title = 'Your office’s
 
       {evaluation.remarks && (
         <blockquote className="rounded-xl bg-slate-50 border border-slate-100 p-3.5">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Remarks</p>
+          <p className="text-xs font-bold text-slate-400">Remarks</p>
           <p className="text-sm text-slate-700 whitespace-pre-line mt-0.5">{evaluation.remarks}</p>
         </blockquote>
       )}

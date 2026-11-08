@@ -88,7 +88,7 @@ export default function NotificationsPage({ student, applications, dutyNotice, a
                   <span className="min-w-0 flex-1">
                     <span className={`block text-sm ${item.isRead ? 'font-medium text-slate-700' : 'font-bold text-slate-900'}`}>{item.title}</span>
                     <span className="mt-0.5 block text-sm text-slate-600">{item.text}</span>
-                    <span className="mt-1 block text-xs text-slate-400">{item.time}{item.isRead ? '' : ' · Unread'}</span>
+                    <span className="mt-1 block text-xs text-slate-500">{item.time}{item.isRead ? '' : ' · Unread'}</span>
                   </span>
                 </button>
               </li>

@@ -69,7 +69,7 @@ export default function AnnouncementCard({ announcement, id, isInitiallyExpanded
               </span>
             )}
           </div>
-          <div className="flex items-center text-slate-400 text-xs gap-1 shrink-0">
+          <div className="flex items-center text-slate-500 text-xs gap-1 shrink-0">
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
             <span>{announcement.date}</span>
           </div>

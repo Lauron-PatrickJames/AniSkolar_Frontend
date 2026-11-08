@@ -27,7 +27,7 @@ const STATUS_STYLES: Record<RenewalStatus, { label: string; className: string; i
 function StatusPill({ status }: { status: RenewalStatus }) {
   const { label, className, icon: Icon } = STATUS_STYLES[status];
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold ${className}`}>
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-bold ${className}`}>
       <Icon className="w-3.5 h-3.5" aria-hidden />
       {label}
     </span>
@@ -148,7 +148,7 @@ export default function Renewals() {
                     <button
                       type="button"
                       onClick={() => openForm({ period })}
-                      className="mt-auto inline-flex items-center justify-center gap-1.5 self-start font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-3 rounded-xl transition-colors"
+                      className="mt-auto inline-flex items-center justify-center gap-1.5 self-start text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark px-5 py-3 rounded-xl transition-colors"
                     >
                       Start renewal <ArrowRight className="w-3.5 h-3.5" />
                     </button>
@@ -226,7 +226,7 @@ function RenewalCard({ renewal, onRevise }: { renewal: Renewal; onRevise?: () =>
         <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 border border-slate-100 p-3.5">
           <MessageSquare className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden />
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Message from the office</p>
+            <p className="text-xs font-bold text-slate-400">Message from the office</p>
             <p className="text-sm text-slate-700 whitespace-pre-line mt-0.5">{renewal.reviewNote}</p>
           </div>
         </div>
@@ -236,23 +236,23 @@ function RenewalCard({ renewal, onRevise }: { renewal: Renewal; onRevise?: () =>
 
       <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
         <div>
-          <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Continuing</dt>
+          <dt className="text-xs font-bold text-slate-400">Continuing</dt>
           <dd className="font-semibold text-slate-700 mt-0.5">{renewal.continuing ? 'Yes' : `No · ${renewal.notContinuingReason ?? ''}`}</dd>
         </div>
         {renewal.continuing && (
           <>
             <div>
-              <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">GPA</dt>
+              <dt className="text-xs font-bold text-slate-400">GPA</dt>
               <dd className="font-semibold text-slate-700 mt-0.5">{formatGpa(renewal.gpa)}</dd>
             </div>
             <div>
-              <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Failing grade</dt>
+              <dt className="text-xs font-bold text-slate-400">Failing grade</dt>
               <dd className="font-semibold text-slate-700 mt-0.5">{renewal.hasFailingGrade ? 'Yes' : 'None'}</dd>
             </div>
           </>
         )}
         <div>
-          <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Submitted</dt>
+          <dt className="text-xs font-bold text-slate-400">Submitted</dt>
           <dd className="font-semibold text-slate-700 mt-0.5">{new Date(renewal.createdAt).toLocaleDateString('en-PH', { dateStyle: 'medium' })}</dd>
         </div>
       </dl>
@@ -264,7 +264,7 @@ function RenewalCard({ renewal, onRevise }: { renewal: Renewal; onRevise?: () =>
               <button
                 type="button"
                 onClick={() => openDocument(doc.fileId, getToken).catch(err => window.alert(err instanceof Error ? err.message : "Couldn't open the file."))}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:border-brand-green/40 hover:text-brand-green"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:border-brand-green/40 hover:text-brand-green"
               >
                 <FileText className="w-3.5 h-3.5" aria-hidden />
                 {doc.docType}
@@ -278,7 +278,7 @@ function RenewalCard({ renewal, onRevise }: { renewal: Renewal; onRevise?: () =>
         <button
           type="button"
           onClick={onRevise}
-          className="inline-flex items-center justify-center gap-1.5 font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-3 rounded-xl transition-colors"
+          className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark px-5 py-3 rounded-xl transition-colors"
         >
           Update renewal <ArrowRight className="w-3.5 h-3.5" />
         </button>
@@ -390,7 +390,7 @@ function RenewalForm({ period, existing, onCancel, onSaved }: {
         <div className="flex items-start gap-2.5 rounded-xl bg-orange-50 border border-orange-200 p-4">
           <AlertCircle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" aria-hidden />
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-orange-700">What the office asked for</p>
+            <p className="text-xs font-bold text-orange-700">What the office asked for</p>
             <p className="text-sm text-orange-900 whitespace-pre-line mt-0.5">{existing.reviewNote}</p>
           </div>
         </div>
@@ -432,7 +432,7 @@ function RenewalForm({ period, existing, onCancel, onSaved }: {
                 placeholder="e.g. 3.25"
                 className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-base sm:text-sm focus:border-brand-green focus:outline-hidden focus:ring-2 focus:ring-brand-green/20"
               />
-              <span className="mt-1 block text-[11px] text-slate-400">As shown on your grades (0.00–4.00).</span>
+              <span className="mt-1 block text-xs text-slate-500">As shown on your grades (0.00–4.00).</span>
             </label>
             <div>
               <span className="text-xs font-bold text-slate-700">Any failing grade last semester?</span>
@@ -453,7 +453,7 @@ function RenewalForm({ period, existing, onCancel, onSaved }: {
                   <div key={requirement} className="rounded-xl border border-slate-200 p-3.5 space-y-2">
                     <p className="text-sm font-semibold text-slate-700">{requirement}</p>
                     {stored && !picked && (
-                      <p className="text-[11px] text-slate-500 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" aria-hidden /> On file: {stored.filename}</p>
+                      <p className="text-xs text-slate-500 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" aria-hidden /> On file: {stored.filename}</p>
                     )}
                     {picked ? (
                       <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
@@ -505,7 +505,7 @@ function RenewalForm({ period, existing, onCancel, onSaved }: {
               className="mt-1.5 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-base sm:text-sm focus:border-brand-green focus:outline-hidden focus:ring-2 focus:ring-brand-green/20"
             />
           </label>
-          <p className="text-[11px] text-slate-500 leading-relaxed">The office is told you won't continue, and your scholarship won't be renewed for {periodLabel(period)}.</p>
+          <p className="text-xs text-slate-500 leading-relaxed">The office is told you won't continue, and your scholarship won't be renewed for {periodLabel(period)}.</p>
         </div>
       )}
 
@@ -519,12 +519,12 @@ function RenewalForm({ period, existing, onCancel, onSaved }: {
         <button
           type="submit"
           disabled={submitting || continuing === null}
-          className="inline-flex items-center justify-center gap-1.5 font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark disabled:opacity-50 disabled:cursor-not-allowed px-5 py-3 rounded-xl transition-colors"
+          className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark disabled:opacity-50 disabled:cursor-not-allowed px-5 py-3 rounded-xl transition-colors"
         >
           {submitting && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}
           {continuing === false ? 'Submit — not continuing' : existing ? 'Resubmit renewal' : 'Submit renewal'}
         </button>
-        <button type="button" onClick={onCancel} disabled={submitting} className="px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-100">
+        <button type="button" onClick={onCancel} disabled={submitting} className="px-5 py-3 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100">
           Cancel
         </button>
       </div>

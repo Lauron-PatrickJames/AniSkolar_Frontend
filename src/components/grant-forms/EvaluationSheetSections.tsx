@@ -186,7 +186,7 @@ export function FamilyDataSection() {
             const required = role.key === 'father' || role.key === 'mother';
             return (
               <div key={role.key} className="p-4 border border-slate-200 rounded-xl bg-slate-50/40">
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">{role.label}{!required && ' (if any)'}</p>
+                <p className="text-xs font-bold text-slate-500 mb-3">{role.label}{!required && ' (if any)'}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   <TextField path={`${base}.name`} label="Name" required={required} className="sm:col-span-2" />
                   <NumberField path={`${base}.age`} label="Age" integer max={120} />

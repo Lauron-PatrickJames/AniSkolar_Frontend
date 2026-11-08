@@ -5,7 +5,14 @@ import { AdminApplication, AppStatus, applicantName, titleCaseName } from './adm
 // the detail page's Prev / Next both use filterApplications(), so stepping
 // through applications follows exactly what the list shows.
 
-export type StatusTab = AppStatus | 'All';
+// 'Ended': approved, then declined by the student, graduated or stopped
+// (kept out of 'Approved').
+export type StatusTab = AppStatus | 'Ended' | 'All';
+
+// Which tab an application is listed under.
+export function tabOf(app: AdminApplication): Exclude<StatusTab, 'All'> {
+  return app.status === 'Approved' && app.endReason ? 'Ended' : app.status;
+}
 export type OfficeFilter = 'All' | ScholarshipOffice;
 export type QueueSort = 'waiting' | 'newest' | 'oldest' | 'name';
 
@@ -55,7 +62,7 @@ export function waitingDays(app: AdminApplication, now = Date.now()): number {
 export function filterApplications(applications: AdminApplication[], filters: ListFilters): AdminApplication[] {
   const q = filters.search.trim().toLowerCase();
   const list = applications.filter(app => {
-    if (filters.status !== 'All' && app.status !== filters.status) return false;
+    if (filters.status !== 'All' && tabOf(app) !== filters.status) return false;
     if (filters.scholarship !== 'All' && app.scholarshipId !== filters.scholarship) return false;
     if (filters.office !== 'All' && (app.office || 'LSO') !== filters.office) return false;
     if (q) {
@@ -88,6 +95,7 @@ const TAB_SLUGS: Record<StatusTab, string> = {
   'Needs Revision': 'needs-revision',
   'Approved': 'approved',
   'Rejected': 'rejected',
+  'Ended': 'ended',
   'All': 'all'
 };
 

@@ -9,7 +9,7 @@ import {
   SearchInput, Select, StatusBadge, Table, TableSkeleton, Tabs, Td, Th, Toolbar, Tooltip, Tr, Truncate, paginate
 } from './AdminUI';
 import {
-  DEFAULT_FILTERS, ListFilters, StatusTab, WAITING_HIGHLIGHT_DAYS,
+  DEFAULT_FILTERS, ListFilters, StatusTab, WAITING_HIGHLIGHT_DAYS, tabOf,
   filterApplications, waitingDays
 } from './applicationQueue';
 import { relativeTime } from './history';
@@ -39,6 +39,7 @@ const TABS: { key: StatusTab; label: string }[] = [
   { key: 'Needs Revision', label: 'Needs revision' },
   { key: 'Approved', label: 'Approved' },
   { key: 'Rejected', label: 'Rejected' },
+  { key: 'Ended', label: 'Declined or ended' },
   { key: 'All', label: 'All' }
 ];
 
@@ -47,6 +48,7 @@ const EMPTY_TABS: Record<StatusTab, { title: string; description: string }> = {
   'Needs Revision': { title: 'Nothing waiting on applicants', description: 'Applications sent back for changes stay here until the applicant resubmits.' },
   'Approved': { title: 'No approved applications', description: 'Applications you approve appear here.' },
   'Rejected': { title: 'No rejected applications', description: 'Applications you reject appear here.' },
+  'Ended': { title: 'Nothing declined or ended', description: 'Approved scholarships the student declined, or that ended when they graduated or stopped, appear here.' },
   'All': { title: 'No applications yet', description: 'Applications appear here as students apply.' }
 };
 
@@ -73,8 +75,8 @@ export default function ApplicationsList({
   }, [applications, adminOffice]);
 
   const counts = useMemo(() => {
-    const c = { All: applications.length } as Record<StatusTab, number>;
-    STATUS_OPTIONS.forEach(s => { c[s] = applications.filter(a => a.status === s).length; });
+    const c = { All: applications.length, Ended: applications.filter(a => tabOf(a) === 'Ended').length } as Record<StatusTab, number>;
+    STATUS_OPTIONS.forEach(s => { c[s] = applications.filter(a => tabOf(a) === s).length; });
     return c;
   }, [applications]);
 
@@ -207,6 +209,7 @@ export default function ApplicationsList({
                             {relativeTime(app.createdAt, now)}
                           </time>
                         </Tooltip>
+                        {app.awardedDirectly && <span className="block text-xs text-ink-subtle">Added by {officeDisplayName(app.office).replace(/^.*\(([^)]+)\)$/, '$1')}</span>}
                       </Td>
                       {showWaiting && (
                         <Td>
@@ -234,7 +237,7 @@ export default function ApplicationsList({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium text-ink">{name}</span>
                         <span className="block truncate text-xs text-ink-subtle">{app.scholarshipName}</span>
-                        <span className="block text-xs text-ink-subtle tabular-nums">{relativeTime(app.createdAt, now)}{showWaiting && days >= WAITING_HIGHLIGHT_DAYS ? ` · waiting ${days} days` : ''}</span>
+                        <span className="block text-xs text-ink-subtle tabular-nums">{app.awardedDirectly ? `Added by ${officeDisplayName(app.office).replace(/^.*\(([^)]+)\)$/, '$1')} · ` : ''}{relativeTime(app.createdAt, now)}{showWaiting && days >= WAITING_HIGHLIGHT_DAYS ? ` · waiting ${days} days` : ''}</span>
                       </span>
                       <StatusBadge status={app.status} endReason={app.endReason} />
                     </button>

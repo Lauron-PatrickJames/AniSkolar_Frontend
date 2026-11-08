@@ -55,6 +55,8 @@ interface ScholarSummary {
   rejectedCount: number;
   latestApplication: AdminApplication;
   latestStatus: AppStatus;
+  // The latest application was approved but declined / graduated / stopped.
+  latestEndReason: string | null;
   firstSubmission: string;
   // Applied in 2+ distinct academic years (isReturningScholar).
   isReturning: boolean;
@@ -91,6 +93,7 @@ function buildScholarSummaries(applications: AdminApplication[]): ScholarSummary
       rejectedCount: apps.filter(a => a.status === 'Rejected').length,
       latestApplication: latest,
       latestStatus: latest.status,
+      latestEndReason: latest.status === 'Approved' ? latest.endReason ?? null : null,
       firstSubmission: oldest.createdAt,
       isReturning: isReturningScholar(apps)
     };
@@ -118,7 +121,7 @@ const EXPORT_COLUMNS: { key: string; label: string; numeric?: boolean; getValue:
       return decided > 0 ? `${((s.approvedCount / decided) * 100).toFixed(0)}%` : '—';
     }
   },
-  { key: 'latestStatus', label: 'Current Status', getValue: s => s.latestStatus },
+  { key: 'latestStatus', label: 'Current Status', getValue: s => (s.latestEndReason === 'Declined' ? 'Declined by student' : s.latestEndReason) || s.latestStatus },
   { key: 'isRenewing', label: 'Returning', getValue: s => (s.isReturning ? 'Yes' : 'No') },
   { key: 'firstSubmission', label: 'First Submission', getValue: s => formatDate(s.firstSubmission) }
 ];
@@ -561,7 +564,7 @@ export default function AdminScholars({
                         <span className="text-ink-subtle"> · {scholar.approvedCount} approved</span>
                       </span>
                     </Td>
-                    <Td><StatusBadge status={scholar.latestStatus} /></Td>
+                    <Td><StatusBadge status={scholar.latestStatus} endReason={scholar.latestEndReason} /></Td>
                     <Td><ChevronRight className="size-4 text-ink-subtle group-hover:text-ink" aria-hidden /></Td>
                   </Tr>
                 ))}
@@ -577,7 +580,7 @@ export default function AdminScholars({
                       <span className="block truncate text-sm font-medium text-ink">{scholar.name}</span>
                       <span className="block truncate text-xs text-ink-subtle">{[scholar.studentNumber, scholar.college, scholar.program].filter(Boolean).join(' · ')}</span>
                     </span>
-                    <StatusBadge status={scholar.latestStatus} />
+                    <StatusBadge status={scholar.latestStatus} endReason={scholar.latestEndReason} />
                   </button>
                 </li>
               ))}
@@ -714,7 +717,7 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
           <>
             {holding.length > 0
               ? holding.map(a => <Badge key={a._id} tone="success" dot>Scholar · {shortName(a.scholarshipName)}</Badge>)
-              : <Badge tone={STATUS_META[scholar.latestStatus]?.tone} dot>{scholar.latestStatus}</Badge>}
+              : <StatusBadge status={scholar.latestStatus} endReason={scholar.latestEndReason} />}
             {scholar.isReturning && <Badge tone="accent">Returning</Badge>}
           </>
         }

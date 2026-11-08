@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Bell, User, LogOut, Settings, Shield, ChevronDown, Menu, X, ArrowRight } from 'lucide-react';
 import { StudentProfile, Application, Announcement } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -47,6 +47,28 @@ export default function Navbar({
 }: NavbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  // Close either menu on a tap or click outside it, or Esc. (A full-screen
+  // "fixed" backdrop doesn't work here: the header's backdrop-filter makes
+  // fixed children cover only the header, and iOS ignores taps on plain divs.)
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showNotifications && !showProfileMenu) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (showNotifications && !notificationsRef.current?.contains(target)) setShowNotifications(false);
+      if (showProfileMenu && !profileMenuRef.current?.contains(target)) setShowProfileMenu(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setShowNotifications(false); setShowProfileMenu(false); }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [showNotifications, showProfileMenu]);
   const [avatarFailed, setAvatarFailed] = useState(false);
   // Title case for display ("Patrick James Secuya Lauron"); the full name
   // shows on hover where it's truncated.
@@ -126,7 +148,7 @@ export default function Navbar({
 
       <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
         {/* Notifications Popover */}
-        <div className="relative">
+        <div className="relative" ref={notificationsRef}>
           <motion.button
             whileTap={{ scale: 0.9 }}
             animate={unreadCount > 0 ? { rotate: [0, -12, 10, -6, 0] } : {}}
@@ -154,7 +176,6 @@ export default function Navbar({
           <AnimatePresence>
             {showNotifications && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowNotifications(false)}></div>
                 <motion.div
                   initial={{ opacity: 0, y: 8, scale: 0.97 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -222,7 +243,7 @@ export default function Navbar({
         </div>
 
         {/* Profile Dropdown Menu */}
-        <div className="relative">
+        <div className="relative" ref={profileMenuRef}>
           <motion.button
             whileTap={{ scale: 0.97 }}
             onClick={() => {
@@ -262,7 +283,6 @@ export default function Navbar({
           <AnimatePresence>
             {showProfileMenu && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowProfileMenu(false)}></div>
                 <motion.div
                   initial={{ opacity: 0, y: 8, scale: 0.97 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}

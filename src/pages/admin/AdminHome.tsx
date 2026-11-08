@@ -38,6 +38,9 @@ const EVENT_BADGE: Record<string, { label: string; tone: Tone }> = {
   Approved: { label: 'Approved', tone: 'success' },
   Rejected: { label: 'Rejected', tone: 'danger' },
   'Needs Revision': { label: 'Revise', tone: 'warning' },
+  Declined: { label: 'Declined', tone: 'neutral' },
+  Graduated: { label: 'Graduated', tone: 'neutral' },
+  Stopped: { label: 'Stopped', tone: 'neutral' },
 };
 // "Student Financial Aid Grant (SFAG)" → "SFAG".
 const shortName = (name: string) => name.match(/\(([^)]+)\)\s*$/)?.[1] ?? name;
@@ -117,7 +120,11 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
   const activity = useMemo(() => applications
     .flatMap(a => (a.history ?? [])
       .filter(h => EVENT_TEXT[h.status])
-      .map(h => ({ app: a, status: h.status, at: h.changedAt, by: h.changedBy === 'student' ? null : h.changedByName || h.changedBy })))
+      .map(h => ({ app: a, status: h.status as string, at: h.changedAt, by: h.changedBy === 'student' ? null : h.changedByName || h.changedBy }))
+      // An approved scholarship the student declined (or that ended).
+      .concat(a.status === 'Approved' && a.endedAt && a.endReason
+        ? [{ app: a, status: a.endReason, at: a.endedAt, by: a.endReason === 'Declined' ? null : a.endedBy ?? null }]
+        : []))
     .sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime())
     .slice(0, 8), [applications]);
 
@@ -189,6 +196,8 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
                 {scholarships.map(s => {
                   const online = acceptsOnlineApplications(s);
                   const approved = s.counts.byStatus.Approved ?? 0;
+                  // Current scholars: approved and not declined, graduated or stopped.
+                  const current = new Set(applications.filter(a => a.scholarshipId === s.id && a.status === 'Approved' && !a.endedAt).map(a => a.studentNumber)).size;
                   return (
                     <li key={s.id} className="space-y-2 px-5 py-3.5">
                       <div className="flex items-start justify-between gap-3">
@@ -206,7 +215,7 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
                           <span className="shrink-0 text-xs tabular-nums text-ink-muted">{approved}/{s.counts.total} approved</span>
                         </div>
                       ) : (
-                        <p className="text-xs text-ink-subtle">{online ? 'No applications yet' : plural(approved, 'scholar')}</p>
+                        <p className="text-xs text-ink-subtle">{online ? 'No applications yet' : plural(current, 'scholar')}</p>
                       )}
                     </li>
                   );

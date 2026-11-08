@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  BadgeCheck, CheckCircle2, ChevronDown, CircleAlert, CircleDashed, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, XCircle
+  BadgeCheck, CalendarClock, CheckCircle2, ChevronDown, CircleAlert, CircleDashed, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, X, XCircle
 } from 'lucide-react';
 import { mockScholarships, acceptsOnlineApplications, applyScholarshipOverrides } from '../../data/scholarships';
 import { retentionMinGpa } from '../../utils/eligibility';
@@ -438,8 +438,11 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
 
       {editingPeriod && (
         <PeriodModal
+          key={editingPeriod === 'new' ? 'new' : editingPeriod._id}
           getToken={getToken}
           period={editingPeriod === 'new' ? null : editingPeriod}
+          existing={periods}
+          onEditExisting={p => setEditingPeriod(p)}
           onClose={() => setEditingPeriod(null)}
           onSaved={saved => {
             setEditingPeriod(null);
@@ -527,9 +530,44 @@ function EvaluationCell({ renewal }: { renewal: Renewal | null }) {
 
 // --- Period ------------------------------------------------------------------------
 
-function PeriodModal({ getToken, period, onClose, onSaved }: {
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const isoLocal = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const addDays = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return isoLocal(d); };
+const endOfMonth = () => { const d = new Date(); return isoLocal(new Date(d.getFullYear(), d.getMonth() + 1, 0)); };
+// Whole days from today to a YYYY-MM-DD date (negative when past).
+const daysUntil = (iso: string) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  const today = new Date();
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86_400_000);
+};
+const daysLabel = (n: number) => (n < 0 ? `${-n} day${n === -1 ? '' : 's'} ago` : n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`);
+
+// A labelled on/off switch row.
+function SwitchRow({ checked, onChange, disabled, title, description }: {
+  checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; title: string; description?: React.ReactNode;
+}) {
+  const id = React.useId();
+  return (
+    <label htmlFor={id} className={`flex items-center gap-3 rounded-control px-3.5 py-3 ring-1 transition-colors ${checked ? 'bg-accent-subtle/40 ring-accent/40' : 'bg-surface ring-line'} ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-ink">{title}</span>
+        {description && <span className="mt-0.5 block text-xs leading-relaxed text-ink-subtle">{description}</span>}
+      </span>
+      <span className="relative inline-flex shrink-0">
+        <input id={id} type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={e => onChange(e.target.checked)} className="peer sr-only" />
+        <span aria-hidden className="h-5 w-9 rounded-full bg-line-strong transition-colors peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2" />
+        <span aria-hidden className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
+      </span>
+    </label>
+  );
+}
+
+function PeriodModal({ getToken, period, existing = [], onEditExisting, onClose, onSaved }: {
   getToken: () => Promise<string | null>;
   period: RenewalPeriod | null;
+  // Periods already set up, to catch opening the same one twice.
+  existing?: RenewalPeriod[];
+  onEditExisting?: (period: RenewalPeriod) => void;
   onClose: () => void;
   onSaved: (period: RenewalPeriod) => void;
 }) {
@@ -568,17 +606,24 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
 
   // Suggestions for a new period: the SFAG's renewal uses the head
   // evaluation, and the scholarship's own retention GPA (e.g. 2.50).
+  const suggestedMin = retentionMinGpa(mockScholarships.find(s => s.id === scholarshipId) ?? {});
   useEffect(() => {
     if (!isNew) return;
     setRequiresEvaluation(scholarshipId === 's1');
-    const min = retentionMinGpa(mockScholarships.find(s => s.id === scholarshipId) ?? {});
-    setMinGpa(min !== undefined ? min.toFixed(2) : '');
+    setMinGpa(suggestedMin !== undefined ? suggestedMin.toFixed(2) : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, scholarshipId]);
+
+  const min = minGpa.trim();
+  const gpaError = min && (!Number.isFinite(Number(min)) || Number(min) < 0 || Number(min) > 4) ? 'Enter a GPA from 0.00 to 4.00.' : undefined;
+  const days = deadline ? daysUntil(deadline) : null;
+  const duplicate = isNew ? existing.find(p => p.scholarshipId === scholarshipId && p.academicYear === Number(academicYear) && p.term === term) : undefined;
+  const scholarshipLabel = isNew ? mockScholarships.find(s => s.id === scholarshipId)?.name ?? '' : period!.scholarshipName;
+  const label = periodLabel({ academicYear: Number(academicYear), term });
 
   const save = async () => {
     setError('');
-    const min = minGpa.trim();
-    if (min && (!Number.isFinite(Number(min)) || Number(min) < 0 || Number(min) > 4)) {
+    if (gpaError) {
       setError('The minimum GPA must be between 0.00 and 4.00.');
       return;
     }
@@ -603,62 +648,194 @@ function PeriodModal({ getToken, period, onClose, onSaved }: {
     }
   };
 
+  const quickPicks: { label: string; value: string }[] = [
+    { label: '1 week', value: addDays(7) },
+    { label: '2 weeks', value: addDays(14) },
+    { label: '30 days', value: addDays(30) },
+    { label: 'Month end', value: endOfMonth() },
+  ];
+
+  const summary = !open && !isNew
+    ? 'Closed: scholars can’t submit.'
+    : deadline
+      ? `Scholars can submit until ${deadlineLabel(deadline)} (${daysLabel(days!)}).`
+      : 'Scholars can submit until you close it.';
+
   return (
     <Modal
-      title={isNew ? 'Open renewal period' : 'Edit renewal period'}
-      description={isNew ? undefined : `${period!.scholarshipName} · ${periodLabel(period!)}`}
+      title={isNew ? 'Open a renewal period' : 'Edit renewal period'}
+      description={isNew ? 'Scholars holding the scholarship get a Renew button for this term.' : `${period!.scholarshipName} · ${periodLabel(period!)}`}
+      icon={<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-accent"><RefreshCw className="size-4" aria-hidden /></span>}
       onClose={onClose}
       dismissible={!saving}
+      size="lg"
+      bodyClassName="p-0"
       footer={
         <>
+          <p className="hidden min-w-0 flex-1 items-center gap-2 text-xs text-ink-muted sm:flex">
+            <CalendarClock className="size-3.5 shrink-0 text-ink-subtle" aria-hidden />
+            <span className="truncate">{summary}</span>
+          </p>
           <Button onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button variant="primary" onClick={save} loading={saving}>{isNew ? 'Open period' : 'Save'}</Button>
+          <Button variant="primary" icon={isNew ? LockOpen : undefined} onClick={save} loading={saving} disabled={!!duplicate || !scholarshipId}>
+            {isNew ? 'Open renewal period' : 'Save changes'}
+          </Button>
         </>
       }
     >
-      <div className="space-y-5">
-        {isNew && (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-            <Field label="Scholarship" className="sm:col-span-3">
-              <Select value={scholarshipId} onChange={setScholarshipId} disabled={saving}>
-                {renewableScholarships().map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
-            </Field>
-            <Field label="Academic year">
-              <Select value={academicYear} onChange={setAcademicYear} disabled={saving}>
-                {[ay + 1, ay, ay - 1].map(y => <option key={y} value={y}>{academicYearLabel(y)}</option>)}
-              </Select>
-            </Field>
-            <Field label="Term" className="sm:col-span-2">
-              <SegmentedControl<RenewalTerm> label="Term" options={RENEWAL_TERMS} value={term} onChange={v => v && setTerm(v)} />
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_19rem]">
+        <div className="space-y-5 px-5 py-5 sm:px-6">
+          {error && <Alert tone="danger">{error}</Alert>}
+
+          {isNew && (
+            <>
+              <Field label="Scholarship">
+                <Select value={scholarshipId} onChange={setScholarshipId} disabled={saving}>
+                  {renewableScholarships().map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              </Field>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[13.5rem_minmax(0,1fr)]">
+                <Field label="Academic year">
+                  <Select value={academicYear} onChange={setAcademicYear} disabled={saving}>
+                    {[ay + 1, ay, ay - 1].map(y => <option key={y} value={y}>{academicYearLabel(y)}{y === ay ? ' (current)' : ''}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Term">
+                  <SegmentedControl<RenewalTerm> label="Term" options={RENEWAL_TERMS} value={term} onChange={v => v && setTerm(v)} />
+                </Field>
+              </div>
+              {duplicate && (
+                <Alert
+                  tone="warning"
+                  title="This renewal period already exists"
+                  action={onEditExisting ? <Button size="sm" icon={Pencil} onClick={() => onEditExisting(duplicate)}>Edit it instead</Button> : undefined}
+                >
+                  {duplicate.scholarshipName}, {periodLabel(duplicate)} is {duplicate.open ? 'open' : 'closed'}.
+                </Alert>
+              )}
+            </>
+          )}
+
+          <div className={`grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_11.5rem] ${isNew ? 'border-t border-line pt-5' : ''}`}>
+            <div className="space-y-2">
+              <Field
+                label="Deadline"
+                optional
+                helper={period?.deadline && !isIsoDate(period.deadline)
+                  ? `Was typed as “${period.deadline}”. Pick it from the calendar.`
+                  : days !== null ? (days < 0 ? <span className="text-warning-fg">This date has passed.</span> : `Closes ${daysLabel(days)}.`) : 'Without one, it stays open until you close it.'}
+              >
+                <DatePicker value={deadline} onChange={setDeadline} disabled={saving} placeholder="Pick the last day" min={isNew ? isoLocal(new Date()) : undefined} />
+              </Field>
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Quick deadlines">
+                {quickPicks.map(q => (
+                  <button
+                    key={q.label}
+                    type="button"
+                    onClick={() => setDeadline(q.value)}
+                    disabled={saving}
+                    aria-pressed={deadline === q.value}
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                      deadline === q.value ? 'bg-accent-subtle text-accent ring-accent' : 'bg-surface text-ink-muted ring-line-strong hover:bg-surface-muted hover:text-ink'}`}
+                  >
+                    {q.label}
+                  </button>
+                ))}
+                {deadline && (
+                  <button type="button" onClick={() => setDeadline('')} disabled={saving} aria-label="Clear the deadline" title="Clear" className="flex size-5 items-center justify-center rounded-full text-ink-subtle hover:bg-neutral-bg hover:text-ink">
+                    <X className="size-3.5" aria-hidden />
+                  </button>
+                )}
+              </div>
+            </div>
+            <Field
+              label="Minimum GPA"
+              optional
+              error={gpaError}
+              helper={!gpaError ? (suggestedMin !== undefined ? `Retention GPA: ${suggestedMin.toFixed(2)}` : 'Blank for none') : undefined}
+            >
+              <TextInput
+                type="text"
+                inputMode="decimal"
+                value={minGpa}
+                onChange={e => setMinGpa(e.target.value.replace(/[^\d.]/g, ''))}
+                onBlur={() => { const n = Number(min); if (min && Number.isFinite(n) && n >= 0 && n <= 4) setMinGpa(n.toFixed(2)); }}
+                placeholder="e.g. 2.50"
+                disabled={saving}
+              />
             </Field>
           </div>
-        )}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Field label="Deadline" optional helper={period?.deadline && !isIsoDate(period.deadline) ? `Was typed as “${period.deadline}”. Pick it from the calendar.` : undefined}>
-            <DatePicker value={deadline} onChange={setDeadline} disabled={saving} placeholder="Pick the last day" />
+
+          <SwitchRow
+            checked={requiresEvaluation}
+            onChange={setRequiresEvaluation}
+            disabled={saving}
+            title="Department head’s evaluation"
+            description={`Below a ${PASSING_AVERAGE} average means an interview.`}
+          />
+
+          <Field label="Note to scholars" optional>
+            <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} disabled={saving} maxLength={1000} placeholder="e.g. Upload your TCG from the Online Student Records Portal." />
           </Field>
-          <Field label="Minimum GPA" optional helper="0.00–4.00">
-            <TextInput type="number" inputMode="decimal" step="0.01" min={0} max={4} value={minGpa} onChange={e => setMinGpa(e.target.value)} placeholder="e.g. 2.50" disabled={saving} />
-          </Field>
+
+          {!isNew && (
+            <SwitchRow
+              checked={open}
+              onChange={setOpenState}
+              disabled={saving}
+              title="Open for submissions"
+              description={open ? 'Scholars can submit or update their renewal.' : 'Scholars can’t submit. Turn it on to reopen.'}
+            />
+          )}
         </div>
-        <Alert tone="info" title={firstSem ? 'Grades and the application papers' : 'Grades only'}>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5">{docs.map(d => <li key={d}>{d}</li>)}</ul>
-        </Alert>
-        <Field label="Note to scholars" optional>
-          <Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} disabled={saving} maxLength={1000} placeholder="e.g. Upload your TCG from the Online Student Records Portal." />
-        </Field>
-        <Checkbox
-          checked={requiresEvaluation}
-          onChange={setRequiresEvaluation}
-          disabled={saving}
-          label="Requires the department head's evaluation"
-          description={`Below ${PASSING_AVERAGE} average means an interview.`}
-        />
-        {!isNew && (
-          <Checkbox checked={open} onChange={setOpenState} disabled={saving} label="Open for submissions" />
-        )}
-        {error && <Alert tone="danger">{error}</Alert>}
+
+        {/* What scholars will see */}
+        <aside className="hidden border-l border-line bg-surface-muted px-5 py-5 lg:block">
+          <div className="lg:sticky lg:top-5">
+          <h3 className="text-sm font-semibold text-ink">What scholars will see</h3>
+          <div className="mt-3 overflow-hidden rounded-card bg-surface shadow-card ring-1 ring-line">
+            <div className="border-b border-line px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-accent">Renewal {open || isNew ? 'open' : 'closed'}</p>
+              <p className="mt-0.5 text-sm font-semibold leading-snug text-ink">{scholarshipLabel || 'Scholarship'}</p>
+              <p className="text-xs text-ink-subtle">{isNew ? label : periodLabel(period!)}</p>
+            </div>
+            <dl className="space-y-3 px-4 py-3 text-xs">
+              <div>
+                <dt className="text-ink-subtle">Deadline</dt>
+                <dd className="mt-0.5 font-medium text-ink">
+                  {deadline ? <>{deadlineLabel(deadline)} <span className={`font-normal ${days! < 0 ? 'text-warning-fg' : 'text-ink-subtle'}`}>· {daysLabel(days!)}</span></> : 'No deadline'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-ink-subtle">To upload</dt>
+                <dd className="mt-1">
+                  <ul className="space-y-1">
+                    {docs.map(d => (
+                      <li key={d} className="flex items-start gap-1.5 text-ink"><FileText className="mt-px size-3.5 shrink-0 text-ink-subtle" aria-hidden />{d}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-1.5 text-ink-subtle">{firstSem ? '1st semester: the application papers are asked again.' : '2nd semester: grades only.'}</p>
+                </dd>
+              </div>
+              {(min && !gpaError) || requiresEvaluation ? (
+                <div>
+                  <dt className="text-ink-subtle">Checked by the office</dt>
+                  <dd className="mt-1 space-y-1 text-ink">
+                    {min && !gpaError && <p className="flex items-center gap-1.5"><BadgeCheck className="size-3.5 text-ink-subtle" aria-hidden />GPA of at least {Number(min).toFixed(2)}</p>}
+                    {requiresEvaluation && <p className="flex items-center gap-1.5"><Users className="size-3.5 text-ink-subtle" aria-hidden />Department head’s evaluation</p>}
+                  </dd>
+                </div>
+              ) : null}
+              {notes.trim() && (
+                <div>
+                  <dt className="text-ink-subtle">Note from the office</dt>
+                  <dd className="mt-1 whitespace-pre-line rounded-control bg-surface-muted px-2.5 py-2 text-ink">{notes.trim()}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+          </div>
+        </aside>
       </div>
     </Modal>
   );

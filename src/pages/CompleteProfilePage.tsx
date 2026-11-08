@@ -8,7 +8,7 @@ import { AcademicFields, ContactFields, FamilyFields, PersonalFields } from '../
 import {
   DraftErrors, DraftField, ProfileDraft, SECTION_FIELDS, draftToPayload, emptyDraft, validateDraft
 } from '../components/profile/profileForm';
-import { nameInitials, titleCaseName } from '../utils/names';
+import { nameInitials, splitDirectoryName, titleCaseName } from '../utils/names';
 import { collegeName, findProgram } from '../data/programs';
 import { formatLongDate } from '../utils/profile';
 
@@ -90,14 +90,19 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
   const saved = useMemo(() => loadSaved(user?.id), [user?.id]);
   const [studentNumber, setStudentNumber] = useState(saved?.studentNumber ?? '');
   // First and last name start from the university (Microsoft) account,
-  // which sometimes splits a name wrongly ("Paolo" + "Stephen Baldo"); the
-  // student corrects them here.
+  // re-split where the directory put given names into the surname
+  // ("Paolo" + "Stephen Baldo"); the student confirms or corrects them here.
+  const accountNames = (u: typeof user) => {
+    const { firstName, lastName } = splitDirectoryName(u?.firstName ?? '', u?.lastName ?? '', u?.primaryEmailAddress?.emailAddress ?? '');
+    return { firstName: titleCaseName(firstName), lastName: titleCaseName(lastName) };
+  };
   const [draft, setDraft] = useState<ProfileDraft>(() => {
     const d = saved?.draft ?? emptyDraft();
+    const names = accountNames(user);
     return {
       ...d,
-      firstName: d.firstName || titleCaseName(user?.firstName?.trim() ?? ''),
-      lastName: d.lastName || titleCaseName(user?.lastName?.trim() ?? ''),
+      firstName: d.firstName || names.firstName,
+      lastName: d.lastName || names.lastName,
     };
   });
   const [step, setStep] = useState(saved?.step ?? 0);
@@ -126,11 +131,7 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
   // The account may load after the first render: prefill the names then.
   useEffect(() => {
     if (!user) return;
-    setDraft(prev => (prev.firstName || prev.lastName ? prev : {
-      ...prev,
-      firstName: titleCaseName(user.firstName?.trim() ?? ''),
-      lastName: titleCaseName(user.lastName?.trim() ?? ''),
-    }));
+    setDraft(prev => (prev.firstName || prev.lastName ? prev : { ...prev, ...accountNames(user) }));
   }, [user]);
 
   // Move focus to the new step's heading, so screen readers announce it.
@@ -218,7 +219,7 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
     submit();
   };
 
-  const accountName = titleCaseName([user?.firstName?.trim(), user?.lastName?.trim()].filter(Boolean).join(' ')) || 'Student';
+  const accountName = (() => { const n = accountNames(user); return [n.firstName, n.lastName].filter(Boolean).join(' '); })() || 'Student';
   const email = user?.primaryEmailAddress?.emailAddress ?? '';
   const isLast = step === STEPS.length - 1;
 

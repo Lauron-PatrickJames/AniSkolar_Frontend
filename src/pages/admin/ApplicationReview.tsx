@@ -805,7 +805,8 @@ function DecisionSummary({ app, last }: { app: AdminApplication; last: ReturnTyp
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={app.status} endReason={app.endReason} />
+        {/* The office's decision; a later decline / end shows under Scholarship status. */}
+        <StatusBadge status={app.status} />
         {app.status === 'Approved' && app.sfagPercentage ? <Badge tone="accent">{app.sfagPercentage}% grant</Badge> : null}
       </div>
       <p className="text-xs text-ink-subtle">

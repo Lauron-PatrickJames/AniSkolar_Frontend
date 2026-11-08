@@ -215,7 +215,7 @@ export default function ApplicationsList({
                             : <span className="tabular-nums">{days === 0 ? 'Today' : `${days} ${days === 1 ? 'day' : 'days'}`}</span>}
                         </Td>
                       )}
-                      <Td><StatusBadge status={app.status} /></Td>
+                      <Td><StatusBadge status={app.status} endReason={app.endReason} /></Td>
                       <Td><ChevronRight className="size-4 text-ink-subtle group-hover:text-ink" aria-hidden /></Td>
                     </Tr>
                   );
@@ -236,7 +236,7 @@ export default function ApplicationsList({
                         <span className="block truncate text-xs text-ink-subtle">{app.scholarshipName}</span>
                         <span className="block text-xs text-ink-subtle tabular-nums">{relativeTime(app.createdAt, now)}{showWaiting && days >= WAITING_HIGHLIGHT_DAYS ? ` · waiting ${days} days` : ''}</span>
                       </span>
-                      <StatusBadge status={app.status} />
+                      <StatusBadge status={app.status} endReason={app.endReason} />
                     </button>
                   </li>
                 );

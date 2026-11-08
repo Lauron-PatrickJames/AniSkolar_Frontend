@@ -1,10 +1,13 @@
 import { GpaRequirement, GrantEligibilityAnswers, Scholarship, StudentProfile } from '../types';
+import { isOpenToProgram } from '../data/requirementCatalog';
 
 // Hides scholarships the student can't take at all (e.g. freshman-only
 // grants for upperclassmen). GPA rules don't hide anything: the profile
 // GPA may be out of date, so a low one is shown as a warning instead
 // (profileGpaWarning).
 export function isEligible(scholarship: Scholarship, student: StudentProfile): boolean {
+  // Open only to some programs (e.g. CS and IT): hidden from everyone else.
+  if (!isOpenToProgram(scholarship.rules, student.programCode)) return false;
   const criteria = scholarship.eligibilityCriteria;
   if (!criteria) return true;
 

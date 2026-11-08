@@ -89,7 +89,17 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
 
   const saved = useMemo(() => loadSaved(user?.id), [user?.id]);
   const [studentNumber, setStudentNumber] = useState(saved?.studentNumber ?? '');
-  const [draft, setDraft] = useState<ProfileDraft>(saved?.draft ?? emptyDraft());
+  // First and last name start from the university (Microsoft) account,
+  // which sometimes splits a name wrongly ("Paolo" + "Stephen Baldo"); the
+  // student corrects them here.
+  const [draft, setDraft] = useState<ProfileDraft>(() => {
+    const d = saved?.draft ?? emptyDraft();
+    return {
+      ...d,
+      firstName: d.firstName || titleCaseName(user?.firstName?.trim() ?? ''),
+      lastName: d.lastName || titleCaseName(user?.lastName?.trim() ?? ''),
+    };
+  });
   const [step, setStep] = useState(saved?.step ?? 0);
   const [touched, setTouched] = useState<Set<FieldKey>>(new Set());
   // Steps the student tried to leave: show all of their errors.
@@ -112,6 +122,16 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
       // Storage unavailable (private mode): the form still works.
     }
   }, [studentNumber, draft, step, user?.id]);
+
+  // The account may load after the first render: prefill the names then.
+  useEffect(() => {
+    if (!user) return;
+    setDraft(prev => (prev.firstName || prev.lastName ? prev : {
+      ...prev,
+      firstName: titleCaseName(user.firstName?.trim() ?? ''),
+      lastName: titleCaseName(user.lastName?.trim() ?? ''),
+    }));
+  }, [user]);
 
   // Move focus to the new step's heading, so screen readers announce it.
   useEffect(() => {
@@ -198,9 +218,7 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
     submit();
   };
 
-  const accountFirst = user?.firstName?.trim() ?? '';
-  const accountLast = user?.lastName?.trim() ?? '';
-  const accountName = titleCaseName([accountFirst, accountLast].filter(Boolean).join(' ')) || 'Student';
+  const accountName = titleCaseName([user?.firstName?.trim(), user?.lastName?.trim()].filter(Boolean).join(' ')) || 'Student';
   const email = user?.primaryEmailAddress?.emailAddress ?? '';
   const isLast = step === STEPS.length - 1;
 
@@ -297,7 +315,7 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
               <>
                 <section aria-labelledby="setup-personal" className="space-y-5">
                   <h3 id="setup-personal" className="text-sm font-semibold text-ink">Personal details</h3>
-                  <PersonalFields draft={draft} update={update} errorFor={errorFor} touch={touch} accountName={{ firstName: titleCaseName(accountFirst), lastName: titleCaseName(accountLast) }} />
+                  <PersonalFields draft={draft} update={update} errorFor={errorFor} touch={touch} nameHint="Filled in from your university account. Check that your first and last name are split correctly — you can’t change them yourself later." />
                 </section>
                 <section aria-labelledby="setup-contact" className="space-y-5 border-t border-line pt-6">
                   <h3 id="setup-contact" className="text-sm font-semibold text-ink">Contact</h3>
@@ -312,7 +330,6 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
               <ReviewStep
                 studentNumber={studentNumber}
                 draft={draft}
-                accountName={accountName}
                 email={email}
                 onEdit={goTo}
                 agreed={agreed}
@@ -342,10 +359,9 @@ export default function CompleteProfilePage({ onComplete }: CompleteProfilePageP
 
 // The last step: everything entered, grouped, with "Edit" back to its step,
 // and the agreement that it's accurate and permanent.
-function ReviewStep({ studentNumber, draft, accountName, email, onEdit, agreed, onAgree, agreeError }: {
+function ReviewStep({ studentNumber, draft, email, onEdit, agreed, onAgree, agreeError }: {
   studentNumber: string;
   draft: ProfileDraft;
-  accountName: string;
   email: string;
   onEdit: (step: number) => void;
   agreed: boolean;
@@ -354,7 +370,7 @@ function ReviewStep({ studentNumber, draft, accountName, email, onEdit, agreed, 
 }) {
   const program = findProgram(draft.programCode);
   const ph = draft.country === 'Philippines';
-  const fullName = [accountName, draft.nameSuffix].filter(Boolean).join(' ');
+  const fullName = [draft.firstName, draft.middleName, draft.lastName, draft.nameSuffix].map(p => p.trim()).filter(Boolean).join(' ');
   const parentLine = (name: string, contact: string, deceased: boolean) => (deceased ? `${name} (deceased)` : [name, contact].filter(Boolean).join(' · '));
   const guardian = draft.guardianType === 'father' ? 'Same as father'
     : draft.guardianType === 'mother' ? 'Same as mother'
@@ -371,7 +387,8 @@ function ReviewStep({ studentNumber, draft, accountName, email, onEdit, agreed, 
     },
     {
       title: 'About you', step: 1, rows: [
-        ['Name', `${fullName}${draft.middleName ? ` (middle name: ${draft.middleName})` : ''}`],
+        ['Name', fullName],
+        ['First name · Middle name · Last name', [draft.firstName, draft.middleName, draft.lastName].map(p => p.trim() || '—').join(' · ')],
         ['Date and place of birth', [formatLongDate(draft.dateOfBirth), draft.placeOfBirth].filter(Boolean).join(' · ')],
         ['Nationality and civil status', [draft.nationality, draft.civilStatus].filter(Boolean).join(' · ')],
         ['Email', email],

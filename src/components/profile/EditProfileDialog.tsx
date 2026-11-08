@@ -31,7 +31,7 @@ const GROUP_FIELDS: Record<CorrectionGroup, DraftField[]> = {
   program: ['programCode'],
   enrollment: ['yearLevel', 'section'],
   gpa: ['gpa'],
-  personal: ['middleName', 'nameSuffix', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'],
+  personal: ['firstName', 'lastName', 'middleName', 'nameSuffix', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'],
 };
 // Personal details the student can no longer change once they're all set
 // (older accounts can still fill in what's missing).
@@ -69,7 +69,9 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
     ...(programLocked || verificationOf(student, 'program') ? ['program' as const] : []),
     ...(personalLocked ? ['personal' as const] : []),
   ];
-  const lockedFields = new Set(lockedGroups.flatMap(g => GROUP_FIELDS[g]));
+  const lockedFields = new Set<DraftField>(lockedGroups.flatMap(g => GROUP_FIELDS[g]));
+  // Names are set at sign-up; afterwards only the AdSO changes them.
+  if (!adminMode) { lockedFields.add('firstName'); lockedFields.add('lastName'); }
 
   const allErrors = validateDraft(draft, { requireAcademic: true });
   const errors = Object.fromEntries(Object.entries(allErrors).filter(([f]) => !lockedFields.has(f as DraftField))) as typeof allErrors;
@@ -237,7 +239,8 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
         ) : (
           <PersonalFields
             draft={draft} update={update} errorFor={errorFor} touch={touch}
-            accountName={{ firstName: titleCaseName(student.firstName ?? ''), lastName: titleCaseName(student.lastName ?? '') }}
+            lockNames={!adminMode}
+            nameHint={adminMode ? undefined : 'Only the Admissions and Scholarship Office can change your name. Use “Request a change” once your personal details are complete.'}
           />
         ))}
         {section === 'contact' && <ContactFields draft={draft} update={update} errorFor={errorFor} touch={touch} email={student.email} />}

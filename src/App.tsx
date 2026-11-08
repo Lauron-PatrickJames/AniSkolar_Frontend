@@ -915,6 +915,7 @@ export default function App() {
           applications={applications}
           heldScholarships={holdings?.held ?? []}
           dutyNotice={dutyNotice}
+          announcements={studentAnnouncements}
           onLogout={handleLogout}
           pageTitle={title}
         >
@@ -1001,6 +1002,7 @@ export default function App() {
                     student={student}
                     applications={applications}
                     dutyNotice={dutyNotice}
+                    announcements={studentAnnouncements}
                     onNavigate={handleNavigate}
                     onViewScholarship={handleViewScholarship}
                   />

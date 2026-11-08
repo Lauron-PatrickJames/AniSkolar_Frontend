@@ -10,7 +10,7 @@ import {
 import { checkApplyEligibility } from '../../utils/eligibility';
 import {
   Block, CheckboxField, ChoiceField, ComputedField, FileSlotField, NumberField, RepeatableList,
-  SelectField, SubHeading, TextField, useGrantForm
+  SchoolDatalist, SchoolField, SelectField, SubHeading, TextField, useGrantForm
 } from './fields';
 
 // Application-form sections shared by every grant-form scholarship
@@ -116,7 +116,8 @@ export function StudentDataSection() {
       <Block>
         <SubHeading>Secondary School</SubHeading>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <TextField path="personalInfo.secondarySchool" label="Secondary School Attended" required className="sm:col-span-2" />
+          <SchoolField path="personalInfo.secondarySchool" typePath="personalInfo.secondarySchoolType" label="Secondary School Attended" required className="sm:col-span-2" />
+          <SchoolDatalist />
           <ChoiceField path="personalInfo.secondarySchoolType" label="Type" required options={['Public', 'Private']} />
         </div>
       </Block>

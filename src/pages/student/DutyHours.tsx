@@ -5,7 +5,7 @@ import { AlertCircle, Building2, CalendarDays, Clock, Loader2, Plus, Printer, Re
 import { StudentProfile } from '../../types';
 import {
   ClaimStatus, CreditedEvent, DUTY_TERMS, DutyEntry, DutyLog, DutyRule, DutySummary, DutyTerm, EventClaim, entryHours, format12h, formatDutyDate, formatHours, yearGroupLabel, dutyRuleError, DUTY_RULES_TEXT, dutyTimeOptions,
-  isTimeRange, sortEntries, summarize, termLabel, todayInManila, weekday, weeklyTotals
+  REVIEW_WINDOW_HOURS, hoursUntilRemoved, isTimeRange, sortEntries, summarize, termLabel, todayInManila, weekday, weeklyTotals
 } from '../../utils/dutyHours';
 import { StatsTableSkeleton } from '../../components/Skeletons';
 
@@ -215,7 +215,8 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
 
       {/* Duty is rendered in the office the AdSO assigns, so logging opens
           once there is one (the server refuses new duties before that). */}
-      {log.officeAssigned ? <AddDutyForm log={log} onSave={save} /> : <AwaitingOfficeCard />}
+      {log.officeAssigned ? <AddDutyForm log={log} onSave={save} confirmationRequired={confirmationRequired} /> : <AwaitingOfficeCard />}
+      {!!log.expiredEntries?.length && <ExpiredDutiesNote entries={log.expiredEntries} />}
 
       {(log.officeAssigned || log.entries.length > 0) && (
         <RegularDutyTable log={log} onSave={save} confirmationRequired={confirmationRequired} />
@@ -357,8 +358,28 @@ function AwaitingOfficeCard() {
   );
 }
 
-function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => void }) {
-  const [date, setDate] = useState(todayInManila());
+// Removed duties (not reviewed within 48 hours), newest first.
+function ExpiredDutiesNote({ entries }: { entries: NonNullable<DutyLog['expiredEntries']> }) {
+  const recent = [...entries].sort((a, b) => (b.removedAt ?? '').localeCompare(a.removedAt ?? '')).slice(0, 5);
+  return (
+    <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+      <p className="font-semibold">{entries.length === 1 ? 'A duty was removed' : `${entries.length} duties were removed`} because your office head didn’t confirm {entries.length === 1 ? 'it' : 'them'} within {REVIEW_WINDOW_HOURS} hours</p>
+      <ul className="mt-1.5 space-y-0.5 text-xs">
+        {recent.map((e, i) => <li key={i}>{weekday(e.date)}, {formatDutyDate(e.date, true)} · {format12h(e.timeIn)}–{format12h(e.timeOut)}</li>)}
+        {entries.length > recent.length && <li>and {entries.length - recent.length} more</li>}
+      </ul>
+      <p className="mt-1.5 text-xs">If you rendered {entries.length === 1 ? 'it' : 'them'}, talk to your office head or the Admissions and Scholarship Office.</p>
+    </div>
+  );
+}
+
+// Duties are logged on the day they're rendered: the date is today. The
+// only other dates offered are those of duties the office head flagged,
+// to log the corrected duty in place of the flagged one.
+function AddDutyForm({ log, onSave, confirmationRequired = false }: { log: DutyLog; onSave: (log: DutyLog) => void; confirmationRequired?: boolean }) {
+  const today = todayInManila();
+  const flaggedDates = [...new Set(log.entries.filter(e => e.status === 'flagged' && e.date !== today).map(e => e.date))].sort();
+  const [date, setDate] = useState(today);
   const [timeIn, setTimeIn] = useState('');
   const [timeOut, setTimeOut] = useState('');
   const [error, setError] = useState('');
@@ -378,7 +399,15 @@ function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => 
     const overlap = log.entries.find(x => x.date === date && timeIn < x.timeOut && x.timeIn < timeOut);
     if (overlap) { setError(`This overlaps your ${format12h(overlap.timeIn)}–${format12h(overlap.timeOut)} duty that day.`); return; }
     setError('');
-    onSave({ ...log, entries: sortEntries([...log.entries, { date, timeIn, timeOut }]) });
+    // Correcting a flagged duty: the new one replaces it.
+    let entries = log.entries;
+    if (date !== today) {
+      const i = entries.findIndex(x => x.status === 'flagged' && x.date === date);
+      if (i < 0) { setError('You can only log a duty on the day you render it.'); return; }
+      entries = entries.filter((_, j) => j !== i);
+      setDate(today);
+    }
+    onSave({ ...log, entries: sortEntries([...entries, { date, timeIn, timeOut }]) });
     setTimeIn('');
     setTimeOut('');
   };
@@ -389,7 +418,14 @@ function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
         <label className="block">
           <span className={labelClass}>Date</span>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} className={`mt-1.5 ${inputClass}`} />
+          {flaggedDates.length ? (
+            <select value={date} onChange={e => { setDate(e.target.value); setTimeIn(''); setTimeOut(''); }} className={`mt-1.5 ${inputClass}`}>
+              <option value={today}>Today, {formatDutyDate(today)}</option>
+              {flaggedDates.map(d => <option key={d} value={d}>Fix flagged duty · {formatDutyDate(d)}</option>)}
+            </select>
+          ) : (
+            <p className={`mt-1.5 ${inputClass} bg-slate-50 text-slate-700`}>Today, {formatDutyDate(today)}</p>
+          )}
         </label>
         <label className="block">
           <span className={labelClass}>Time in</span>
@@ -425,10 +461,17 @@ function AddDutyForm({ log, onSave }: { log: DutyLog; onSave: (log: DutyLog) => 
         {weekend && <span className="font-semibold text-amber-700"> · No duty on weekends</span>}
         {hours !== null && <> · <span className="font-bold text-slate-700">{formatHours(hours)} hours</span></>}
       </p>
-      <p className="rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-500"><span className="font-semibold text-slate-700">Duty rules:</span> {DUTY_RULES_TEXT} Only times that fit these rules are listed.</p>
+      <p className="rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-500"><span className="font-semibold text-slate-700">Duty rules:</span> {DUTY_RULES_TEXT} Only times that fit these rules are listed. Log each duty on the day you render it; you can’t add duties for earlier days.{confirmationRequired && ` Your office head has ${REVIEW_WINDOW_HOURS} hours to confirm a duty, or it’s removed.`}</p>
       {error && <p role="alert" className="text-xs font-semibold text-rose-600">{error}</p>}
     </form>
   );
+}
+
+// "· removed in 5 h" on a duty still waiting for the office head.
+function waitingSuffix(entry: DutyEntry): string {
+  const left = hoursUntilRemoved(entry);
+  if (left === null) return '';
+  return left <= 1 ? ' · removed within the hour' : ` · removed in ${left} h`;
 }
 
 function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: DutyLog; onSave: (log: DutyLog) => void; confirmationRequired?: boolean }) {
@@ -460,7 +503,7 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
                     {confirmationRequired && (
                       <> · {entry.status === 'confirmed' ? <span className="font-bold text-emerald-700">Confirmed</span>
                         : entry.status === 'flagged' ? <span className="font-bold text-rose-700">Flagged{entry.note ? `: ${entry.note}` : ''}</span>
-                          : <span className="font-bold text-amber-700">Waiting</span>}</>
+                          : <span className="font-bold text-amber-700">Waiting{waitingSuffix(entry)}</span>}</>
                     )}
                   </p>
                 </div>
@@ -501,7 +544,7 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
                       <td className="px-3 py-2.5">
                         {entry.status === 'confirmed' ? <span className="text-[11px] font-bold text-emerald-700">Confirmed</span>
                           : entry.status === 'flagged' ? <span className="text-[11px] font-bold text-rose-700" title={entry.note ?? ''}>Flagged{entry.note ? `: ${entry.note}` : ''}</span>
-                            : <span className="text-[11px] font-bold text-amber-700">Waiting</span>}
+                            : <span className="text-[11px] font-bold text-amber-700">Waiting{waitingSuffix(entry)}</span>}
                       </td>
                     )}
                     <td className="pr-4 text-right">

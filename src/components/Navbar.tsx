@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, User, LogOut, Settings, Shield, ChevronDown, Menu, X, ArrowRight } from 'lucide-react';
-import { StudentProfile, Application } from '../types';
+import { StudentProfile, Application, Announcement } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { buildNotifications, markAllRead, markRead, NotificationItem, DutyNotice } from '../utils/notifications';
 import { displayName, nameInitials } from '../utils/names';
@@ -22,6 +22,8 @@ interface NavbarProps {
   heldScholarships?: { scholarshipId: string; scholarshipName: string }[];
   // This semester's duty hours (SFAG scholars), for the hours-done notice.
   dutyNotice?: DutyNotice | null;
+  // Published announcements: new ones show as notifications.
+  announcements?: Announcement[];
   id?: string;
 }
 
@@ -40,6 +42,7 @@ export default function Navbar({
   onNavigate,
   heldScholarships = [],
   dutyNotice = null,
+  announcements = [],
   id
 }: NavbarProps) {
   const [showNotifications, setShowNotifications] = useState(false);
@@ -49,15 +52,15 @@ export default function Navbar({
   // shows on hover where it's truncated.
   const fullName = displayName(student);
   const [notifications, setNotifications] = useState<NotificationItem[]>(() =>
-    buildNotifications(student, applications, dutyNotice)
+    buildNotifications(student, applications, dutyNotice, { announcements })
   );
 
   // Recompute whenever the student or their applications change (e.g. right
   // after a new submission, or an application status update from the office).
   useEffect(() => {
-    setNotifications(buildNotifications(student, applications, dutyNotice));
+    setNotifications(buildNotifications(student, applications, dutyNotice, { announcements }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [student.studentNumber, applications, dutyNotice?.termKey, dutyNotice?.complete, dutyNotice?.evaluated]);
+  }, [student.studentNumber, applications, dutyNotice?.termKey, dutyNotice?.complete, dutyNotice?.evaluated, announcements]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
   // Cap the displayed number so the badge doesn't stretch out of shape.
@@ -350,7 +353,7 @@ export function NotificationPreview({ item, onClose, onOpen }: { item: Notificat
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5">
           <div className="min-w-0 space-y-1.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Notification · {item.time}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.kind === 'announcement' ? `Announcement${item.postedBy ? ` · ${item.postedBy}` : ''}` : 'Notification'} · {item.time}</p>
             <h2 id="notif-preview-title" className="font-display text-base font-bold text-slate-900">{item.title}</h2>
             {item.status && (
               <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${STATUS_STYLE[item.status] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>{item.status}</span>
@@ -372,7 +375,7 @@ export function NotificationPreview({ item, onClose, onOpen }: { item: Notificat
         <div className="flex flex-col-reverse gap-2 border-t border-slate-100 p-4 sm:flex-row sm:justify-end">
           <button type="button" onClick={onClose} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green">Close</button>
           <button type="button" onClick={onOpen} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand-green px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-green-dark focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2">
-            {item.page === 'duty-hours' ? 'Open Duty Hours' : item.scholarshipId ? 'View application' : 'Explore scholarships'}
+            {item.page === 'duty-hours' ? 'Open Duty Hours' : item.kind === 'announcement' ? 'Open Announcements' : item.scholarshipId ? 'View application' : 'Explore scholarships'}
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>

@@ -1,24 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, CheckCheck } from 'lucide-react';
-import { Application, StudentProfile } from '../../types';
+import { Announcement, Application, StudentProfile } from '../../types';
 import { DutyNotice, NotificationItem, buildNotifications, markAllRead, markRead } from '../../utils/notifications';
 import { NotificationPreview } from '../../components/Navbar';
 
 // Every notification, read or not. Nothing can be cleared: this is the
 // student's record of what happened to their applications and duties.
-export default function NotificationsPage({ student, applications, dutyNotice, onNavigate, onViewScholarship }: {
+export default function NotificationsPage({ student, applications, dutyNotice, announcements = [], onNavigate, onViewScholarship }: {
   student: StudentProfile;
   applications: Application[];
   dutyNotice: DutyNotice | null;
+  announcements?: Announcement[];
   onNavigate: (page: string) => void;
   onViewScholarship: (scholarshipId: string) => void;
 }) {
-  const build = () => buildNotifications(student, applications, dutyNotice, { includeCleared: true });
+  const build = () => buildNotifications(student, applications, dutyNotice, { includeCleared: true, announcements });
   const [items, setItems] = useState<NotificationItem[]>(build);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [preview, setPreview] = useState<NotificationItem | null>(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => setItems(build()), [student.studentNumber, applications, dutyNotice?.termKey, dutyNotice?.complete, dutyNotice?.evaluated]);
+  useEffect(() => setItems(build()), [student.studentNumber, applications, dutyNotice?.termKey, dutyNotice?.complete, dutyNotice?.evaluated, announcements]);
 
   const unread = items.filter(n => !n.isRead).length;
   const shown = filter === 'unread' ? items.filter(n => !n.isRead) : items;

@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
 import { Lock, Plus, X } from 'lucide-react';
 import {
-  APPLICANT_TYPE_LABELS, ApplicantType, EligibilityRules, RULES, RuleDef, RuleKey, TICKABLE_DOCUMENTS, ruleText
+  APPLICANT_TYPE_LABELS, ApplicantType, EligibilityRules, RULES, RuleDef, RuleKey, TICKABLE_DOCUMENTS, openToText, ruleText
 } from '../../data/requirementCatalog';
+import { COLLEGES, PROGRAMS } from '../../data/programs';
 import { Badge, Button, IconButton, Tooltip } from './AdminUI';
 
 // Checklist editors for a scholarship's eligibility and documents, picked
@@ -172,6 +173,83 @@ export function RulesEditor({ rules, onChange, locked = [], disabled }: {
         );
       })}
     </ul>
+  );
+}
+
+// --- Open to ------------------------------------------------------------------------
+
+// Who can see and apply: every program, or only the ticked ones (a
+// college's box ticks all of its programs). Students of other programs
+// don't see the scholarship in Explore.
+export function OpenToEditor({ rules, onChange, disabled }: {
+  rules: EligibilityRules;
+  onChange: (next: EligibilityRules) => void;
+  disabled?: boolean;
+}) {
+  const codes = rules.programs ?? [];
+  const limited = rules.programs !== undefined;
+  const picked = new Set(codes);
+  const setCodes = (next: string[] | undefined) => {
+    const out = { ...rules };
+    if (next === undefined) delete out.programs;
+    else out.programs = PROGRAMS.map(p => p.code).filter(c => next.includes(c));
+    onChange(out);
+  };
+  const toggle = (list: string[], on: boolean) =>
+    setCodes(on ? [...new Set([...codes, ...list])] : codes.filter(c => !list.includes(c)));
+  const text = openToText(rules);
+  return (
+    <div className="space-y-3">
+      <div role="radiogroup" aria-label="Open to" className="flex flex-wrap gap-x-5 gap-y-2">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+          <input type="radio" name="open-to" checked={!limited} onChange={() => setCodes(undefined)} disabled={disabled} className="size-4 accent-accent" />
+          All programs
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+          <input type="radio" name="open-to" checked={limited} onChange={() => setCodes(codes)} disabled={disabled} className="size-4 accent-accent" />
+          Only some programs or colleges
+        </label>
+      </div>
+      {limited && (
+        <>
+          <div className="max-h-80 space-y-3 overflow-y-auto rounded-control p-3 ring-1 ring-line">
+            {Object.entries(COLLEGES).map(([college, name]) => {
+              const programs = PROGRAMS.filter(p => p.college === college);
+              const list = programs.map(p => p.code);
+              const count = list.filter(c => picked.has(c)).length;
+              return (
+                <fieldset key={college}>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-ink">
+                    <input
+                      type="checkbox"
+                      checked={count === list.length}
+                      ref={el => { if (el) el.indeterminate = count > 0 && count < list.length; }}
+                      onChange={e => toggle(list, e.target.checked)}
+                      disabled={disabled}
+                      className="size-4 shrink-0 rounded accent-accent"
+                    />
+                    {name} <span className="text-xs font-normal text-ink-subtle">({college})</span>
+                  </label>
+                  <ul className="mt-1 grid grid-cols-1 gap-x-4 pl-6 sm:grid-cols-2">
+                    {programs.map(p => (
+                      <li key={p.code}>
+                        <label className="flex cursor-pointer items-center gap-2 rounded-control px-1 py-1 text-sm text-ink hover:bg-surface-muted">
+                          <input type="checkbox" checked={picked.has(p.code)} onChange={e => toggle([p.code], e.target.checked)} disabled={disabled} className="size-4 shrink-0 rounded accent-accent" />
+                          <span className="min-w-0">{p.name}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </fieldset>
+              );
+            })}
+          </div>
+          <p className={`text-xs ${codes.length ? 'text-ink-subtle' : 'text-danger-fg'}`}>
+            {codes.length ? <>Students read: “{text}”. Students of other programs won’t see this scholarship.</> : 'Tick at least one program, or choose All programs.'}
+          </p>
+        </>
+      )}
+    </div>
   );
 }
 

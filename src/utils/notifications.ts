@@ -1,4 +1,4 @@
-import { StudentProfile, Application } from '../types';
+import { StudentProfile, Application, Announcement } from '../types';
 
 export interface NotificationItem {
   id: string;
@@ -16,6 +16,8 @@ export interface NotificationItem {
   note?: string;
   // A student page to open instead of a scholarship (e.g. 'duty-hours').
   page?: string;
+  kind?: 'announcement';
+  postedBy?: string;
 }
 
 // This semester's duty hours, for the "hours done / evaluated" notices
@@ -65,7 +67,12 @@ function statusMessage(scholarshipName: string, status: string): string {
 
 // Notifications can't be cleared any more (View all keeps every one);
 // ones cleared before stay hidden from the bell only.
-export function buildNotifications(student: StudentProfile, applications: Application[], duty?: DutyNotice | null, { includeCleared = false } = {}): NotificationItem[] {
+// Announcements notify for this long after they're published (at most
+// this many, newest first), and never from before the student signed up.
+const ANNOUNCEMENT_DAYS = 30;
+const MAX_ANNOUNCEMENTS = 10;
+
+export function buildNotifications(student: StudentProfile, applications: Application[], duty?: DutyNotice | null, { includeCleared = false, announcements = [] as Announcement[] } = {}): NotificationItem[] {
   const cleared = includeCleared ? new Set<string>() : getIds(CLEARED_PREFIX, student.studentNumber);
   const read = getIds(READ_PREFIX, student.studentNumber);
   const items: NotificationItem[] = [];
@@ -117,6 +124,29 @@ export function buildNotifications(student: StudentProfile, applications: Applic
       });
     }
   }
+
+  // New announcements (office and, for SFAG scholars, their duty office's).
+  const since = Math.max(
+    Date.now() - ANNOUNCEMENT_DAYS * 86_400_000,
+    Date.parse((student as { createdAt?: string }).createdAt ?? '') || 0,
+  );
+  const recent = announcements
+    .filter(a => a.publishedAt && Date.parse(a.publishedAt) >= since)
+    .sort((a, b) => Date.parse(b.publishedAt!) - Date.parse(a.publishedAt!))
+    .slice(0, MAX_ANNOUNCEMENTS)
+    .filter(a => !cleared.has(`ann-${a.id}`));
+  items.unshift(...recent.map(a => ({
+    id: `ann-${a.id}`,
+    page: 'announcements',
+    title: a.title,
+    text: a.description || a.content.slice(0, 280),
+    time: a.date,
+    isRead: read.has(`ann-${a.id}`),
+    status: undefined,
+    note: undefined,
+    kind: 'announcement' as const,
+    postedBy: a.postedBy ?? undefined,
+  })));
 
   return items;
 }

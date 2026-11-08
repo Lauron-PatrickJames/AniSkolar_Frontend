@@ -84,7 +84,10 @@ export function Badge({ tone = 'neutral', dot, icon: Icon, children, className =
   );
 }
 
-export function StatusBadge({ status }: { status: AppStatus }) {
+// endReason: an approved scholarship the student declined, or that ended
+// (graduated / stopped) — shown instead of "Approved".
+export function StatusBadge({ status, endReason }: { status: AppStatus; endReason?: string | null }) {
+  if (status === 'Approved' && endReason) return <Badge tone="neutral" dot>{endReason === 'Declined' ? 'Declined by student' : endReason}</Badge>;
   const meta = STATUS_META[status] ?? STATUS_META['Under Evaluation'];
   return <Badge tone={meta.tone} dot>{status}</Badge>;
 }

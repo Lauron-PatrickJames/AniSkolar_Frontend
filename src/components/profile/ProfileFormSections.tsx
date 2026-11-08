@@ -123,27 +123,32 @@ export function LockedValue({ label, value, note, action }: { label: string; val
 
 // --- Personal ------------------------------------------------------------------------
 
-export function PersonalFields({ draft, update, errorFor, touch, accountName }: SectionProps & {
-  // First and last name from the university account (read-only).
-  accountName?: { firstName: string; lastName: string };
+export function PersonalFields({ draft, update, errorFor, touch, lockNames = false, nameHint }: SectionProps & {
+  // First and last name shown read-only (a student editing after sign-up:
+  // only the AdSO changes names).
+  lockNames?: boolean;
+  // A line under the name fields.
+  nameHint?: string;
 }) {
   const today = new Date();
   const maxDob = `${today.getFullYear() - 10}-12-31`;
   return (
     <div className="space-y-5">
-      {accountName && (
-        <div>
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <Field label="First name">
-              <TextInput value={accountName.firstName} readOnly disabled />
+      <div>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Slot name="firstName">
+            <Field label="First name" error={lockNames ? undefined : errorFor('firstName')} helper={!lockNames && !errorFor('firstName') ? 'All of your given names, e.g. “Paolo Stephen”.' : undefined}>
+              <TextInput value={draft.firstName} onChange={e => update({ firstName: e.target.value })} onBlur={() => touch('firstName')} maxLength={60} autoComplete="given-name" readOnly={lockNames} disabled={lockNames} />
             </Field>
-            <Field label="Last name">
-              <TextInput value={accountName.lastName} readOnly disabled />
+          </Slot>
+          <Slot name="lastName">
+            <Field label="Last name" error={lockNames ? undefined : errorFor('lastName')}>
+              <TextInput value={draft.lastName} onChange={e => update({ lastName: e.target.value })} onBlur={() => touch('lastName')} maxLength={60} autoComplete="family-name" readOnly={lockNames} disabled={lockNames} />
             </Field>
-          </div>
-          <p className="mt-1.5 text-xs text-ink-subtle">From your university account.</p>
+          </Slot>
         </div>
-      )}
+        {nameHint && <p className="mt-1.5 text-xs text-ink-subtle">{nameHint}</p>}
+      </div>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-[1fr_10rem]">
         <Slot name="middleName">
           <Field label="Middle name" error={errorFor('middleName')} helper={!errorFor('middleName') ? 'Your full middle name, not just the initial.' : undefined}>

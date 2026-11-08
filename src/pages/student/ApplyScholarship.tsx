@@ -19,8 +19,9 @@ import { isGrantFormType } from '../../utils/grantForms';
 import { OFFICE_LABELS, officeOf } from '../../data/scholarships';
 import { OfficeAnswers, answerText, askedQuestions, officeFormFor } from '../../data/officeForms';
 import {
-  Block, ChoicePills, FieldError, FileSlotView, Hint, Req, SubHeading, errorInputClass, inputClass, labelClass
+  Block, ChoicePills, FieldError, FileSlotView, Hint, Req, SCHOOL_HINT, SchoolDatalist, SubHeading, errorInputClass, inputClass, labelClass
 } from '../../components/grant-forms/fields';
+import { SCHOOL_LIST_ID, findSchool } from '../../data/schools';
 import {
   BackLink, DraftIndicator, FormBanner, PrivacyNote, RevisionNote, SectionNav, SectionPanel, SectionStatus,
   SubmittedScreen, WizardFooter, WizardHeader, WizardSection
@@ -181,7 +182,7 @@ function emptyAssetsExpenses(): SfagAssetsExpenses {
     automobile: ASSET_BRACKETS[0],
     incomeSources: '',
     combinedNonTaxableIncome: INCOME_BRACKETS[0],
-    affidavitNonFilingIncomeTax: INCOME_BRACKETS[0],
+    affidavitNonFilingIncomeTax: '',   // 'Yes' | 'No'
     waterBill: BILL_BRACKETS[0],
     electricityBill: BILL_BRACKETS[0],
     telephoneBill: BILL_BRACKETS[0],
@@ -385,6 +386,8 @@ interface TextFieldOpts {
   max?: string;
   disabled?: boolean;
   hint?: React.ReactNode;
+  // A <datalist> id: suggestions while typing (free text still allowed).
+  list?: string;
 }
 
 interface SelectFieldOpts {
@@ -683,6 +686,7 @@ function StandardApplyScholarship({
     }
     if (step === 5) {
       if (isBlank(assetsExpenses.incomeSources)) errs.incomeSources = REQUIRED_MSG;
+      if (!['Yes', 'No'].includes(assetsExpenses.affidavitNonFilingIncomeTax)) errs.affidavitNonFilingIncomeTax = 'Choose Yes or No.';
     }
 
     return errs;
@@ -961,6 +965,8 @@ function StandardApplyScholarship({
         maxLength={o.maxLength}
         placeholder={o.placeholder}
         disabled={o.disabled}
+        list={o.list}
+        autoComplete={o.list ? 'off' : undefined}
         onChange={e => { o.onChange(e.target.value); clearFieldError(o.key); }}
         onBlur={o.required && !o.disabled ? e => validateOnBlur(o.key, e.target.value, o.kind ?? 'text') : undefined}
         aria-invalid={!!fieldError(o.key)}
@@ -1088,7 +1094,20 @@ function StandardApplyScholarship({
       <Block>
         <SubHeading>Secondary School</SubHeading>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {textField({ key: 'secondarySchool', label: 'Secondary School Attended', required: true, className: 'sm:col-span-2', value: contactSchool.secondarySchool, onChange: v => setCS({ secondarySchool: v }) })}
+          {textField({
+            key: 'secondarySchool', label: 'Secondary School Attended', required: true, className: 'sm:col-span-2',
+            list: SCHOOL_LIST_ID, placeholder: 'Search for your school', hint: SCHOOL_HINT,
+            value: contactSchool.secondarySchool,
+            onChange: v => {
+              // A listed school fills in its type and (if empty) its city.
+              const school = findSchool(v);
+              setCS(school
+                ? { secondarySchool: v, schoolType: school.type, ...(contactSchool.schoolAddress.trim() ? {} : { schoolAddress: school.city }) }
+                : { secondarySchool: v });
+              if (school && !contactSchool.schoolAddress.trim()) clearFieldError('schoolAddress');
+            },
+          })}
+          <SchoolDatalist />
           <div>
             <label className={labelClass}>Type</label>
             <ChoicePills value={contactSchool.schoolType} onChange={v => setCS({ schoolType: v as 'Public' | 'Private' })} options={['Public', 'Private']} />
@@ -1358,7 +1377,18 @@ function StandardApplyScholarship({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {textField({ key: 'incomeSources', label: 'Income Sources', required: true, className: 'sm:col-span-2', placeholder: 'e.g. Salary, small business, remittances', value: assetsExpenses.incomeSources, onChange: v => setAE({ incomeSources: v }) })}
           {selectField({ label: 'Combined Total Non-Taxable Income', value: assetsExpenses.combinedNonTaxableIncome, onChange: v => setAE({ combinedNonTaxableIncome: v }), options: INCOME_BRACKETS })}
-          {selectField({ label: 'Affidavit of Non-Filing of Income Tax', value: assetsExpenses.affidavitNonFilingIncomeTax, onChange: v => setAE({ affidavitNonFilingIncomeTax: v }), options: INCOME_BRACKETS })}
+          <div data-field="affidavitNonFilingIncomeTax">
+            <label className={labelClass}>Affidavit of Non-Filing of Income Tax <Req /></label>
+            <ChoicePills
+              value={assetsExpenses.affidavitNonFilingIncomeTax}
+              onChange={v => { setAE({ affidavitNonFilingIncomeTax: v }); clearFieldError('affidavitNonFilingIncomeTax'); }}
+              options={['Yes', 'No']}
+              invalid={!!fieldError('affidavitNonFilingIncomeTax')}
+            />
+            {fieldError('affidavitNonFilingIncomeTax')
+              ? <FieldError message={fieldError('affidavitNonFilingIncomeTax')} />
+              : <Hint>Yes if a parent or guardian has an affidavit that they don’t file an income tax return.</Hint>}
+          </div>
         </div>
       </Block>
       <Block>

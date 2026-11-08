@@ -5,7 +5,7 @@ import AccountSecurity from '../../components/AccountSecurity';
 import logo from '../../assets/logo.png';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
-import { DutyTerm, format12h, formatDutyDate, formatHours, termLabel, weekday } from '../../utils/dutyHours';
+import { DutyTerm, format12h, hoursUntilRemoved, formatDutyDate, formatHours, termLabel, weekday } from '../../utils/dutyHours';
 import { EVALUATION_ITEMS, PASSING_AVERAGE, RATING_LABELS, ratingLabel } from '../../utils/renewals';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from '../admin/adminData';
 import { ResultDialog,
@@ -297,7 +297,7 @@ function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head:
   );
 }
 
-interface EntryRow { _id: string; date: string; timeIn: string; timeOut: string; hours: number; status: 'confirmed' | 'flagged' | null; note: string | null }
+interface EntryRow { _id: string; date: string; timeIn: string; timeOut: string; hours: number; status: 'confirmed' | 'flagged' | null; note: string | null; loggedAt?: string | null }
 
 function DutiesModal({ studentNumber, term, getToken, onClose, onChanged, onToast }: {
   studentNumber: string; term: TermKey; getToken: GetToken; onClose: () => void; onChanged: () => void; onToast: (m: string) => void;
@@ -402,6 +402,15 @@ function DutiesModal({ studentNumber, term, getToken, onClose, onChanged, onToas
       <span className="w-12 text-right text-sm tabular-nums text-ink">{hrs(e.hours)} h</span>
       <span className="ml-auto flex items-center gap-1">{actions}</span>
       {e.status === 'flagged' && e.note && <p className="w-full pl-0 text-xs text-danger-fg sm:pl-[8.75rem]">Your note: {e.note}</p>}
+      {(() => {
+        // Unreviewed duties are removed 48 hours after they're logged.
+        const left = hoursUntilRemoved(e);
+        return left === null ? null : (
+          <p className="w-full pl-0 text-xs text-warning-fg sm:pl-[8.75rem]">
+            {left <= 1 ? 'Removed within the hour if not confirmed or flagged' : `Removed in ${left} hours if not confirmed or flagged`}
+          </p>
+        );
+      })()}
     </li>
   );
 

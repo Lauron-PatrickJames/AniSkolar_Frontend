@@ -210,6 +210,8 @@ export interface Announcement {
   // The office that posted it, e.g. "Sports Development Office (SDO)" or a
   // duty office ("Office of the University Registrar").
   postedBy?: string | null;
+  // ISO publish time (feed), for "new announcement" notifications.
+  publishedAt?: string | null;
 }
 
 // --- Detailed SFAG application schema ------------------------------

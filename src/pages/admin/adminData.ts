@@ -151,6 +151,8 @@ export interface AdminApplication {
   // approved scholar as graduated or stopped, freeing their slot.
   endedAt?: string | null;
   endReason?: 'Graduated' | 'Stopped' | 'Declined' | null;
+  // Added by the office without an application (the SDO's tryouts).
+  awardedDirectly?: boolean;
   endedBy?: string;
   // Set once a POLCA / Alumni office sends the application to the AdSO.
   forwardedAt?: string | null;

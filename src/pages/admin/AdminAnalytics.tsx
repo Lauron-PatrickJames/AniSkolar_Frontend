@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip
 } from 'recharts';
-import { ArrowDown, ArrowUp, BarChart3, Download, Info } from 'lucide-react';
+import { ArrowDown, ArrowUp, BarChart3, Download, Info, UserCheck, UserRound, Users } from 'lucide-react';
 import { ScholarshipOffice } from '../../types';
 import { OFFICE_LABELS, mockScholarships, officeOf } from '../../data/scholarships';
-import { AdminApplication, AppStatus, CYCLE_START_MONTH, STATUS_OPTIONS } from './adminData';
+import { COLLEGES, YEAR_LEVELS, collegeName, findProgram } from '../../data/programs';
+import { API_BASE_URL, AdminApplication, AppStatus, CYCLE_START_MONTH, STATUS_OPTIONS, authHeaders } from './adminData';
 import {
-  Alert, Button, Card, EmptyState, ErrorState, KpiCard, KpiGrid, PageHeader, STATUS_META, Select, Skeleton,
+  Alert, Button, Card, EmptyState, ErrorState, KpiCard, KpiGrid, PageHeader, STATUS_META, SegmentedControl, Select, Skeleton,
   Table, Td, TextInput, Th, Tooltip, Tr, RowLink, tokenColor
 } from './AdminUI';
 
@@ -20,8 +21,13 @@ interface AdminAnalyticsProps {
   ownOffice: ScholarshipOffice;
   // Opens the Applications list filtered to one scholarship.
   onViewScholarship: (scholarshipId: string) => void;
+  // AdSO: loads sign-ups (GET /api/students) for the Students card.
+  getToken?: () => Promise<string | null>;
+  onOpenStudents?: () => void;
   id?: string;
 }
+
+interface SignUp { joinedAt: string | null; applications: number; lastAppliedAt: string | null; college: string | null; yearLevel: string | null; programCode: string | null }
 
 // --- Dates -----------------------------------------------------------------------
 // All bucketing uses LOCAL calendar days. Keys are built from local date
@@ -119,6 +125,35 @@ function resolveRange(key: RangeKey, custom: { from: string; to: string }, now =
   }
 }
 
+// The same number of days just before `range`, for "vs previous" changes.
+function previousRange(range: DateRange): DateRange {
+  const days = daysBetween(range.start, range.endExclusive);
+  return { start: addDays(range.start, -days), endExclusive: range.start };
+}
+
+// "+3 vs previous 30 days", "no change vs …", or null when there's nothing to compare.
+function deltaText(now: number, before: number, days: number, unit = ''): React.ReactNode {
+  const span = `previous ${days} ${days === 1 ? 'day' : 'days'}`;
+  if (now === 0 && before === 0) return null;
+  const diff = Math.round((now - before) * 10) / 10;
+  if (diff === 0) return <span>No change vs {span}</span>;
+  const up = diff > 0;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={`inline-flex items-center font-medium ${up ? 'text-success-fg' : 'text-danger-fg'}`}>
+        {up ? <ArrowUp className="size-3" aria-hidden /> : <ArrowDown className="size-3" aria-hidden />}
+        {Math.abs(diff)}{unit}
+      </span>
+      vs {span}
+    </span>
+  );
+}
+
+const gpaOf = (a: AdminApplication): number | null => {
+  const n = Number(a.currentProfile?.gpa);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
 function describeRange(range: DateRange): string {
   const last = addDays(range.endExclusive, -1);
   if (dayKey(range.start) === dayKey(last)) return fmtDayYear(last);
@@ -137,9 +172,12 @@ function inRange(iso: string, range: DateRange): boolean {
 // day. Every bucket in the range is created up front so empty weeks/days
 // show as zero, and edge weeks are clipped to the range (their label says so).
 
-interface Bucket { key: string; label: string; count: number }
+interface Bucket { key: string; label: string; count: number; approved: number; rejected: number }
 
-function buildSubmissionSeries(apps: AdminApplication[], range: DateRange): { buckets: Bucket[]; unit: 'day' | 'week' } {
+// A dated event for the chart; `kind` splits decisions into approved / rejected.
+interface ChartEvent { at: string; kind?: 'approved' | 'rejected' }
+
+function buildSeries(events: ChartEvent[], range: DateRange): { buckets: Bucket[]; unit: 'day' | 'week' } {
   const unit = daysBetween(range.start, range.endExclusive) > 14 ? 'week' : 'day';
   const buckets: Bucket[] = [];
   const byKey = new Map<string, Bucket>();
@@ -148,20 +186,35 @@ function buildSubmissionSeries(apps: AdminApplication[], range: DateRange): { bu
     const next = addDays(cursor, unit === 'week' ? 7 : 1);
     const first = cursor < range.start ? range.start : cursor;
     const last = addDays(next > range.endExclusive ? range.endExclusive : next, -1);
-    const bucket = { key: dayKey(cursor), label: bucketLabel(first, last), count: 0 };
+    const bucket = { key: dayKey(cursor), label: bucketLabel(first, last), count: 0, approved: 0, rejected: 0 };
     buckets.push(bucket);
     byKey.set(bucket.key, bucket);
     cursor = next;
   }
-  apps.forEach(app => {
-    const created = new Date(app.createdAt);
-    if (Number.isNaN(created.getTime())) return;
-    const key = dayKey(unit === 'week' ? startOfWeek(created) : startOfDay(created));
-    const bucket = byKey.get(key);
-    if (bucket) bucket.count += 1;
+  events.forEach(e => {
+    const at = new Date(e.at);
+    if (Number.isNaN(at.getTime()) || !inRange(e.at, range)) return;
+    const bucket = byKey.get(dayKey(unit === 'week' ? startOfWeek(at) : startOfDay(at)));
+    if (!bucket) return;
+    bucket.count += 1;
+    if (e.kind) bucket[e.kind] += 1;
   });
   return { buckets, unit };
 }
+
+// The date and outcome of an application's last final decision.
+function finalDecision(app: AdminApplication): ChartEvent | null {
+  const finals = (app.history ?? []).filter(h => h.status === 'Approved' || h.status === 'Rejected');
+  const last = finals[finals.length - 1];
+  return last ? { at: last.changedAt, kind: last.status === 'Approved' ? 'approved' : 'rejected' } : null;
+}
+
+type ChartMetric = 'Submissions' | 'Decisions' | 'Sign-ups';
+const METRIC_TEXT: Record<ChartMetric, { one: string; many: string; about: string }> = {
+  Submissions: { one: 'submission', many: 'submissions', about: 'Applications received' },
+  Decisions: { one: 'decision', many: 'decisions', about: 'Approved and rejected, by the date of the decision' },
+  'Sign-ups': { one: 'sign-up', many: 'sign-ups', about: 'Students who set up a profile' },
+};
 
 // --- Metrics -----------------------------------------------------------------------
 
@@ -206,7 +259,14 @@ const STATUS_LABELS: Record<AppStatus, string> = {
   'Rejected': 'Rejected'
 };
 
-const formatDays = (days: number | null) => (days === null ? '—' : `${days.toFixed(1)} ${days.toFixed(1) === '1.0' ? 'day' : 'days'}`);
+const formatDays = (days: number | null) => {
+  if (days === null) return '—';
+  if (days < 1) {
+    const hours = Math.round(days * 24);
+    return hours < 1 ? 'Under an hour' : `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  }
+  return `${days.toFixed(1)} ${days.toFixed(1) === '1.0' ? 'day' : 'days'}`;
+};
 const formatCycles = (n: number | null) => (n === null ? '—' : n.toFixed(1));
 
 // --- Per-scholarship table ------------------------------------------------------------
@@ -222,9 +282,11 @@ interface ScholarshipRow {
   pending: number;
   avgDecisionDays: number | null;
   avgRevisionCycles: number | null;
+  // Applicants' profile GPA (1st years without one are left out).
+  avgGpa: number | null;
 }
 
-type SortKey = 'name' | 'office' | 'submissions' | 'approved' | 'rejected' | 'pending' | 'avgDecisionDays' | 'avgRevisionCycles';
+type SortKey = 'name' | 'office' | 'submissions' | 'approved' | 'rejected' | 'pending' | 'avgDecisionDays' | 'avgRevisionCycles' | 'avgGpa';
 
 function buildScholarshipRows(apps: AdminApplication[]): ScholarshipRow[] {
   const groups = new Map<string, AdminApplication[]>();
@@ -241,7 +303,8 @@ function buildScholarshipRows(apps: AdminApplication[]): ScholarshipRow[] {
       rejected: counts.Rejected,
       pending: counts['Under Evaluation'] + counts['Needs Revision'],
       avgDecisionDays: average(group.map(decisionDays)),
-      avgRevisionCycles: average(group.map(revisionCycles))
+      avgRevisionCycles: average(group.map(revisionCycles)),
+      avgGpa: average(group.map(gpaOf))
     };
   });
 }
@@ -260,7 +323,7 @@ function sortRows(rows: ScholarshipRow[], key: SortKey, dir: 'asc' | 'desc'): Sc
 }
 
 function toCsv(rows: ScholarshipRow[], includeOffice: boolean): string {
-  const header = ['Scholarship', ...(includeOffice ? ['Office'] : []), 'Submissions', 'Approved', 'Rejected', 'Pending', 'Avg. decision time (days)', 'Avg. revision cycles'];
+  const header = ['Scholarship', ...(includeOffice ? ['Office'] : []), 'Submissions', 'Approved', 'Rejected', 'Pending', 'Avg. decision time (days)', 'Avg. revision cycles', 'Avg. applicant GPA'];
   const cell = (v: string | number | null) => {
     const text = v === null ? '' : String(v);
     return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -270,7 +333,8 @@ function toCsv(rows: ScholarshipRow[], includeOffice: boolean): string {
     ...(includeOffice ? [OFFICE_LABELS[r.office]] : []),
     r.submissions, r.approved, r.rejected, r.pending,
     r.avgDecisionDays === null ? null : r.avgDecisionDays.toFixed(1),
-    r.avgRevisionCycles === null ? null : r.avgRevisionCycles.toFixed(1)
+    r.avgRevisionCycles === null ? null : r.avgRevisionCycles.toFixed(1),
+    r.avgGpa === null ? null : r.avgGpa.toFixed(2)
   ].map(cell).join(','));
   return [header.map(cell).join(','), ...lines].join('\r\n');
 }
@@ -287,12 +351,77 @@ function downloadCsv(filename: string, csv: string) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+// --- Breakdown ----------------------------------------------------------------------
+// The chart's metric for the range, grouped by college, year level, program
+// or scholarship. `part` is the outcome that matters: approved (of
+// submissions or decisions) or applied (of sign-ups).
+
+type Dimension = 'College' | 'Year level' | 'Program' | 'Scholarship';
+
+interface Groupable { college?: string | null; yearLevel?: string | null; programCode?: string | null; scholarshipId?: string; scholarshipName?: string; part: boolean }
+interface BreakdownRow { key: string; label: string; title?: string; total: number; part: number }
+
+const NOT_SET = 'Not set';
+const MAX_PROGRAM_ROWS = 10;
+
+function groupOf(item: Groupable, by: Dimension): { key: string; label: string; title?: string } {
+  if (by === 'College') return item.college ? { key: item.college, label: item.college, title: collegeName(item.college) } : { key: NOT_SET, label: NOT_SET };
+  if (by === 'Year level') return { key: item.yearLevel || NOT_SET, label: item.yearLevel || NOT_SET };
+  if (by === 'Program') {
+    const program = findProgram(item.programCode);
+    return program ? { key: program.code, label: program.code, title: program.name } : { key: NOT_SET, label: NOT_SET };
+  }
+  const name = item.scholarshipName ?? item.scholarshipId ?? NOT_SET;
+  return { key: item.scholarshipId ?? name, label: name.match(/\(([^)]+)\)\s*$/)?.[1] ?? name, title: name };
+}
+
+function buildBreakdown(items: Groupable[], by: Dimension): BreakdownRow[] {
+  const map = new Map<string, BreakdownRow>();
+  for (const item of items) {
+    const g = groupOf(item, by);
+    const row = map.get(g.key) ?? { ...g, total: 0, part: 0 };
+    row.total += 1;
+    if (item.part) row.part += 1;
+    map.set(g.key, row);
+  }
+  let rows = [...map.values()];
+  if (by === 'Year level') {
+    const order = (k: string) => (YEAR_LEVELS.indexOf(k) < 0 ? 99 : YEAR_LEVELS.indexOf(k));
+    rows.sort((a, b) => order(a.key) - order(b.key));
+  } else if (by === 'College') {
+    const codes = Object.keys(COLLEGES);
+    const order = (k: string) => (codes.indexOf(k) < 0 ? 99 : codes.indexOf(k));
+    rows.sort((a, b) => b.total - a.total || order(a.key) - order(b.key));
+  } else {
+    rows.sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
+  }
+  if (by === 'Program' && rows.length > MAX_PROGRAM_ROWS) {
+    const rest = rows.slice(MAX_PROGRAM_ROWS - 1);
+    rows = [...rows.slice(0, MAX_PROGRAM_ROWS - 1), { key: 'others', label: `Others (${rest.length} programs)`, total: rest.reduce((n, r) => n + r.total, 0), part: rest.reduce((n, r) => n + r.part, 0) }];
+  }
+  return rows;
+}
+
 // --- Page ----------------------------------------------------------------------------
 
 // Refetch on range change and window focus, at most this often.
 const REFETCH_AFTER_MS = 30_000;
 
-export default function AdminAnalytics({ applications, isLoading, error, onRefresh, ownOffice, onViewScholarship, id }: AdminAnalyticsProps) {
+export default function AdminAnalytics({ applications, isLoading, error, onRefresh, ownOffice, onViewScholarship, getToken, onOpenStudents, id }: AdminAnalyticsProps) {
+  // Sign-ups (AdSO), for the Students card.
+  const [signUps, setSignUps] = useState<SignUp[] | null>(null);
+  useEffect(() => {
+    if (!getToken) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/students`, { headers: await authHeaders(getToken) });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setSignUps(body.students ?? []);
+      } catch { /* the card just doesn't show */ }
+    })();
+    return () => { cancelled = true; };
+  }, [getToken]);
   const [rangeKey, setRangeKey] = useState<RangeKey>('30d');
   const [custom, setCustom] = useState(() => {
     const today = startOfDay(new Date());
@@ -325,12 +454,80 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
   };
 
   const range = useMemo(() => resolveRange(rangeKey, custom), [rangeKey, custom]);
-  const scoped = useMemo(() => applications.filter(a => inRange(a.createdAt, range)), [applications, range]);
+  // Applications only: scholars an office added without an application
+  // (the SDO's tryouts) aren't submissions and have no decision time.
+  const inPeriod = useMemo(() => applications.filter(a => inRange(a.createdAt, range)), [applications, range]);
+  const scoped = useMemo(() => inPeriod.filter(a => !a.awardedDirectly), [inPeriod]);
+  const directAwards = inPeriod.length - scoped.length;
+  // Approved, then declined by the student (they chose another scholarship).
+  const declined = useMemo(() => scoped.filter(a => a.status === 'Approved' && a.endReason === 'Declined').length, [scoped]);
+  const signUpStats = useMemo(() => {
+    if (!signUps) return null;
+    const joined = signUps.filter(s => s.joinedAt && inRange(s.joinedAt, range));
+    const applied = joined.filter(s => s.applications > 0).length;
+    return { joined: joined.length, applied, notApplied: joined.length - applied, total: signUps.length, totalNotApplied: signUps.filter(s => s.applications === 0).length };
+  }, [signUps, range]);
 
   const counts = useMemo(() => countStatuses(scoped), [scoped]);
+
+  // The same length of time just before, for the changes on the cards.
+  const prev = useMemo(() => {
+    const r = previousRange(range);
+    const apps = applications.filter(a => !a.awardedDirectly && inRange(a.createdAt, r));
+    const c = countStatuses(apps);
+    const dec = c.Approved + c.Rejected;
+    return { submissions: apps.length, decided: dec, rate: dec ? Math.round((c.Approved / dec) * 100) : null, days: daysBetween(r.start, r.endExclusive) };
+  }, [applications, range]);
+
+  // Approved SFAG scholars in the range, by grant percentage.
+  const sfagLevels = useMemo(() => {
+    const approved = scoped.filter(a => a.applicationFormType === 'sfag' && a.status === 'Approved');
+    if (!approved.length) return null;
+    const levels = [100, 75, 50, 25].map(pct => ({ pct, n: approved.filter(a => a.sfagPercentage === pct).length }));
+    return { total: approved.length, levels, unset: approved.filter(a => ![100, 75, 50, 25].includes(Number(a.sfagPercentage))).length };
+  }, [scoped]);
   const decided = counts.Approved + counts.Rejected;
   const avgDecision = useMemo(() => average(scoped.map(decisionDays)), [scoped]);
-  const series = useMemo(() => buildSubmissionSeries(scoped, range), [scoped, range]);
+  const [metric, setMetric] = useState<ChartMetric>('Submissions');
+  const metrics: ChartMetric[] = signUps ? ['Submissions', 'Decisions', 'Sign-ups'] : ['Submissions', 'Decisions'];
+  const series = useMemo(() => {
+    if (metric === 'Decisions') {
+      return buildSeries(applications.filter(a => !a.awardedDirectly).map(finalDecision).filter((e): e is ChartEvent => !!e), range);
+    }
+    if (metric === 'Sign-ups') {
+      return buildSeries((signUps ?? []).filter(s => s.joinedAt).map(s => ({ at: s.joinedAt! })), range);
+    }
+    return buildSeries(scoped.map(a => ({ at: a.createdAt })), range);
+  }, [metric, applications, signUps, scoped, range]);
+
+  const [dimension, setDimension] = useState<Dimension>('College');
+  const dimensions: Dimension[] = metric === 'Sign-ups' ? ['College', 'Year level', 'Program'] : ['College', 'Year level', 'Program', 'Scholarship'];
+  const shownDimension: Dimension = dimensions.includes(dimension) ? dimension : 'College';
+  const breakdown = useMemo(() => {
+    const fromApp = (a: AdminApplication, part: boolean): Groupable => ({
+      college: a.currentProfile?.college ?? findProgram(a.currentProfile?.programCode)?.college ?? null,
+      yearLevel: a.currentProfile?.yearLevel ?? null,
+      programCode: a.currentProfile?.programCode ?? null,
+      scholarshipId: a.scholarshipId,
+      scholarshipName: a.scholarshipName,
+      part,
+    });
+    let items: Groupable[];
+    if (metric === 'Sign-ups') {
+      items = (signUps ?? []).filter(s => s.joinedAt && inRange(s.joinedAt, range))
+        .map(s => ({ college: s.college, yearLevel: s.yearLevel, programCode: s.programCode, part: s.applications > 0 }));
+    } else if (metric === 'Decisions') {
+      items = applications.filter(a => !a.awardedDirectly).flatMap(a => {
+        const d = finalDecision(a);
+        return d && inRange(d.at, range) ? [fromApp(a, d.kind === 'approved')] : [];
+      });
+    } else {
+      items = scoped.map(a => fromApp(a, a.status === 'Approved'));
+    }
+    return buildBreakdown(items, shownDimension);
+  }, [metric, signUps, applications, scoped, range, shownDimension]);
+  const breakdownMax = Math.max(1, ...breakdown.map(r => r.total));
+  const partLabel = metric === 'Sign-ups' ? { part: 'applied', rest: 'not applied yet' } : metric === 'Decisions' ? { part: 'approved', rest: 'rejected' } : { part: 'approved', rest: 'other' };
 
   const rows = useMemo(() => buildScholarshipRows(scoped), [scoped]);
   const sortedRows = useMemo(() => sortRows(rows, sort.key, sort.dir), [rows, sort]);
@@ -344,7 +541,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
     status: Object.fromEntries(STATUS_OPTIONS.map(s => [s, tokenColor(STATUS_META[s].token, '#94a3b8')])) as Record<AppStatus, string>
   }), []);
 
-  const hasData = applications.length > 0;
+  const hasData = applications.some(a => !a.awardedDirectly);
   const firstLoad = !!isLoading && !hasData;
   const failedEmpty = !!error && !hasData && !isLoading;
   const rangeText = describeRange(range);
@@ -431,8 +628,12 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
     body = (
       <>
         <KpiGrid>
-          <KpiCard label="Submissions" value={scoped.length} hint={rangeText} />
-          <KpiCard label="Decided" value={decided} hint={`approved ${counts.Approved} · rejected ${counts.Rejected}`} />
+          <KpiCard
+            label="Submissions"
+            value={scoped.length}
+            hint={<>{deltaText(scoped.length, prev.submissions, prev.days) ?? rangeText}{directAwards ? <span className="block">Plus {directAwards} added directly by an office</span> : null}</>}
+          />
+          <KpiCard label="Decided" value={decided} hint={`approved ${counts.Approved} · rejected ${counts.Rejected}${declined ? ` · ${declined} declined by the student` : ''}`} />
           <KpiCard
             label="Approval rate"
             value={approvalRate === null ? '—' : (
@@ -441,18 +642,74 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
                 <span className="ml-2 text-sm font-normal tracking-normal text-ink-subtle">{counts.Approved} of {decided}</span>
               </>
             )}
-            hint={decided === 0 ? 'No decisions yet' : decided < SMALL_SAMPLE ? 'Small sample — read with care' : 'Of decided applications'}
+            hint={decided === 0 ? 'No decisions yet' : (
+              <>
+                {approvalRate !== null && prev.rate !== null && deltaText(approvalRate, prev.rate, prev.days, ' pts')}
+                {decided < SMALL_SAMPLE && <span className="block">Small sample — read with care</span>}
+              </>
+            )}
           />
           <KpiCard label="Avg. time to decision" value={formatDays(avgDecision)} />
         </KpiGrid>
 
+        {sfagLevels && (
+            <Card title="SFAG grant levels" description={`${sfagLevels.total} approved in this range · decides duty hours`}>
+              <ul className="space-y-2.5">
+                {sfagLevels.levels.map(({ pct, n }) => (
+                  <li key={pct} className="grid grid-cols-[3.5rem_1fr_2rem] items-center gap-3 text-sm">
+                    <span className="font-medium text-ink tabular-nums">{pct}%</span>
+                    <span className="h-2.5 overflow-hidden rounded-full bg-neutral-bg" aria-hidden>
+                      <span className="block h-full rounded-full" style={{ width: `${(n / sfagLevels.total) * 100}%`, backgroundColor: colors.accent }} />
+                    </span>
+                    <span className={`text-right tabular-nums ${n ? 'text-ink' : 'text-ink-subtle'}`}>{n}</span>
+                  </li>
+                ))}
+              </ul>
+              {sfagLevels.unset > 0 && <p className="mt-3 text-xs text-warning-fg">{sfagLevels.unset} approved without a grant percentage yet.</p>}
+            </Card>
+          )}
+
+        {signUpStats && (
+          <Card
+            title="Students"
+            description={`Signed up ${rangeText}`}
+            actions={onOpenStudents && <Button size="sm" onClick={onOpenStudents}>Open Students</Button>}
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {[
+                { icon: Users, label: 'Signed up', value: signUpStats.joined, hint: `${signUpStats.total} in all` },
+                { icon: UserCheck, label: 'Applied', value: signUpStats.applied, hint: signUpStats.joined ? `${Math.round((signUpStats.applied / signUpStats.joined) * 100)}% of sign-ups` : '—' },
+                { icon: UserRound, label: 'Not applied yet', value: signUpStats.notApplied, hint: `${signUpStats.totalNotApplied} in all` },
+              ].map(({ icon: Icon, label, value, hint }) => (
+                <div key={label} className="flex items-start gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-control bg-neutral-bg text-ink-muted"><Icon className="size-4" aria-hidden /></span>
+                  <div>
+                    <p className="text-sm text-ink-muted">{label}</p>
+                    <p className="text-xl font-semibold text-ink tabular-nums">{value}</p>
+                    <p className="text-xs text-ink-subtle tabular-nums">{hint}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
           <Card
-            title="Submissions"
-            description={series.unit === 'week' ? 'Per week (Monday to Sunday)' : 'Per day'}
+            title={metric}
+            description={`${METRIC_TEXT[metric].about} · ${series.unit === 'week' ? 'per week (Monday to Sunday)' : 'per day'}`}
             className="lg:col-span-2"
+            actions={
+              <SegmentedControl
+                options={metrics}
+                value={metric}
+                onChange={v => v && setMetric(v)}
+                label="Show on the chart"
+                className="w-auto"
+              />
+            }
           >
-            <div className="h-64 sm:h-72" role="img" aria-label={`Submissions per ${series.unit}, ${rangeText}: ${series.buckets.map(b => `${b.label} ${b.count}`).join(', ')}`}>
+            <div className="h-64 sm:h-72" role="img" aria-label={`${metric} per ${series.unit}, ${rangeText}: ${series.buckets.map(b => `${b.label} ${b.count}`).join(', ')}`}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={series.buckets} margin={{ top: 8, right: 8, left: -20, bottom: 0 }} barCategoryGap="20%">
                   <CartesianGrid stroke={colors.grid} strokeOpacity={0.7} vertical={false} />
@@ -464,11 +721,24 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
                     allowDecimals={false}
                     domain={[0, Math.max(4, maxCount)]}
                   />
-                  <ChartTooltip cursor={{ fill: colors.hover }} content={<SubmissionsTooltip />} />
-                  <Bar dataKey="count" name="Submissions" fill={colors.accent} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
+                  <ChartTooltip cursor={{ fill: colors.hover }} content={<SeriesTooltip metric={metric} />} />
+                  {metric === 'Decisions' ? (
+                    <>
+                      <Bar dataKey="approved" stackId="d" name="Approved" fill={colors.status.Approved} maxBarSize={40} isAnimationActive={false} />
+                      <Bar dataKey="rejected" stackId="d" name="Rejected" fill={colors.status.Rejected} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
+                    </>
+                  ) : (
+                    <Bar dataKey="count" name={metric} fill={colors.accent} radius={[3, 3, 0, 0]} maxBarSize={40} isAnimationActive={false} />
+                  )}
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            {metric === 'Decisions' && (
+              <div className="mt-3 flex items-center gap-4 text-xs text-ink-muted">
+                <span className="flex items-center gap-1.5"><span aria-hidden className="size-2.5 rounded-sm" style={{ backgroundColor: colors.status.Approved }} />Approved</span>
+                <span className="flex items-center gap-1.5"><span aria-hidden className="size-2.5 rounded-sm" style={{ backgroundColor: colors.status.Rejected }} />Rejected</span>
+              </div>
+            )}
           </Card>
 
           <Card title="Status" description={`${scoped.length} ${scoped.length === 1 ? 'application' : 'applications'}`}>
@@ -480,6 +750,26 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
             <ul className="mt-4 divide-y divide-line">
               {STATUS_OPTIONS.map(status => {
                 const n = counts[status];
+                if (status === 'Approved' && declined > 0) {
+                  return (
+                    <React.Fragment key={status}>
+                      <li className="flex items-center justify-between gap-3 py-2 text-sm text-ink">
+                        <span className="flex items-center gap-2">
+                          <span aria-hidden className="size-2.5 shrink-0 rounded-sm" style={{ backgroundColor: colors.status[status] }} />
+                          {STATUS_LABELS[status]}
+                        </span>
+                        <span className="tabular-nums">
+                          <span className="font-medium">{n}</span>
+                          <span className="ml-2 inline-block w-9 text-right text-xs text-ink-subtle">{Math.round((n / scoped.length) * 100)}%</span>
+                        </span>
+                      </li>
+                      <li className="flex items-center justify-between gap-3 py-2 pl-5 text-sm text-ink-muted">
+                        <span>of which declined by the student</span>
+                        <span className="tabular-nums"><span>{declined}</span><span className="ml-2 inline-block w-9" /></span>
+                      </li>
+                    </React.Fragment>
+                  );
+                }
                 return (
                   <li key={status} className={`flex items-center justify-between gap-3 py-2 text-sm ${n === 0 ? 'text-ink-subtle' : 'text-ink'}`}>
                     <span className="flex items-center gap-2">
@@ -498,11 +788,51 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
         </div>
 
         <Card
+          title="Breakdown"
+          description={`${metric} in this range, by ${shownDimension.toLowerCase()}`}
+          actions={
+            <SegmentedControl
+              options={dimensions}
+              value={shownDimension}
+              onChange={v => v && setDimension(v)}
+              label="Break down by"
+              className="w-auto"
+            />
+          }
+        >
+          {breakdown.length === 0 ? (
+            <p className="py-6 text-center text-sm text-ink-subtle">No {METRIC_TEXT[metric].many} in this range.</p>
+          ) : (
+            <>
+              <ul className="space-y-2.5">
+                {breakdown.map(r => (
+                  <li key={r.key} className="grid grid-cols-[minmax(4.5rem,9rem)_1fr_auto] items-center gap-3 text-sm">
+                    <span className="truncate font-medium text-ink" title={r.title ?? r.label}>{r.label}</span>
+                    <span className="flex h-2.5 overflow-hidden rounded-full bg-neutral-bg" aria-hidden>
+                      <span style={{ width: `${(r.part / breakdownMax) * 100}%`, backgroundColor: metric === 'Decisions' ? colors.status.Approved : colors.accent }} />
+                      <span style={{ width: `${((r.total - r.part) / breakdownMax) * 100}%`, backgroundColor: metric === 'Decisions' ? colors.status.Rejected : colors.accent, opacity: metric === 'Decisions' ? 1 : 0.35 }} />
+                    </span>
+                    <span className="w-28 text-right tabular-nums text-ink">
+                      {r.total}
+                      <span className="ml-1.5 text-xs text-ink-subtle">· {r.part} {partLabel.part}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-ink-muted">
+                <span className="flex items-center gap-1.5"><span aria-hidden className="size-2.5 rounded-sm" style={{ backgroundColor: metric === 'Decisions' ? colors.status.Approved : colors.accent }} />{partLabel.part[0].toUpperCase() + partLabel.part.slice(1)}</span>
+                <span className="flex items-center gap-1.5"><span aria-hidden className="size-2.5 rounded-sm" style={{ backgroundColor: metric === 'Decisions' ? colors.status.Rejected : colors.accent, opacity: metric === 'Decisions' ? 1 : 0.35 }} />{partLabel.rest[0].toUpperCase() + partLabel.rest.slice(1)}</span>
+              </div>
+            </>
+          )}
+        </Card>
+
+        <Card
           flush
           title="By scholarship"
           actions={<Button size="sm" icon={Download} onClick={exportCsv}>Export CSV</Button>}
         >
-          <Table label="Applications by scholarship" minWidth={showOffice ? '56rem' : '48rem'}>
+          <Table label="Applications by scholarship" minWidth={showOffice ? '62rem' : '54rem'}>
             <thead>
               <tr>
                 <SortTh label="Scholarship" sortKey="name" sort={sort} onSort={toggleSort} />
@@ -520,6 +850,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
                 />
                 <SortTh label="Avg. decision" sortKey="avgDecisionDays" sort={sort} onSort={toggleSort} numeric className="w-32" />
                 <SortTh label="Avg. revisions" sortKey="avgRevisionCycles" sort={sort} onSort={toggleSort} numeric className="w-32" />
+                <SortTh label="Avg. GPA" sortKey="avgGpa" sort={sort} onSort={toggleSort} numeric className="w-24" hint="Applicants' cumulative GPA from their profiles (incoming freshmen have none)." />
               </tr>
             </thead>
             <tbody>
@@ -535,6 +866,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
                   <Td numeric><Count n={r.pending} /></Td>
                   <Td numeric>{formatDays(r.avgDecisionDays)}</Td>
                   <Td numeric>{formatCycles(r.avgRevisionCycles)}</Td>
+                  <Td numeric>{r.avgGpa === null ? '—' : r.avgGpa.toFixed(2)}</Td>
                 </Tr>
               ))}
             </tbody>
@@ -590,13 +922,15 @@ function SortTh({ label, sortKey, sort, onSort, numeric, className = '', hint }:
   );
 }
 
-function SubmissionsTooltip({ active, payload, label }: { active?: boolean; payload?: { value?: number }[]; label?: string }) {
-  if (!active || !payload?.length) return null;
-  const n = Number(payload[0].value ?? 0);
+function SeriesTooltip({ active, payload, label, metric }: { active?: boolean; payload?: { payload?: Bucket }[]; label?: string; metric: ChartMetric }) {
+  const b = payload?.[0]?.payload;
+  if (!active || !b) return null;
+  const words = METRIC_TEXT[metric];
   return (
     <div className="rounded-control bg-ink px-2.5 py-1.5 text-xs text-surface shadow-overlay">
       <p className="font-medium">{label}</p>
-      <p className="tabular-nums">{n} {n === 1 ? 'submission' : 'submissions'}</p>
+      <p className="tabular-nums">{b.count} {b.count === 1 ? words.one : words.many}</p>
+      {metric === 'Decisions' && b.count > 0 && <p className="tabular-nums opacity-80">{b.approved} approved · {b.rejected} rejected</p>}
     </div>
   );
 }

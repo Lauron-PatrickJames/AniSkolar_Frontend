@@ -786,7 +786,7 @@ export default function App() {
   // scholarship-details page re-rendering underneath before the form swaps in.
   if (isLoadingResubmit) {
     return (
-      <div className="min-h-screen bg-slate-50"><FormSkeleton label="Opening your application" /></div>
+      <div className="min-h-dvh bg-slate-50"><FormSkeleton label="Opening your application" /></div>
     );
   }
 
@@ -825,7 +825,7 @@ export default function App() {
   // of silently rendering an empty portal is the whole point of this state.
   if (isSignedIn && authPhase === 'error') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <div className="min-h-dvh flex items-center justify-center bg-slate-50 px-4">
         <div className="text-center space-y-4 max-w-sm">
           <p className="font-display font-bold text-slate-900">Couldn't load your profile</p>
           <p className="text-xs text-slate-500 leading-relaxed">

@@ -12,7 +12,7 @@ interface PublicLayoutProps {
 
 export default function PublicLayout({ children, onLoginClick, onLogoClick, id }: PublicLayoutProps) {
   return (
-    <div id={id} className="min-h-screen flex flex-col bg-slate-50">
+    <div id={id} className="min-h-dvh flex flex-col bg-slate-50">
       {/* Public Navigation Header */}
       <header className="bg-white/90 backdrop-blur-md border-b border-slate-100 sticky top-0 z-50 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

@@ -20,7 +20,7 @@ function Status({ label, children, className = '' }: { label: string; children: 
 // The whole app while the session loads: a top bar and a page of cards.
 export function AppSkeleton({ label = 'Loading AniSkolar', caption }: { label?: string; caption?: string }) {
   return (
-    <Status label={label} className="min-h-screen bg-slate-50">
+    <Status label={label} className="min-h-dvh bg-slate-50">
       <div className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
           <Bone className="size-9 rounded-full" />

@@ -33,6 +33,33 @@ export function displayName(student: Pick<StudentProfile, 'firstName' | 'middleN
   return titleCaseName(joined || student.name || '');
 }
 
+// Words that belong to the surname that follows them ("dela Cruz", "San Jose").
+const SURNAME_PARTICLES = new Set(['de', 'del', 'dela', 'delas', 'delos', 'di', 'da', 'du', 'la', 'las', 'los', 'san', 'santa', 'sta', 'sta.', 'sto', 'sto.', 'van', 'von', 'mac', 'mc']);
+
+// The DLSU-D Microsoft directory sends only the first word as the first
+// name and puts the other given names into the surname ("JUAN" +
+// "MIGUEL DELA CRUZ"). The username starts with the surname's initial
+// (dja1234 = Dela Cruz, Juan, A…), so the surname is the shortest ending
+// of the last name that starts with that letter, with any particle before
+// it ("dela Cruz"). When that doesn't fit — the first name already has
+// several words (corrected by hand), one-word last name, no match — the
+// names are returned unchanged. The student still confirms them.
+// Mirrors splitDirectoryName in the backend (routes/students.js).
+export function splitDirectoryName(first: string, last: string, email: string): { firstName: string; lastName: string } {
+  const f = (first ?? '').trim().replace(/\s+/g, ' ');
+  const l = (last ?? '').trim().replace(/\s+/g, ' ');
+  const initial = (email ?? '').trim().charAt(0).toLowerCase();
+  const words = l.split(' ').filter(Boolean);
+  if (!f || f.includes(' ') || words.length < 2 || !/[a-z]/.test(initial)) return { firstName: f, lastName: l };
+  for (let i = words.length - 1; i >= 1; i--) {
+    if (words[i].charAt(0).toLowerCase() !== initial) continue;
+    let start = i;
+    while (start > 1 && SURNAME_PARTICLES.has(words[start - 1].toLowerCase())) start--;
+    return { firstName: [f, ...words.slice(0, start)].join(' '), lastName: words.slice(start).join(' ') };
+  }
+  return { firstName: f, lastName: l };
+}
+
 // Up to two initials for an avatar placeholder.
 export function nameInitials(name: string): string {
   return name.split(/\s+/).filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase();

@@ -333,7 +333,7 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
   return (
     <div
       id={id}
-      className="min-h-screen bg-slate-900 bg-cover bg-center flex items-center justify-center p-4 sm:p-6 md:p-10 lg:p-12"
+      className="min-h-dvh bg-slate-900 bg-cover bg-center flex items-center justify-center p-4 sm:p-6 md:p-10 lg:p-12"
       // The campus photo from the landing page hero, tinted dark green so the card stands out.
       style={{ backgroundImage: `linear-gradient(135deg, rgba(0, 40, 22, 0.82), rgba(0, 60, 32, 0.9)), url(${campusImage})` }}
     >

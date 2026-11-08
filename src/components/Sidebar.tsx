@@ -95,7 +95,7 @@ export default function Sidebar({
 
       <aside
         id={id}
-        className={`fixed md:sticky top-0 left-0 h-screen w-[78vw] max-w-64 sm:w-64 bg-white border-r border-slate-200 text-slate-700 flex flex-col z-50 transition-transform duration-300 md:transform-none ${
+        className={`fixed md:sticky top-0 left-0 h-dvh w-[78vw] max-w-64 sm:w-64 bg-white border-r border-slate-200 text-slate-700 flex flex-col z-50 transition-transform duration-300 md:transform-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >

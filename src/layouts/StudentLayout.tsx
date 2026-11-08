@@ -52,7 +52,7 @@ export default function StudentLayout({
   };
 
   return (
-    <div id={id} className="h-screen bg-slate-50 flex flex-row overflow-hidden">
+    <div id={id} className="h-dvh bg-slate-50 flex flex-row overflow-hidden">
       <Sidebar
         currentPage={currentPage}
         onNavigate={onNavigate}
@@ -67,7 +67,7 @@ export default function StudentLayout({
         needsRevision={applications.filter(app => app.status === 'Needs Revision').length}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen relative">
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto h-dvh relative">
         <Navbar
           pageTitle={pageTitle}
           student={student}
@@ -82,7 +82,7 @@ export default function StudentLayout({
           announcements={announcements}
         />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(2rem+env(safe-area-inset-bottom))] lg:p-8 lg:pb-[calc(2.5rem+env(safe-area-inset-bottom))] max-w-7xl w-full mx-auto">
           <motion.div
             key={currentPage}
             initial={{ opacity: 0, y: 8 }}

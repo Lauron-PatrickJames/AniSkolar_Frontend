@@ -11,6 +11,7 @@ import AutomationPage from './AutomationPage';
 import ScholarshipsManager from './ScholarshipsManager';
 import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
 import AdminScholars from './AdminScholars';
+import StudentsPage from './StudentsPage';
 import MessagesPage from './MessagesPage';
 import AccountSecurity from '../../components/AccountSecurity';
 import AddScholarDialog from './AddScholarDialog';
@@ -65,7 +66,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const directAward = mockScholarships.filter(s => s.directAward && officeOf(s) === (adminOffice ?? 'LSO'));
   const onlyDirect = !!adminOffice && directAward.length > 0 && mockScholarships.filter(s => officeOf(s) === adminOffice).every(s => s.directAward);
   const hiddenViews: MainView[] = isAdso ? [] : [
-    'analytics', 'automation', 'fse', 'dutyHours', 'messages',
+    'analytics', 'automation', 'fse', 'dutyHours', 'messages', 'students',
     ...(officeHasRenewals ? [] : ['renewals' as MainView]),
   ];
   // Its scholars' records still open in the application view.
@@ -320,6 +321,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         }}
         onMessageStudent={isAdso ? messageStudent : undefined}
         onAddScholar={directAward.length ? () => setAddScholarFor(directAward[0].id) : undefined}
+      />
+    );
+  } else if (mainView === 'students') {
+    page = (
+      <StudentsPage
+        getToken={getToken}
+        onOpenScholar={studentNumber => { navigate('lifecycle'); setSelectedScholar(studentNumber); }}
+        onMessageStudent={messageStudent}
       />
     );
   } else if (mainView === 'announcements') {

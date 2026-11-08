@@ -25,10 +25,11 @@ export const VIEW_TITLES: Record<MainView, string> = {
 
 const SECTIONS: { title: string; items: { id: MainView; icon: React.ElementType }[] }[] = [
   { title: '', items: [{ id: 'home', icon: LayoutDashboard }] },
+  { title: 'Programs', items: [{ id: 'scholarships', icon: Award }] },
   { title: 'Review', items: [{ id: 'applications', icon: LayoutList }, { id: 'renewals', icon: RefreshCw }, { id: 'lifecycle', icon: GraduationCap }, { id: 'students', icon: Users }, { id: 'dutyHours', icon: Clock }] },
   { title: 'Insights', items: [{ id: 'analytics', icon: BarChart3 }, { id: 'fse', icon: Calculator }] },
   { title: 'Communication', items: [{ id: 'messages', icon: MessageSquare }, { id: 'announcements', icon: Megaphone }, { id: 'templates', icon: MessageSquareText }] },
-  { title: 'Manage', items: [{ id: 'scholarships', icon: Award }, { id: 'automation', icon: Zap }] }
+  { title: 'Manage', items: [{ id: 'automation', icon: Zap }] }
 ];
 
 export interface Crumb {

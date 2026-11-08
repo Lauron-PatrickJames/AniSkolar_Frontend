@@ -62,13 +62,16 @@ export function ScheduleFields({ value, onChange, disabled, error, nowLabel = 'N
         />
       </Field>
       {value.timing === 'Schedule' && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Date" error={error}>
-            <DatePicker value={value.date} onChange={date => onChange({ ...value, date })} min={today} disabled={disabled} />
-          </Field>
-          <Field label="Time">
-            <TextInput type="time" value={value.time} onChange={e => onChange({ ...value, time: e.target.value })} disabled={disabled} />
-          </Field>
+        // Side by side only when there is room; stacked in a narrow side panel.
+        <div className="@container">
+          <div className="grid grid-cols-1 gap-3 @sm:grid-cols-[minmax(0,1fr)_9rem]">
+            <Field label="Date" error={error}>
+              <DatePicker value={value.date} onChange={date => onChange({ ...value, date })} min={today} disabled={disabled} />
+            </Field>
+            <Field label="Time">
+              <TextInput type="time" value={value.time} onChange={e => onChange({ ...value, time: e.target.value })} disabled={disabled} />
+            </Field>
+          </div>
         </div>
       )}
     </div>

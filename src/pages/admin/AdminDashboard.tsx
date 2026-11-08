@@ -301,6 +301,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onRefresh={fetchApplications}
         ownOffice={(adminOffice ?? 'LSO') as ScholarshipOffice}
         onViewScholarship={viewApplicationsFor}
+        getToken={isAdso ? getToken : undefined}
+        onOpenStudents={isAdso ? () => navigate('students') : undefined}
       />
     );
   } else if (mainView === 'lifecycle') {

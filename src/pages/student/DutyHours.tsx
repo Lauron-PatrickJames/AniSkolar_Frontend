@@ -179,7 +179,7 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
             type="button"
             onClick={() => printReport(student, log, summary)}
             disabled={log.entries.length === 0 && log.specialEvents.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
           >
             <Printer className="w-4 h-4" /> Print
           </button>
@@ -253,8 +253,8 @@ function DetailsCard({ log, rule, onSave, saveState }: {
     <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-display font-bold text-base text-slate-900">Details</h3>
-        {saveState === 'saving' && <span className="text-[11px] text-slate-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Saving</span>}
-        {saveState === 'saved' && <span className="text-[11px] text-brand-green font-semibold flex items-center gap-1"><Check className="w-3 h-3" /> Saved</span>}
+        {saveState === 'saving' && <span className="text-xs text-slate-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Saving</span>}
+        {saveState === 'saved' && <span className="text-xs text-brand-green font-semibold flex items-center gap-1"><Check className="w-3 h-3" /> Saved</span>}
       </div>
       <div>
         <span className={labelClass}>Office assigned</span>
@@ -274,7 +274,7 @@ function DetailsCard({ log, rule, onSave, saveState }: {
             <Lock className="w-3.5 h-3.5 shrink-0 text-slate-400" aria-hidden />
             {log.deadline ? formatDutyDate(log.deadline, true) : <span className="font-normal text-slate-500">Not set yet</span>}
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">Set by the scholarship office for everyone.</p>
+          <p className="mt-1 text-xs text-slate-500">Set by the scholarship office for everyone.</p>
         </div>
         {hoursFromAdso ? (
           <div>
@@ -289,7 +289,7 @@ function DetailsCard({ log, rule, onSave, saveState }: {
         )}
       </div>
       {rule.percentage !== null && (
-        <p className="text-[11px] text-slate-500">
+        <p className="text-xs text-slate-500">
           {rule.percentage}% grant{rule.yearGroup ? `, ${yearGroupLabel(rule.yearGroup)}` : ''}
           {hoursFromAdso
             ? `: ${formatHours(rule.requiredHours)} hours a term, set by the scholarship office.`
@@ -324,9 +324,9 @@ function SummaryCard({ summary }: { summary: DutySummary }) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {stats.map(s => (
           <div key={s.label}>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{s.label}</p>
+            <p className="text-xs font-semibold text-slate-500">{s.label}</p>
             <p className="font-display font-black text-3xl text-slate-900 mt-1">{s.value}</p>
-            {s.hint && <p className="text-[11px] text-slate-400 mt-0.5">{s.hint}</p>}
+            {s.hint && <p className="text-xs text-slate-500 mt-0.5">{s.hint}</p>}
           </div>
         ))}
       </div>
@@ -335,7 +335,7 @@ function SummaryCard({ summary }: { summary: DutySummary }) {
           <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label="Progress toward required hours">
             <div className={`h-full rounded-full ${done ? 'bg-brand-green' : 'bg-emerald-400'}`} style={{ width: `${pct}%` }} />
           </div>
-          <p className="mt-1.5 text-[11px] font-semibold text-slate-500">
+          <p className="mt-1.5 text-xs font-semibold text-slate-500">
             {done ? 'Requirement completed' : `${Math.round(pct)}% of ${formatHours(summary.required)} hours`}
           </p>
         </div>
@@ -451,7 +451,7 @@ function AddDutyForm({ log, onSave, confirmationRequired = false }: { log: DutyL
             {ends.map(t => <option key={t} value={t}>{format12h(t)} ({formatHours(entryHours({ timeIn, timeOut: t }))} h)</option>)}
           </select>
         </label>
-        <button type="submit" className="inline-flex items-center justify-center gap-1.5 font-display font-bold uppercase text-xs tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-3 rounded-xl transition-colors">
+        <button type="submit" className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark px-5 py-3 rounded-xl transition-colors">
           <Plus className="w-4 h-4" /> Add duty
         </button>
       </div>
@@ -461,7 +461,7 @@ function AddDutyForm({ log, onSave, confirmationRequired = false }: { log: DutyL
         {weekend && <span className="font-semibold text-amber-700"> · No duty on weekends</span>}
         {hours !== null && <> · <span className="font-bold text-slate-700">{formatHours(hours)} hours</span></>}
       </p>
-      <p className="rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-500"><span className="font-semibold text-slate-700">Duty rules:</span> {DUTY_RULES_TEXT} Only times that fit these rules are listed. Log each duty on the day you render it; you can’t add duties for earlier days.{confirmationRequired && ` Your office head has ${REVIEW_WINDOW_HOURS} hours to confirm a duty, or it’s removed.`}</p>
+      <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500"><span className="font-semibold text-slate-700">Duty rules:</span> {DUTY_RULES_TEXT} Only times that fit these rules are listed. Log each duty on the day you render it; you can’t add duties for earlier days.{confirmationRequired && ` Your office head has ${REVIEW_WINDOW_HOURS} hours to confirm a duty, or it’s removed.`}</p>
       {error && <p role="alert" className="text-xs font-semibold text-rose-600">{error}</p>}
     </form>
   );
@@ -487,7 +487,7 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
         <span className="text-xs font-semibold text-slate-500">{entries.length} {entries.length === 1 ? 'duty' : 'duties'}</span>
       </div>
       {entries.length === 0 ? (
-        <p className="px-6 py-8 text-center text-xs text-slate-400">No duty logged for this term yet.</p>
+        <p className="px-6 py-8 text-center text-xs text-slate-500">No duty logged for this term yet.</p>
       ) : (
         <>
         <ul className="divide-y divide-slate-100 lg:hidden">
@@ -517,7 +517,7 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
         </ul>
         <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[34rem] text-sm">
-            <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <thead className="bg-slate-50 text-xs font-bold text-slate-400">
               <tr>
                 <th className="px-5 sm:px-6 py-2.5 text-left">Date</th>
                 <th className="px-3 py-2.5 text-left">Day</th>
@@ -542,9 +542,9 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
                     <td className="px-3 py-2.5 text-right font-bold text-slate-800">{formatHours(entryHours(entry))}</td>
                     {confirmationRequired && (
                       <td className="px-3 py-2.5">
-                        {entry.status === 'confirmed' ? <span className="text-[11px] font-bold text-emerald-700">Confirmed</span>
-                          : entry.status === 'flagged' ? <span className="text-[11px] font-bold text-rose-700" title={entry.note ?? ''}>Flagged{entry.note ? `: ${entry.note}` : ''}</span>
-                            : <span className="text-[11px] font-bold text-amber-700">Waiting{waitingSuffix(entry)}</span>}
+                        {entry.status === 'confirmed' ? <span className="text-xs font-bold text-emerald-700">Confirmed</span>
+                          : entry.status === 'flagged' ? <span className="text-xs font-bold text-rose-700" title={entry.note ?? ''}>Flagged{entry.note ? `: ${entry.note}` : ''}</span>
+                            : <span className="text-xs font-bold text-amber-700">Waiting{waitingSuffix(entry)}</span>}
                       </td>
                     )}
                     <td className="pr-4 text-right">
@@ -587,7 +587,7 @@ function EventsCard({ events, claims, busyId, onWithdraw }: {
     <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
       <div className="px-5 sm:px-6 py-4 border-b border-slate-100">
         <h3 className="font-display font-bold text-base text-slate-900">Events</h3>
-        <p className="text-[11px] text-slate-400 mt-0.5">Events credited by the scholarship office (including COSA events). Sign the attendance sheet at the event with your student number; the hours count once the office checks the sheet.</p>
+        <p className="text-xs text-slate-500 mt-0.5">Events credited by the scholarship office (including COSA events). Sign the attendance sheet at the event with your student number; the hours count once the office checks the sheet.</p>
       </div>
       {events.length === 0 ? (
         <p className="px-5 sm:px-6 py-6 text-sm text-slate-500">No credited events this term yet.</p>
@@ -601,27 +601,27 @@ function EventsCard({ events, claims, busyId, onWithdraw }: {
               <li key={event._id} className="px-5 sm:px-6 py-3 flex items-start justify-between gap-3 text-sm">
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-800">{event.name}</p>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-xs text-slate-500">
                     {weekday(event.date)}, {formatDutyDate(event.date, true)} · {event.organizer} · <span className="font-bold text-slate-700">{formatHours(event.creditHours)} hours credit</span>
                   </p>
-                  {claim?.status === 'Rejected' && claim.note && <p className="mt-1 text-[11px] text-rose-700">{claim.note}</p>}
+                  {claim?.status === 'Rejected' && claim.note && <p className="mt-1 text-xs text-rose-700">{claim.note}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {claim ? (
                     <>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ring-inset ${CLAIM_BADGE[claim.status]}`}>
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ring-1 ring-inset ${CLAIM_BADGE[claim.status]}`}>
                         {claim.status === 'Pending' ? 'Waiting for approval' : claim.status === 'Approved' ? 'Credited' : claim.status}
                       </span>
                       {claim.status === 'Pending' && (
-                        <button type="button" onClick={() => onWithdraw(event._id)} disabled={busy} className="text-[11px] font-bold text-slate-500 hover:text-rose-600 disabled:opacity-50">
+                        <button type="button" onClick={() => onWithdraw(event._id)} disabled={busy} className="text-xs font-bold text-slate-500 hover:text-rose-600 disabled:opacity-50">
                           Withdraw
                         </button>
                       )}
                     </>
                   ) : upcoming ? (
-                    <span className="text-[11px] text-slate-400">Upcoming · sign the sheet there</span>
+                    <span className="text-xs text-slate-500">Upcoming · sign the sheet there</span>
                   ) : (
-                    <span className="text-[11px] text-slate-400">Not credited</span>
+                    <span className="text-xs text-slate-500">Not credited</span>
                   )}
                 </div>
               </li>
@@ -642,7 +642,7 @@ function WeeklyCard({ entries }: { entries: DutyEntry[] }) {
         <h3 className="font-display font-bold text-base text-slate-900">Weekly duty hours</h3>
       </div>
       {weeks.length === 0 ? (
-        <p className="px-6 py-8 text-center text-xs text-slate-400">Weekly totals appear once you log a duty.</p>
+        <p className="px-6 py-8 text-center text-xs text-slate-500">Weekly totals appear once you log a duty.</p>
       ) : (
         <ul className="divide-y divide-slate-100">
           {weeks.map(w => (

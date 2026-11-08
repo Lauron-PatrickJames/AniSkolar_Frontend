@@ -3,6 +3,7 @@ import { ShieldCheck, Mail, Lock, ArrowLeft, Eye, EyeOff, KeyRound, AlertCircle,
 import { motion, AnimatePresence } from 'motion/react';
 import { useSignIn } from '@clerk/react';
 import logo from '../assets/logo.png';
+import campusImage from '../assets/sample hero 1.jpg';
 
 interface LoginPageProps {
   onBackToLanding: () => void;
@@ -330,25 +331,27 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
   };
 
   return (
-    <div id={id} className="min-h-screen bg-[#f1f5f9] flex items-center justify-center p-4 sm:p-6 md:p-10 lg:p-12">
-      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col lg:flex-row min-h-160 border border-slate-100">
+    <div
+      id={id}
+      className="min-h-screen bg-slate-900 bg-cover bg-center flex items-center justify-center p-4 sm:p-6 md:p-10 lg:p-12"
+      // The campus photo from the landing page hero, tinted dark green so the card stands out.
+      style={{ backgroundImage: `linear-gradient(135deg, rgba(0, 40, 22, 0.82), rgba(0, 60, 32, 0.9)), url(${campusImage})` }}
+    >
+      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl shadow-black/40 overflow-hidden flex flex-col lg:flex-row min-h-160">
 
         {/* Left Side: Solid DLSU Green Branding Sidebar */}
-        <div className="lg:w-[45%] bg-brand-green text-white p-8 sm:p-12 flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#ffffff_1px,transparent_1px)] bg-size-[16px_16px]"></div>
-          <div className="absolute -top-24 -right-24 w-72 h-72 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
-          <div className="absolute -bottom-32 -left-16 w-72 h-72 bg-black/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="lg:w-[45%] bg-brand-green text-white p-8 sm:p-12 flex flex-col justify-between">
 
           <button
             onClick={onBackToLanding}
-            className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white rounded-full px-4.5 py-2 text-xs font-semibold tracking-wide transition-all self-start z-10 backdrop-blur-sm"
+            className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white rounded-full px-4 py-2 text-sm font-semibold transition-colors self-start focus:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-4 h-4" aria-hidden />
             <span>Back to main site</span>
           </button>
 
-          <div className="my-10 space-y-6 z-10">
-            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-lg ring-4 ring-white/10 overflow-hidden">
+          <div className="my-10 space-y-6">
+            <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center overflow-hidden">
               <img
                 src={logo}
                 alt="AniSkolar logo"
@@ -356,14 +359,14 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
               />
             </div>
             <div className="space-y-3">
-              <h1 className="text-3xl sm:text-4xl font-display font-extrabold tracking-tight">AniSkolar Portal</h1>
-              <p className="text-emerald-100/80 text-sm leading-relaxed max-w-xs">
+              <h1 className="text-3xl sm:text-4xl font-display font-extrabold tracking-tight text-balance">AniSkolar Portal</h1>
+              <p className="text-emerald-50 text-base leading-relaxed max-w-xs text-pretty">
                 Sign in to access variety of scholarship programs and supportive services.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-[10px] text-emerald-100/40 font-bold uppercase tracking-widest mt-auto z-10">
+          <div className="text-sm text-emerald-100/80 font-medium mt-auto">
             De La Salle University - Dasmariñas
           </div>
         </div>
@@ -382,14 +385,15 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h2 className="text-3xl font-display font-extrabold text-slate-900 tracking-tight">
-                      {loginMode === 'admin' ? 'Admin Login' : 'Welcome Back'}
+                    <h2 className="text-3xl font-display font-extrabold text-slate-900 tracking-tight text-balance">
+                      {loginMode === 'admin' ? 'Admin Login' : 'Sign in'}
                     </h2>
-                    <p className="text-slate-400 text-xs sm:text-sm mt-2 leading-relaxed">
-                      {loginMode === 'admin'
-                        ? 'Restricted access for scholarship office staff.'
-                        : 'Sign in to access variety of scholarship programs and supportive services.'}
-                    </p>
+                    {/* The student line is on the green panel already. */}
+                    {loginMode === 'admin' && (
+                      <p className="text-slate-600 text-base mt-2 leading-relaxed text-pretty">
+                        Restricted access for scholarship office staff.
+                      </p>
+                    )}
                   </div>
                   {loginMode === 'admin' && (
                     <div className="shrink-0 w-11 h-11 rounded-xl bg-brand-green/10 flex items-center justify-center">
@@ -406,7 +410,7 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       exit={{ opacity: 0, height: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="p-3 flex items-start gap-2 bg-rose-50 text-rose-800 rounded-lg border border-rose-100 text-xs font-semibold">
+                      <div className="p-3 flex items-start gap-2 bg-rose-50 text-rose-800 rounded-lg ring-1 ring-rose-100 text-sm font-medium">
                         <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                         <span>{authError}</span>
                       </div>
@@ -422,7 +426,7 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       exit={{ opacity: 0, height: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="p-3 bg-rose-50 text-rose-800 rounded-lg border border-rose-100 text-xs font-semibold">
+                      <div className="p-3 bg-rose-50 text-rose-800 rounded-lg ring-1 ring-rose-100 text-sm font-medium">
                         {error || errors.fields?.identifier?.message || errors.fields?.password?.message}
                       </div>
                     </motion.div>
@@ -453,7 +457,7 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
 
                     <form className="space-y-6" onSubmit={handleVerify}>
                       <div>
-                        <label htmlFor="verify-code" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                        <label htmlFor="verify-code" className="block text-sm font-medium text-slate-700 mb-1.5">
                           Verification code
                         </label>
                         <input
@@ -465,15 +469,15 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                           value={code}
                           onChange={(e) => setCode(e.target.value)}
                           placeholder={verifyStep.method === 'backup_code' ? 'Backup code' : '123456'}
-                          className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-base tracking-[0.3em] text-center font-semibold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all"
+                          className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-base tracking-[0.3em] text-center font-semibold tabular-nums bg-white hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-colors"
                         />
-                        {codeNotice && <p className="mt-2 text-xs font-semibold text-brand-green">{codeNotice}</p>}
+                        {codeNotice && <p className="mt-2 text-sm font-medium text-brand-green">{codeNotice}</p>}
                       </div>
 
                       <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full font-display font-bold text-xs tracking-wider text-white bg-brand-green hover:bg-[#00542c] active:scale-[0.99] py-3.5 rounded-lg transition-all duration-150 shadow-sm hover:shadow-md flex items-center justify-center gap-2 focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed uppercase"
+                        className="w-full text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark active:scale-[0.99] py-3 rounded-lg transition-colors duration-150 flex items-center justify-center gap-2 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isLoading ? (
                           <>
@@ -486,17 +490,17 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       </button>
                     </form>
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-medium">
                       {(verifyStep.method === 'email_code' || verifyStep.method === 'phone_code') ? (
                         <button type="button" onClick={resendCode} disabled={isLoading} className="inline-flex items-center gap-1.5 text-brand-green hover:underline disabled:opacity-50">
-                          <RotateCw className="w-3.5 h-3.5" /> Resend code
+                          <RotateCw className="w-4 h-4" aria-hidden /> Resend code
                         </button>
                       ) : <span />}
                       {verifyStep.available.length > 1 && (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-400">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-500">
                           <span>Other ways:</span>
                           {verifyStep.available.filter(m => m !== verifyStep.method).map(m => (
-                            <button key={m} type="button" onClick={() => switchMethod(m)} disabled={isLoading} className="text-slate-500 hover:text-brand-green disabled:opacity-50">
+                            <button key={m} type="button" onClick={() => switchMethod(m)} disabled={isLoading} className="text-slate-600 hover:text-brand-green disabled:opacity-50">
                               {VERIFY_METHOD_LABELS[m]}
                             </button>
                           ))}
@@ -508,9 +512,9 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       type="button"
                       onClick={cancelVerification}
                       disabled={isLoading}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-slate-400 hover:text-brand-green transition-colors focus:outline-hidden disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-slate-600 hover:text-brand-green transition-colors focus:outline-hidden focus-visible:text-brand-green disabled:opacity-50"
                     >
-                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <ArrowLeft className="w-4 h-4" aria-hidden />
                       Use a different account
                     </button>
                   </div>
@@ -533,38 +537,38 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                     {resetStep === 'email' ? (
                       <form className="space-y-6" onSubmit={sendResetCode}>
                         <div>
-                          <label htmlFor="reset-email" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Email</label>
-                          <input id="reset-email" type="email" autoFocus required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. staff@dlsud.edu.ph" className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all" />
+                          <label htmlFor="reset-email" className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+                          <input id="reset-email" type="email" autoFocus required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. staff@dlsud.edu.ph" className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-white hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-colors" />
                         </div>
-                        <button type="submit" disabled={isLoading} className="w-full font-display font-bold text-xs tracking-wider text-white bg-brand-green hover:bg-[#00542c] active:scale-[0.99] py-3.5 rounded-lg transition-all duration-150 shadow-sm hover:shadow-md flex items-center justify-center gap-2 focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed uppercase">
+                        <button type="submit" disabled={isLoading} className="w-full text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark active:scale-[0.99] py-3 rounded-lg transition-colors duration-150 flex items-center justify-center gap-2 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
                           {isLoading ? 'Sending...' : 'Send reset code'}
                         </button>
                       </form>
                     ) : (
                       <form className="space-y-5" onSubmit={submitReset}>
                         <div>
-                          <label htmlFor="reset-code" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Code</label>
-                          <input id="reset-code" type="text" inputMode="numeric" autoComplete="one-time-code" autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all tracking-[0.3em] text-center font-semibold" />
-                          {codeNotice && <p className="mt-2 text-xs font-semibold text-brand-green">{codeNotice}</p>}
+                          <label htmlFor="reset-code" className="block text-sm font-medium text-slate-700 mb-1.5">Code</label>
+                          <input id="reset-code" type="text" inputMode="numeric" autoComplete="one-time-code" autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-white hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-colors tracking-[0.3em] text-center font-semibold tabular-nums" />
+                          {codeNotice && <p className="mt-2 text-sm font-medium text-brand-green">{codeNotice}</p>}
                         </div>
                         <div>
-                          <label htmlFor="new-password" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">New password</label>
-                          <input id="new-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all" />
+                          <label htmlFor="new-password" className="block text-sm font-medium text-slate-700 mb-1.5">New password</label>
+                          <input id="new-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-white hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-colors" />
                         </div>
                         <div>
-                          <label htmlFor="confirm-password" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Confirm new password</label>
-                          <input id="confirm-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all" />
-                          <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-500">
+                          <label htmlFor="confirm-password" className="block text-sm font-medium text-slate-700 mb-1.5">Confirm new password</label>
+                          <input id="confirm-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="block w-full px-4 py-3 border border-slate-200 rounded-lg text-sm bg-white hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-colors" />
+                          <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-600">
                             <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} className="rounded-sm border-slate-300 text-brand-green focus:ring-brand-green" />
                             Show passwords
                           </label>
                         </div>
-                        <p className="text-xs text-slate-500">Saving signs you out on every other device.</p>
-                        <button type="submit" disabled={isLoading} className="w-full font-display font-bold text-xs tracking-wider text-white bg-brand-green hover:bg-[#00542c] active:scale-[0.99] py-3.5 rounded-lg transition-all duration-150 shadow-sm hover:shadow-md flex items-center justify-center gap-2 focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed uppercase">
+                        <p className="text-sm text-slate-600">Saving signs you out on every other device.</p>
+                        <button type="submit" disabled={isLoading} className="w-full text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark active:scale-[0.99] py-3 rounded-lg transition-colors duration-150 flex items-center justify-center gap-2 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
                           {isLoading ? 'Saving...' : 'Set new password and sign in'}
                         </button>
-                        <button type="button" onClick={() => sendResetCode()} disabled={isLoading} className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-green hover:underline disabled:opacity-50">
-                          <RotateCw className="w-3.5 h-3.5" /> Resend code
+                        <button type="button" onClick={() => sendResetCode()} disabled={isLoading} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-green hover:underline disabled:opacity-50">
+                          <RotateCw className="w-4 h-4" aria-hidden /> Resend code
                         </button>
                       </form>
                     )}
@@ -573,9 +577,9 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       type="button"
                       onClick={cancelReset}
                       disabled={isLoading}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-slate-400 hover:text-brand-green transition-colors focus:outline-hidden disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-slate-600 hover:text-brand-green transition-colors focus:outline-hidden focus-visible:text-brand-green disabled:opacity-50"
                     >
-                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <ArrowLeft className="w-4 h-4" aria-hidden />
                       Back to sign in
                     </button>
                   </div>
@@ -583,7 +587,7 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                   <div className="space-y-6">
                     <form className="space-y-6" onSubmit={handleSubmit}>
                       <div>
-                        <label htmlFor="email" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                        <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">
                           Email
                         </label>
                         <div className="relative rounded-lg">
@@ -597,17 +601,17 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             placeholder="e.g. staff@dlsud.edu.ph"
-                            className="block w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all"
+                            className="block w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm bg-white hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-colors"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <div className="flex justify-between items-center mb-2">
-                          <label htmlFor="password" className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label htmlFor="password" className="block text-sm font-medium text-slate-700">
                             Password
                           </label>
-                          <button type="button" className="text-xs font-bold text-brand-green hover:underline" onClick={startReset}>
+                          <button type="button" className="text-sm font-medium text-brand-green hover:underline" onClick={startReset}>
                             Forgot password?
                           </button>
                         </div>
@@ -622,7 +626,7 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="••••••••"
-                            className="block w-full pl-10 pr-10 py-3 border border-slate-200 rounded-lg text-sm bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-brand-green/15 focus:border-brand-green transition-all"
+                            className="block w-full pl-10 pr-10 py-3 border border-slate-200 rounded-lg text-sm bg-white hover:border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-colors"
                           />
                           <button
                             type="button"
@@ -637,7 +641,7 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       <button
                         type="submit"
                         disabled={isLoading}
-                        className="w-full font-display font-bold text-xs tracking-wider text-white bg-brand-green hover:bg-[#00542c] active:scale-[0.99] py-3.5 rounded-lg transition-all duration-150 shadow-sm hover:shadow-md flex items-center justify-center gap-2 focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed uppercase"
+                        className="w-full text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark active:scale-[0.99] py-3 rounded-lg transition-colors duration-150 flex items-center justify-center gap-2 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isLoading ? (
                           <>
@@ -654,9 +658,9 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       type="button"
                       onClick={switchToStudent}
                       disabled={isLoading}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-slate-400 hover:text-brand-green transition-colors focus:outline-hidden disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-slate-600 hover:text-brand-green transition-colors focus:outline-hidden focus-visible:text-brand-green disabled:opacity-50"
                     >
-                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <ArrowLeft className="w-4 h-4" aria-hidden />
                       Back to Student Login
                     </button>
                   </div>
@@ -666,12 +670,12 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       type="button"
                       onClick={handleMicrosoftLogin}
                       disabled={isLoading}
-                      className="w-full flex items-center justify-center gap-2.5 px-4 py-3.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-300 active:scale-[0.99] transition-all focus:outline-hidden disabled:opacity-50 shadow-sm"
+                      className="w-full flex items-center justify-center gap-3 px-4 py-3.5 border border-slate-300 rounded-lg text-base font-semibold text-slate-900 bg-white hover:bg-slate-50 hover:border-slate-400 active:scale-[0.99] transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2 disabled:opacity-50 shadow-sm"
                     >
                       {isLoading ? (
                         <span className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
                       ) : (
-                        <svg className="h-4.5 w-4.5 shrink-0" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <svg className="h-5 w-5 shrink-0" viewBox="0 0 23 23" aria-hidden fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M0 0H11V11H0V0Z" fill="#F25022"/>
                           <path d="M12 0H23V11H12V0Z" fill="#7FBA00"/>
                           <path d="M0 12H11V23H0V12Z" fill="#00A4EF"/>
@@ -681,22 +685,19 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                       <span>{isLoading ? 'Redirecting...' : 'Sign in with Microsoft'}</span>
                     </button>
 
-                    <div className="relative py-1">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-slate-100"></div>
-                      </div>
-                      <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest">
-                        <span className="bg-white px-3 text-slate-400">Or continue with</span>
-                      </div>
+                    <div className="flex items-center gap-3 text-sm text-slate-500">
+                      <span className="h-px flex-1 bg-slate-200" aria-hidden />
+                      Or continue with
+                      <span className="h-px flex-1 bg-slate-200" aria-hidden />
                     </div>
 
                     <button
                       type="button"
                       onClick={switchToAdmin}
                       disabled={isLoading}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-500 bg-slate-50/50 hover:bg-slate-100 hover:text-slate-700 transition-colors focus:outline-hidden disabled:opacity-50"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green disabled:opacity-50"
                     >
-                      <KeyRound className="w-3.5 h-3.5" />
+                      <KeyRound className="w-4 h-4" aria-hidden />
                       Admin Login
                     </button>
                   </div>

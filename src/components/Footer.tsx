@@ -14,7 +14,7 @@ export default function Footer() {
               </div>
               <div className="min-w-0">
                 <span className="font-display font-bold text-xl text-white tracking-tight">AniSkolar</span>
-                <p className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">DLSU-D Portal</p>
+                <p className="text-xs text-slate-400 font-medium">DLSU-D Portal</p>
               </div>
             </div>
             <p className="text-sm text-slate-400 leading-relaxed mb-4">
@@ -24,7 +24,7 @@ export default function Footer() {
 
           {/* Quick Links */}
           <div id="footer-links-quick">
-            <h3 className="font-display font-semibold text-white mb-4 text-sm uppercase tracking-wider">Quick Links</h3>
+            <h3 className="font-display font-semibold text-white mb-4 text-base">Quick Links</h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <a href="#about" className="hover:text-brand-green transition-colors text-slate-400">About AniSkolar</a>
@@ -43,7 +43,7 @@ export default function Footer() {
 
           {/* External Links */}
           <div id="footer-links-univ">
-            <h3 className="font-display font-semibold text-white mb-4 text-sm uppercase tracking-wider">University Resources</h3>
+            <h3 className="font-display font-semibold text-white mb-4 text-base">University Resources</h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <a href="https://www.dlsud.edu.ph" target="_blank" rel="noopener noreferrer" className="hover:text-brand-green transition-colors flex items-center space-x-1 text-slate-400">
@@ -69,7 +69,7 @@ export default function Footer() {
 
           {/* Contact LSO */}
           <div id="footer-contact">
-            <h3 className="font-display font-semibold text-white mb-4 text-sm uppercase tracking-wider">Contact AdSO</h3>
+            <h3 className="font-display font-semibold text-white mb-4 text-base">Contact AdSO</h3>
             <ul className="space-y-3 text-sm text-slate-400">
               <li className="flex items-start space-x-3">
                 <MapPin className="w-4 h-4 text-brand-green shrink-0 mt-1" />

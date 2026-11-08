@@ -135,7 +135,7 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-subtle">{today}</p>
+          <p className="text-sm font-medium text-ink-subtle">{today}</p>
           <h1 className="mt-1 text-title font-semibold tracking-tight text-ink">{greeting()}, <span className="capitalize">{adminName}</span></h1>
         </div>
         <div className="flex flex-wrap gap-2">

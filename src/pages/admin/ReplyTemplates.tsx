@@ -201,13 +201,13 @@ export function TemplatePicker({ getToken, context, decision, vars, value, onIns
                     <>
                       {forDecision.length > 0 && (
                         <>
-                          <p className="px-3 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">For “{decision}”</p>
+                          <p className="px-3 pt-2 text-xs font-semibold text-ink-subtle">For “{decision}”</p>
                           <ul>{forDecision.map(item)}</ul>
                         </>
                       )}
                       {others.length > 0 && (
                         <>
-                          {forDecision.length > 0 && <p className="px-3 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">Others</p>}
+                          {forDecision.length > 0 && <p className="px-3 pt-2 text-xs font-semibold text-ink-subtle">Others</p>}
                           <ul>{others.map(item)}</ul>
                         </>
                       )}

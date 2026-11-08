@@ -31,7 +31,7 @@ export default function PublicLayout({ children, onLoginClick, onLogoClick, id }
               </div>
               <div>
                 <span className="font-display font-black text-xl text-slate-900 tracking-tight block">AniSkolar</span>
-                <span className="text-[10px] text-slate-500 font-bold tracking-widest uppercase leading-none block">DLSU-D PORTAL</span>
+                <span className="text-xs text-slate-500 font-medium leading-none block">DLSU-D Portal</span>
               </div>
             </div>
 
@@ -47,7 +47,7 @@ export default function PublicLayout({ children, onLoginClick, onLogoClick, id }
             <div className="flex items-center space-x-3">
               <button
                 onClick={onLoginClick}
-                className="flex items-center space-x-1.5 text-xs font-bold uppercase tracking-wider text-white bg-brand-green hover:bg-brand-green-dark px-5 py-3 rounded-lg transition-all duration-200 shadow-sm shadow-emerald-900/10 focus:outline-hidden"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark px-5 py-2.5 rounded-lg transition-colors duration-150 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
               >
                 <User className="w-4 h-4" />
                 <span>Login</span>

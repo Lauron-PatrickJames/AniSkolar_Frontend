@@ -567,7 +567,7 @@ function DocumentsStep({ reselect }: { reselect: [string, string[]][] }) {
               <FileText className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-bold text-slate-700">{slot.label}</p>
-                <p className="text-[11px] text-slate-500">{slot.hint ?? 'Generated from your answers in this wizard.'}</p>
+                <p className="text-xs text-slate-500">{slot.hint ?? 'Generated from your answers in this wizard.'}</p>
               </div>
             </div>
           ))}

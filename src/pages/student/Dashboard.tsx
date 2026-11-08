@@ -95,12 +95,12 @@ export default function Dashboard({
   return (
     <div id={id} className="space-y-6">
       {/* Greeting */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-green to-emerald-700 px-5 py-6 sm:px-8 text-white shadow-sm">
+      <section className="rounded-2xl bg-gradient-to-br from-brand-green to-emerald-700 px-5 py-6 sm:px-8 text-white">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <p className="text-sm text-emerald-100">{greeting()},</p>
             <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight">{firstName || 'there'}</h2>
-            <p className="mt-1 text-xs sm:text-sm text-emerald-100/90 truncate">
+            <p className="mt-1 text-sm text-emerald-50 truncate tabular-nums">
               {[student.course, student.yearLevel, student.studentNumber, gpa && `GPA ${gpa}`].filter(Boolean).join(' · ')}
             </p>
           </div>
@@ -122,19 +122,19 @@ export default function Dashboard({
       {held.length > 0 || isScholar ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {/* Scholarship */}
-          <button type="button" onClick={() => onNavigate('my-scholarship')} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs hover:border-brand-green/40">
-            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400"><Award className="h-3.5 w-3.5" aria-hidden />My scholarship</p>
+          <button type="button" onClick={() => onNavigate('my-scholarship')} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition-colors hover:border-brand-green/40 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green">
+            <p className="flex items-center gap-2 text-sm font-medium text-slate-500"><Award className="h-4 w-4" aria-hidden />My scholarship</p>
             <p className="mt-3 font-display text-lg font-bold leading-snug text-slate-900">{held[0]?.scholarshipName ?? 'Scholarship'}</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-sm text-slate-600">
               {[sfagDetail?.grantPercentage && `${sfagDetail.grantPercentage}% tuition discount`, sfagDetail?.approvedAt && `since ${new Date(sfagDetail.approvedAt).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })}`].filter(Boolean).join(' · ') || 'Approved'}
             </p>
-            <p className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-brand-green">View details <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden /></p>
+            <p className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-green">View details <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden /></p>
           </button>
 
           {/* Duty hours */}
           {sfag && (
-            <button type="button" onClick={() => onNavigate('duty-hours')} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs hover:border-brand-green/40">
-              <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400"><Clock className="h-3.5 w-3.5" aria-hidden />Duty hours</p>
+            <button type="button" onClick={() => onNavigate('duty-hours')} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition-colors hover:border-brand-green/40 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green">
+              <p className="flex items-center gap-2 text-sm font-medium text-slate-500"><Clock className="h-4 w-4" aria-hidden />Duty hours</p>
               {!duty ? <div className="mt-3 h-14 animate-pulse rounded-lg bg-slate-100" /> : (
                 <>
                   <p className="mt-3 text-sm text-slate-500">
@@ -146,7 +146,7 @@ export default function Dashboard({
                       <div className={`h-full rounded-full ${dutyDone ? 'bg-brand-green' : 'bg-emerald-400'}`} style={{ width: `${dutyPct}%` }} />
                     </div>
                   )}
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-sm text-slate-600">
                     {!duty.log.officeAssigned ? 'Waiting for your office assignment'
                       : duty.evaluated ? `Done · ${duty.log.officeAssigned} evaluated you`
                         : dutyDone ? `Done · waiting for ${duty.log.officeAssigned}’s evaluation`
@@ -158,25 +158,25 @@ export default function Dashboard({
           )}
 
           {/* Renewal */}
-          <button type="button" onClick={() => onNavigate('renewals')} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs hover:border-brand-green/40">
-            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-400"><RefreshCw className="h-3.5 w-3.5" aria-hidden />Renewal</p>
+          <button type="button" onClick={() => onNavigate('renewals')} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition-colors hover:border-brand-green/40 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green">
+            <p className="flex items-center gap-2 text-sm font-medium text-slate-500"><RefreshCw className="h-4 w-4" aria-hidden />Renewal</p>
             {!renewals ? <div className="mt-3 h-14 animate-pulse rounded-lg bg-slate-100" /> : renewals.available.length > 0 ? (
               <>
                 <p className="mt-3 font-display text-lg font-bold text-slate-900">Open now</p>
-                <p className="mt-1 text-xs text-slate-500">{periodLabel(renewals.available[0])}{renewals.available[0].deadline ? ` · due ${deadlineLabel(renewals.available[0].deadline)}` : ''}</p>
+                <p className="mt-1 text-sm text-slate-600">{periodLabel(renewals.available[0])}{renewals.available[0].deadline ? ` · due ${deadlineLabel(renewals.available[0].deadline)}` : ''}</p>
               </>
             ) : latestRenewal ? (
               <>
                 <p className="mt-3 font-display text-lg font-bold text-slate-900">{latestRenewal.status === 'Renewed' ? 'Renewed' : latestRenewal.status}</p>
-                <p className="mt-1 text-xs text-slate-500">{periodLabel(latestRenewal)}</p>
+                <p className="mt-1 text-sm text-slate-600">{periodLabel(latestRenewal)}</p>
               </>
             ) : (
               <>
                 <p className="mt-3 font-display text-lg font-bold text-slate-900">Not open yet</p>
-                <p className="mt-1 text-xs text-slate-500">You’ll renew with your grades when the office opens it.</p>
+                <p className="mt-1 text-sm text-slate-600">You’ll renew with your grades when the office opens it.</p>
               </>
             )}
-            <p className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-brand-green">Go to Renewal <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden /></p>
+            <p className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-green">Go to Renewal <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden /></p>
           </button>
         </div>
       ) : (
@@ -185,7 +185,7 @@ export default function Dashboard({
           <section className="rounded-2xl border border-slate-200 bg-white shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <h3 className="font-display text-base font-bold text-slate-900">My applications</h3>
-              <button type="button" onClick={() => onNavigate('applications')} className="text-xs font-bold text-brand-green hover:text-brand-green-dark">See all</button>
+              <button type="button" onClick={() => onNavigate('applications')} className="text-sm font-semibold text-brand-green hover:text-brand-green-dark">See all</button>
             </div>
             {applications.length === 0 ? (
               <p className="px-5 py-6 text-center text-sm text-slate-500">You haven’t applied yet. Scholarships open to you are on the right.</p>
@@ -194,7 +194,7 @@ export default function Dashboard({
                 {applications.slice(0, 4).map(a => (
                   <li key={a.id} className="flex items-center gap-3 px-5 py-3">
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">{a.scholarshipName}</span>
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${STATUS_STYLE[a.status] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>{STATUS_LABEL[a.status] ?? a.status}</span>
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${STATUS_STYLE[a.status] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>{STATUS_LABEL[a.status] ?? a.status}</span>
                   </li>
                 ))}
               </ul>
@@ -204,8 +204,8 @@ export default function Dashboard({
           {/* Open to them */}
           <section className="rounded-2xl border border-slate-200 bg-white shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <h3 className="font-display text-base font-bold text-slate-900">Open to you <span className="text-slate-400 font-semibold">({openToMe.length})</span></h3>
-              <button type="button" onClick={() => onNavigate('explore')} className="text-xs font-bold text-brand-green hover:text-brand-green-dark">Explore</button>
+              <h3 className="font-display text-base font-bold text-slate-900">Open to you <span className="text-slate-500 font-semibold tabular-nums">({openToMe.length})</span></h3>
+              <button type="button" onClick={() => onNavigate('explore')} className="text-sm font-semibold text-brand-green hover:text-brand-green-dark">Explore</button>
             </div>
             <ul className="divide-y divide-slate-100">
               {openToMe.slice(0, 4).map(s => (
@@ -216,8 +216,8 @@ export default function Dashboard({
                       {s.deadline && <span className="block truncate text-xs text-slate-500">{s.deadline.replace(/^Applications open\s+/i, '')}</span>}
                     </span>
                     {appliedIds.has(s.id)
-                      ? <span className="shrink-0 text-[11px] font-semibold text-slate-400">Applied</span>
-                      : <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" aria-hidden />}
+                      ? <span className="shrink-0 text-xs font-semibold text-slate-500">Applied</span>
+                      : <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />}
                   </button>
                 </li>
               ))}
@@ -231,8 +231,8 @@ export default function Dashboard({
       {/* Announcements */}
       <section className="rounded-2xl border border-slate-200 bg-white shadow-xs lg:col-span-2">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h3 className="flex items-center gap-2 font-display text-base font-bold text-slate-900"><Bell className="h-4 w-4 text-brand-green" aria-hidden />Latest from the scholarship office</h3>
-          <button type="button" onClick={() => onNavigate('announcements')} className="inline-flex items-center gap-1 text-xs font-bold text-brand-green hover:text-brand-green-dark">All announcements <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
+          <h3 className="font-display text-base font-bold text-slate-900">Latest from the scholarship office</h3>
+          <button type="button" onClick={() => onNavigate('announcements')} className="inline-flex items-center gap-1 text-sm font-semibold text-brand-green hover:text-brand-green-dark">All announcements <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
         </div>
         {announcements.length === 0 ? (
           <p className="px-5 py-6 text-center text-sm text-slate-500">No announcements yet.</p>
@@ -240,17 +240,17 @@ export default function Dashboard({
           <ul className="divide-y divide-slate-100">
             {announcements.slice(0, 3).map(a => (
               <li key={a.id}>
-                <button type="button" onClick={() => onNavigate('announcements')} className="flex w-full items-start gap-3 px-5 py-3.5 text-left hover:bg-slate-50">
+                <button type="button" onClick={() => onNavigate('announcements')} className="flex w-full items-start gap-3 px-5 py-3.5 text-left hover:bg-slate-50 focus:outline-hidden focus-visible:bg-slate-50">
                   {a.imageUrls?.[0]
                     ? <img src={a.imageUrls[0]} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover ring-1 ring-slate-200" />
                     : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-brand-green"><Bell className="h-5 w-5" aria-hidden /></span>}
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2 text-[11px] text-slate-400">
-                      <span className="font-semibold text-slate-500">{a.category}</span>
-                      <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" aria-hidden />{a.date}</span>
+                    <span className="flex items-center gap-2 text-xs text-slate-500">
+                      <span className="font-semibold text-brand-green">{a.category}</span>
+                      <span className="inline-flex items-center gap-1 tabular-nums"><Calendar className="h-3.5 w-3.5" aria-hidden />{a.date}</span>
                     </span>
-                    <span className="mt-0.5 block truncate text-sm font-semibold text-slate-800">{a.title}</span>
-                    <span className="block truncate text-xs text-slate-500">{a.description}</span>
+                    <span className="mt-0.5 block truncate text-sm font-semibold text-slate-900">{a.title}</span>
+                    <span className="block truncate text-sm text-slate-600">{a.description}</span>
                   </span>
                 </button>
               </li>
@@ -278,8 +278,8 @@ export default function Dashboard({
               <button type="button" onClick={() => onNavigate(a.page)} className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-brand-green"><a.icon className="h-4 w-4" aria-hidden /></span>
                 <span className="min-w-0 flex-1 truncate">{a.label}</span>
-                {'count' in a && a.count ? <span className="rounded-full bg-amber-500 px-1.5 py-px text-[10px] font-bold text-white tabular-nums">{a.count > 9 ? '9+' : a.count}</span> : null}
-                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-400" aria-hidden />
+                {'count' in a && a.count ? <span className="rounded-full bg-amber-500 px-1.5 py-px text-xs font-bold text-white tabular-nums">{a.count > 9 ? '9+' : a.count}</span> : null}
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-600" aria-hidden />
               </button>
             </li>
           ))}

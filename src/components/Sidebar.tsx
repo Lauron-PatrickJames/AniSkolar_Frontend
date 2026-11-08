@@ -49,7 +49,7 @@ export default function Sidebar({
     ...(holds ? [{
       label: 'Scholarship',
       chip: !choosing ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-brand-green ring-1 ring-emerald-100" title={heldScholarships[0].scholarshipName}>
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-brand-green ring-1 ring-emerald-100" title={heldScholarships[0].scholarshipName}>
           <ShieldCheck className="h-3 w-3" aria-hidden />{short(heldScholarships[0].scholarshipName)}
         </span>
       ) : undefined,
@@ -106,8 +106,8 @@ export default function Sidebar({
               <img src={logo} alt="AniSkolar logo" className="w-4/5 h-4/5 object-contain" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-base font-bold leading-none text-brand-green uppercase tracking-tight truncate">AniSkolar</h1>
-              <p className="text-[10px] text-slate-400 font-semibold mt-1 truncate">DLSU-DASMARIÑAS</p>
+              <h1 className="font-display text-lg font-extrabold leading-none text-brand-green tracking-tight truncate">AniSkolar</h1>
+              <p className="text-xs text-slate-500 font-medium mt-1 truncate">DLSU-Dasmariñas</p>
             </div>
           </div>
           <button
@@ -139,7 +139,7 @@ export default function Sidebar({
             <div key={group.label ?? gi} className={gi ? 'mt-4' : ''}>
               {group.label && (
                 <div className="mb-1 flex items-center justify-between gap-2 px-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{group.label}</p>
+                  <p className="text-xs font-semibold text-slate-500">{group.label}</p>
                   {group.chip}
                 </div>
               )}
@@ -161,7 +161,7 @@ export default function Sidebar({
                         <span className="truncate">{item.name}</span>
                         {item.count ? (
                           <span
-                            className={`ml-auto rounded-full px-1.5 py-px text-[10px] font-bold tabular-nums text-white ${item.tone === 'alert' ? 'bg-amber-500' : 'bg-rose-500'}`}
+                            className={`ml-auto rounded-full px-1.5 py-px text-xs font-bold tabular-nums text-white ${item.tone === 'alert' ? 'bg-amber-500' : 'bg-rose-500'}`}
                             aria-label={item.tone === 'alert' ? `${item.count} need revision` : `${item.count} unread`}
                           >
                             {item.count > 9 ? '9+' : item.count}

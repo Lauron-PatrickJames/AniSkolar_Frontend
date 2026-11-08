@@ -40,7 +40,7 @@ export function AnswerField({ label, value, wide, summary }: { label: string; va
   }
   return (
     <div className={`min-w-0 ${wide ? 'col-span-2 sm:col-span-3' : ''}`}>
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{label}</p>
+      <p className="text-xs font-semibold text-slate-500 mb-0.5">{label}</p>
       <p className="text-sm text-slate-700 font-semibold wrap-break-word">{empty ? <span className="text-slate-300 font-normal">—</span> : value}</p>
     </div>
   );
@@ -58,7 +58,7 @@ export function AnswerGroup({ title, children }: { title: string; children: Reac
   }
   return (
     <section className="space-y-3">
-      <h4 className="font-display font-bold text-xs text-brand-green uppercase tracking-wider pb-1.5 border-b border-slate-100">{title}</h4>
+      <h4 className="font-display font-bold text-sm text-brand-green pb-1.5 border-b border-slate-100">{title}</h4>
       {children}
     </section>
   );
@@ -75,7 +75,7 @@ export function AnswerSubheading({ children }: { children: React.ReactNode }) {
   const admin = React.useContext(AnswersStyleContext).variant === 'admin';
   return admin
     ? <p className="pt-2 text-xs font-medium text-ink-muted">{children}</p>
-    : <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-2">{children}</p>;
+    : <p className="text-xs font-semibold text-slate-500 pt-2">{children}</p>;
 }
 
 export function AnswerCheck({ ok, children }: { ok: boolean; children: React.ReactNode }) {
@@ -92,12 +92,12 @@ export function AnswerCheck({ ok, children }: { ok: boolean; children: React.Rea
 // Compact table for repeatable rows; scrolls horizontally on small screens.
 export function RowsTable({ columns, rows, empty }: { columns: string[]; rows: React.ReactNode[][]; empty: string }) {
   const admin = React.useContext(AnswersStyleContext).variant === 'admin';
-  if (rows.length === 0) return <p className={admin ? 'text-sm text-ink-subtle' : 'text-xs text-slate-400 italic'}>{empty}</p>;
+  if (rows.length === 0) return <p className={admin ? 'text-sm text-ink-subtle' : 'text-xs text-slate-500 italic'}>{empty}</p>;
   return (
     <div className="overflow-x-auto -mx-1">
       <table className="w-full text-xs text-left min-w-[560px]">
         <thead>
-          <tr className={admin ? 'text-xs text-ink-subtle' : 'text-[10px] font-bold text-slate-400 uppercase tracking-wider'}>
+          <tr className={admin ? 'text-xs text-ink-subtle' : 'text-xs font-semibold text-slate-500  '}>
             {columns.map(c => <th key={c} className={`px-2 py-2 ${admin ? 'font-normal' : 'font-bold'}`}>{c}</th>)}
           </tr>
         </thead>

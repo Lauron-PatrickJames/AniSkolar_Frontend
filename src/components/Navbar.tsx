@@ -144,7 +144,7 @@ export default function Navbar({
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 20 }}
-                className="absolute -top-1 -right-1 min-w-4.5 h-4.5 px-1 rounded-full bg-rose-500 ring-2 ring-white text-white text-[10px] font-bold leading-none flex items-center justify-center"
+                className="absolute -top-1 -right-1 min-w-4.5 h-4.5 px-1 rounded-full bg-rose-500 ring-2 ring-white text-white text-xs font-bold leading-none flex items-center justify-center"
               >
                 {badgeLabel}
               </motion.span>
@@ -199,7 +199,7 @@ export default function Navbar({
                             <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${!item.isRead ? 'bg-brand-green' : 'bg-transparent'}`} />
                             <div className="min-w-0">
                               <p className="text-xs text-slate-700 leading-normal wrap-break-word">{item.text}</p>
-                              <span className="text-[10px] text-slate-400 block mt-1">{item.time}</span>
+                              <span className="text-xs text-slate-500 block mt-1 tabular-nums">{item.time}</span>
                             </div>
                           </motion.button>
                         ))}
@@ -245,7 +245,7 @@ export default function Navbar({
             )}
             <div className="hidden md:block min-w-0">
               <p className="text-xs font-bold text-slate-700 leading-none truncate max-w-40" title={fullName}>{fullName}</p>
-              <p className="text-[10px] text-slate-400 font-medium leading-none mt-1">
+              <p className="text-xs text-slate-500 font-medium leading-none mt-1">
                 {student.studentNumber}
                 {heldScholarships.length > 0 && <span className="ml-1.5 rounded-sm bg-emerald-50 px-1 py-px font-bold text-brand-green ring-1 ring-emerald-100">Scholar</span>}
               </p>
@@ -273,12 +273,12 @@ export default function Navbar({
                 >
                   <div className="p-4 text-left min-w-0">
                     <p className="text-xs font-bold text-slate-800 leading-tight truncate" title={fullName}>{fullName}</p>
-                    <p className="text-[10px] text-slate-500 truncate mt-1" title={student.email}>{student.email}</p>
-                    <p className="text-[10px] font-bold text-brand-green mt-1.5 px-1.5 py-0.5 rounded-sm bg-brand-green/10 inline-block truncate max-w-full">
+                    <p className="text-xs text-slate-500 truncate mt-1" title={student.email}>{student.email}</p>
+                    <p className="text-xs font-bold text-brand-green mt-1.5 px-1.5 py-0.5 rounded-sm bg-brand-green/10 inline-block truncate max-w-full">
                       {student.course}
                     </p>
                     {heldScholarships.length > 0 && (
-                      <p className="mt-1.5 text-[10px] font-semibold text-slate-600">Scholar · {heldScholarships.map(h => h.scholarshipName).join(', ')}</p>
+                      <p className="mt-1.5 text-xs font-semibold text-slate-600">Scholar · {heldScholarships.map(h => h.scholarshipName).join(', ')}</p>
                     )}
                   </div>
 
@@ -353,7 +353,7 @@ export function NotificationPreview({ item, onClose, onOpen }: { item: Notificat
       >
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5">
           <div className="min-w-0 space-y-1.5">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{item.kind === 'announcement' ? `Announcement${item.postedBy ? ` · ${item.postedBy}` : ''}` : 'Notification'} · {item.time}</p>
+            <p className="text-xs font-medium text-slate-500">{item.kind === 'announcement' ? `Announcement${item.postedBy ? ` · ${item.postedBy}` : ''}` : 'Notification'} · {item.time}</p>
             <h2 id="notif-preview-title" className="font-display text-base font-bold text-slate-900">{item.title}</h2>
             {item.status && (
               <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${STATUS_STYLE[item.status] ?? 'bg-slate-50 text-slate-600 ring-slate-200'}`}>{item.status}</span>

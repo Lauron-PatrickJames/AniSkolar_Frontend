@@ -68,7 +68,7 @@ export default function Messages({ applications }: { applications: Application[]
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-xs">
           <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
             <p className="text-sm font-bold text-slate-900">Admissions and Scholarship Office</p>
-            <p className="text-[11px] text-slate-500">Usually replies within office hours (Mon–Fri).</p>
+            <p className="text-xs text-slate-500">Usually replies within office hours (Mon–Fri).</p>
           </div>
           <Conversation
             className="h-[min(70vh,640px)]"

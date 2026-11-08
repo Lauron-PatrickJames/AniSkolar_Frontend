@@ -838,7 +838,7 @@ function ApplicationRow({ app, studentName, open, onToggle, onOpenApplication }:
         <ChevronRight className={`size-4 shrink-0 text-ink-subtle transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden />
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={app.scholarshipName}>{app.scholarshipName}</span>
         <span className="hidden shrink-0 text-xs text-ink-subtle tabular-nums sm:inline">Submitted {formatDate(app.createdAt)}</span>
-        <span className="shrink-0"><StatusBadge status={app.status} /></span>
+        <span className="shrink-0"><StatusBadge status={app.status} endReason={app.endReason} /></span>
       </button>
       <div id={panelId} hidden={!open} className="pb-3 pl-12 pr-5">
         <p className="text-xs text-ink-subtle sm:hidden">Submitted {formatDate(app.createdAt)}</p>

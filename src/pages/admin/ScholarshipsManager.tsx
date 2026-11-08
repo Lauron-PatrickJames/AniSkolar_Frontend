@@ -5,7 +5,7 @@ import { ApplicationFormType, Scholarship, ScholarshipOffice, ScholarshipOverrid
 import {
   OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, formatPeriod, officeOf, registerCustomScholarships, scholarshipDefaults, handlingOffice } from '../../data/scholarships';
 import { EligibilityRules, lockedRules, ruleLines } from '../../data/requirementCatalog';
-import { DocumentsEditor, ListEditor, RulesEditor } from './RequirementEditors';
+import { DocumentsEditor, ListEditor, OpenToEditor, RulesEditor } from './RequirementEditors';
 import ScholarshipMatrix, { MatrixPatch } from './ScholarshipMatrix';
 import { API_BASE_URL, AppStatus, STATUS_OPTIONS, authHeaders, formatDateTime } from './adminData';
 import {
@@ -761,6 +761,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
   if (isCustom && !/^[A-Za-z]{2,8}$/.test(form.referenceCode.trim())) errors.referenceCode = '2–8 letters, e.g. CSG.';
   if (form.opensOn && form.closesOn && form.closesOn < form.opensOn) errors.closesOn = 'The closing date can’t be before the opening date.';
   if (!form.description.trim()) errors.description = 'Enter a description.';
+  if (form.rules.programs && !form.rules.programs.length) errors.rules = 'Tick at least one program, or choose All programs.';
   if (ruleLines(form.rules).length + clean(form.customEligibility).length === 0) errors.customEligibility = 'Tick at least one rule or add a condition, so students know who can apply.';
   const errorCount = Object.keys(errors).length;
   const shown = attempted ? errors : {};
@@ -909,6 +910,9 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
             title="Eligibility"
           >
             <div className="space-y-5">
+              <Field label="Open to" error={shown.rules}>
+                <OpenToEditor rules={form.rules} onChange={v => set('rules', v)} disabled={isSaving} />
+              </Field>
               <RulesEditor rules={form.rules} onChange={v => set('rules', v)} locked={locked} disabled={isSaving} />
               <Field label="Other conditions" optional error={shown.customEligibility}>
                 <ListEditor items={form.customEligibility} onChange={v => set('customEligibility', v)} label="Condition" addLabel="Add condition" placeholder="e.g. Must be a member of the Vicissitude Editorial Board" disabled={isSaving} />

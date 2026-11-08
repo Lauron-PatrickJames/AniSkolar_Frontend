@@ -7,6 +7,7 @@ import { AnswersStyleProvider, ApplicationFormAnswers, EvaluationSheetAnswers } 
 import PolcaAdminFieldsCard from '../../components/grant-forms/PolcaAdminFieldsCard';
 import { SfagAnswers, StandardProfileAnswers } from '../../components/grant-forms/StandardAnswersView';
 import { mockScholarships, officeDisplayName } from '../../data/scholarships';
+import { PROGRAMS } from '../../data/programs';
 import { GrantApplicationDetails, PolcaAdminFields, Scholarship, SfagApplicationDetails } from '../../types';
 import { isGrantFormType, toGrantDetails } from '../../utils/grantForms';
 import { downloadZip, useDocumentUrl } from '../../utils/documents';
@@ -97,7 +98,15 @@ export default function ApplicationReview({
   // student's profile may have changed since.
   const now = app.currentProfile;
   const same = (a?: string, b?: string) => !a || !b || a.trim().toLowerCase() === b.trim().toLowerCase();
-  const profileChanged = !!now && (!same(now.course, program) || !same(now.yearLevel, yearLevel));
+  // A program may be written as its code ("BSIT") or its name ("Bachelor
+  // of Science in Information Technology"): compare them as programs.
+  const programKey = (v?: string) => {
+    const t = (v ?? '').trim().toLowerCase();
+    return PROGRAMS.find(p => p.code.toLowerCase() === t || p.name.toLowerCase() === t)?.code ?? t;
+  };
+  const sameProgram = !now?.course || !program || programKey(now.course) === programKey(program)
+    || (!!now.programCode && programKey(program) === programKey(now.programCode));
+  const profileChanged = !!now && (!sameProgram || !same(now.yearLevel, yearLevel));
   const summary: [string, React.ReactNode][] = [
     ['Student no.', <span className="tabular-nums">{app.studentNumber}</span>],
     ['Program', program || yearLevel
@@ -131,7 +140,7 @@ export default function ApplicationReview({
         description={app.scholarshipName}
         meta={
           <>
-            <StatusBadge status={app.status} />
+            <StatusBadge status={app.status} endReason={app.endReason} />
             {officeApp && <Badge>via {officeDisplayName(app.office)}</Badge>}
             {officeApp && app.decisionOffice === 'LSO' && <Badge tone="warning" icon={ShieldCheck}>AdSO override</Badge>}
             <span className="flex items-center gap-1 text-xs text-ink-subtle">
@@ -796,7 +805,7 @@ function DecisionSummary({ app, last }: { app: AdminApplication; last: ReturnTyp
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={app.status} />
+        <StatusBadge status={app.status} endReason={app.endReason} />
         {app.status === 'Approved' && app.sfagPercentage ? <Badge tone="accent">{app.sfagPercentage}% grant</Badge> : null}
       </div>
       <p className="text-xs text-ink-subtle">

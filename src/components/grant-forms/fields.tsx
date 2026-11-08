@@ -3,6 +3,7 @@ import { AlertCircle, FileText, Plus, Trash2, Upload, CheckCircle } from 'lucide
 import { motion, AnimatePresence } from 'motion/react';
 import { DocumentSlot, GrantApplicationDetails, Scholarship, StoredDocument } from '../../types';
 import { FieldErrors, getIn } from '../../utils/grantForms';
+import { SCHOOLS, SCHOOL_LIST_ID, findSchool } from '../../data/schools';
 
 // Form primitives for the grant-form wizard. Every input is bound to the
 // form state by a dot path (e.g. "evaluationSheet.travel.hasPassport"),
@@ -116,6 +117,50 @@ export function TextField({ path, label, required, hint, className, disabled, ty
         maxLength={maxLength}
         disabled={disabled}
         inputMode={type === 'tel' ? 'tel' : undefined}
+        className={error ? errorInputClass : inputClass}
+        aria-invalid={!!error}
+      />
+    </Labelled>
+  );
+}
+
+// The list of schools for every school input on the page (render once).
+export function SchoolDatalist() {
+  return (
+    <datalist id={SCHOOL_LIST_ID}>
+      {SCHOOLS.map(s => <option key={s.name} value={s.name}>{s.city}</option>)}
+    </datalist>
+  );
+}
+
+export const SCHOOL_HINT = 'Start typing to search. Not on the list? Type the school’s full name.';
+
+// A school name: search the list or type one that isn't listed. Picking a
+// listed school fills in its type and, if empty, its address.
+export function SchoolField({ path, typePath, addressPath, label, required, hint = SCHOOL_HINT, className, disabled }: BaseProps & {
+  typePath?: string;
+  addressPath?: string;
+}) {
+  const { values, setValue, errors } = useGrantForm();
+  const value = (getIn(values, path) as string) ?? '';
+  const error = errors[path];
+  const onChange = (next: string) => {
+    setValue(path, next);
+    const school = findSchool(next);
+    if (!school) return;
+    if (typePath) setValue(typePath, school.type);
+    if (addressPath && !String(getIn(values, addressPath) ?? '').trim()) setValue(addressPath, school.city);
+  };
+  return (
+    <Labelled label={label} required={required} error={error} hint={hint} className={className}>
+      <input
+        type="text"
+        list={SCHOOL_LIST_ID}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        disabled={disabled}
+        autoComplete="off"
+        placeholder="Search for your school"
         className={error ? errorInputClass : inputClass}
         aria-invalid={!!error}
       />

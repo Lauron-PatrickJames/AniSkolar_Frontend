@@ -12,6 +12,8 @@
 // and its `eligibility` / `requirements` text is generated from them
 // (deriveScholarship in data/scholarships.ts).
 
+import { COLLEGES, PROGRAMS } from './programs';
+
 export type ApplicantType = 'incoming' | 'continuing' | 'any';
 
 export interface EligibilityRules {
@@ -23,9 +25,37 @@ export interface EligibilityRules {
   residencySemesters?: number;  // returnees / transferees: semesters of residency first
   filipino?: boolean;
   noBalance?: boolean;          // no unpaid or outstanding balance
+  // Open only to these programs (codes from data/programs.ts); unset = all.
+  // Not one of RULES: edited with OpenToEditor. Other students don't see
+  // the scholarship in Explore and can't apply (the backend checks it too).
+  programs?: string[];
 }
 
-export type RuleKey = keyof EligibilityRules;
+export type RuleKey = Exclude<keyof EligibilityRules, 'programs'>;
+
+// "BS Computer Science and BS Information Technology students only", or a
+// college's name when every program in it is picked.
+export function openToText(rules: EligibilityRules = {}): string {
+  const codes = rules.programs ?? [];
+  if (!codes.length) return '';
+  const picked = new Set(codes);
+  const parts: string[] = [];
+  for (const college of Object.keys(COLLEGES)) {
+    const inCollege = PROGRAMS.filter(p => p.college === college);
+    const chosen = inCollege.filter(p => picked.has(p.code));
+    if (!chosen.length) continue;
+    if (chosen.length === inCollege.length) parts.push(COLLEGES[college]);
+    else parts.push(...chosen.map(p => p.name));
+  }
+  const list = parts.length <= 2 ? parts.join(' and ') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return `For ${list} students only`;
+}
+
+// Whether a student in this program may apply.
+export function isOpenToProgram(rules: EligibilityRules | undefined, programCode?: string | null): boolean {
+  const codes = rules?.programs ?? [];
+  return !codes.length || (!!programCode && codes.includes(programCode));
+}
 
 interface RuleBase<K extends RuleKey> {
   key: K;
@@ -95,7 +125,7 @@ export function ruleCell(key: RuleKey, rules: EligibilityRules): string {
 }
 
 export function ruleLines(rules: EligibilityRules = {}): string[] {
-  return RULES.map(r => ruleText(r.key, rules)).filter(Boolean);
+  return [openToText(rules), ...RULES.map(r => ruleText(r.key, rules))].filter(Boolean);
 }
 
 // --- Documents --------------------------------------------------------------

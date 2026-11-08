@@ -4,7 +4,7 @@ import { useAuth } from '@clerk/react';
 import { MESSAGES_API_BASE, MESSAGES_READ_EVENT } from '../utils/messages';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { StudentProfile, Application } from '../types';
+import { StudentProfile, Application, Announcement } from '../types';
 import { HeldScholarship, isSfagScholar } from '../utils/eligibility';
 import { motion } from 'motion/react';
 
@@ -20,6 +20,7 @@ interface StudentLayoutProps {
   // Scholarships the student holds now (GET /api/students/me/holdings).
   heldScholarships?: HeldScholarship[];
   dutyNotice?: DutyNotice | null;
+  announcements?: Announcement[];
   onLogout: () => void;
   pageTitle: string;
   id?: string;
@@ -34,6 +35,7 @@ export default function StudentLayout({
   applications,
   heldScholarships = [],
   dutyNotice = null,
+  announcements = [],
   onLogout,
   pageTitle,
   id
@@ -77,6 +79,7 @@ export default function StudentLayout({
           onNavigate={onNavigate}
           heldScholarships={heldScholarships}
           dutyNotice={dutyNotice}
+          announcements={announcements}
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">

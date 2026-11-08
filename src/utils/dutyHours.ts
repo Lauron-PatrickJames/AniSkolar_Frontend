@@ -15,6 +15,27 @@ export interface DutyEntry {
   status?: 'confirmed' | 'flagged' | null;
   note?: string | null;
   reviewedAt?: string | null;
+  // When it was logged; unreviewed duties are removed 48 hours after this.
+  loggedAt?: string | null;
+}
+
+// Duties the office head didn't confirm or flag within this long are removed
+// (backend utils/dutyExpiry.js).
+export const REVIEW_WINDOW_HOURS = 48;
+
+// Hours left before an unreviewed duty is removed, or null if it won't be.
+export function hoursUntilRemoved(entry: DutyEntry, now = Date.now()): number | null {
+  if (entry.status || !entry.loggedAt) return null;
+  const left = (new Date(entry.loggedAt).getTime() + REVIEW_WINDOW_HOURS * 3600_000 - now) / 3600_000;
+  return Math.max(0, Math.ceil(left));
+}
+
+// A duty removed because nobody reviewed it in time.
+export interface ExpiredDutyEntry {
+  date: string;
+  timeIn: string;
+  timeOut: string;
+  removedAt?: string;
 }
 
 // Event credit counted in the totals: approved claims on credited events
@@ -59,6 +80,7 @@ export interface DutyLog {
   requiredHours?: number;
   entries: DutyEntry[];
   specialEvents: SpecialEvent[];
+  expiredEntries?: ExpiredDutyEntry[];
   updatedAt?: string;
 }
 

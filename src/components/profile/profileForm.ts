@@ -13,6 +13,8 @@ export interface ProfileDraft {
   yearLevel: string;
   section: string;
   gpa: string;
+  firstName: string;            // prefilled from the university account; may be corrected at sign-up
+  lastName: string;
   middleName: string;
   nameSuffix: string;           // '', Jr., Sr., II, III, IV, V
   dateOfBirth: string;          // YYYY-MM-DD
@@ -47,10 +49,13 @@ export const PHILIPPINES = 'Philippines';
 export const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widowed', 'Separated', 'Divorced'];
 export const NAME_SUFFIXES = ['Jr.', 'Sr.', 'II', 'III', 'IV', 'V'];
 
+// Letters (any language), spaces, hyphens, apostrophes and periods.
+export const NAME_PATTERN = /^\p{L}[\p{L}\p{M}\s.'’-]*$/u;
+
 export function emptyDraft(): ProfileDraft {
   return {
     programCode: '', yearLevel: '', section: '', gpa: '',
-    middleName: '', nameSuffix: '', dateOfBirth: '', placeOfBirth: '', nationality: 'Filipino', civilStatus: '',
+    firstName: '', lastName: '', middleName: '', nameSuffix: '', dateOfBirth: '', placeOfBirth: '', nationality: 'Filipino', civilStatus: '',
     homeAddress: '', cityMunicipality: '', province: '', zipCode: '', country: PHILIPPINES,
     mobileNumber: '', telephoneNumber: '',
     fatherName: '', fatherContactNo: '', fatherDeceased: false, motherName: '', motherContactNo: '', motherDeceased: false,
@@ -68,6 +73,8 @@ export function draftFromStudent(s: StudentProfile): ProfileDraft {
     yearLevel: text(s.yearLevel),
     section: text(s.section),
     gpa: gpa === 'NaN' ? '' : gpa,
+    firstName: text(s.firstName),
+    lastName: text(s.lastName),
     middleName: text(s.middleName),
     nameSuffix: text(s.nameSuffix),
     dateOfBirth: toIsoDate(s.dateOfBirth),
@@ -100,7 +107,7 @@ export function draftFromStudent(s: StudentProfile): ProfileDraft {
 export type DraftSection = 'academic' | 'personal' | 'contact' | 'family';
 export const SECTION_FIELDS: Record<DraftSection, DraftField[]> = {
   academic: ['programCode', 'yearLevel', 'section', 'gpa'],
-  personal: ['middleName', 'nameSuffix', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'],
+  personal: ['firstName', 'lastName', 'middleName', 'nameSuffix', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'],
   contact: ['homeAddress', 'country', 'province', 'cityMunicipality', 'zipCode', 'mobileNumber', 'telephoneNumber'],
   family: ['fatherName', 'fatherContactNo', 'motherName', 'motherContactNo', 'guardianType', 'guardianName', 'guardianRelationship', 'guardianContactNo', 'guardianAddress'],
 };
@@ -122,6 +129,11 @@ export function validateDraft(d: ProfileDraft, _options: { requireAcademic?: boo
   need('yearLevel', 'Choose your year level.');
   need('section', 'Enter your section.');
   if (d.yearLevel !== '1st Year') need('gpa', 'Enter your cumulative GPA.');
+  need('firstName', 'Enter your first name.');
+  need('lastName', 'Enter your last name.');
+  for (const f of ['firstName', 'middleName', 'lastName'] as const) {
+    if (d[f].trim() && !NAME_PATTERN.test(d[f].trim())) e[f] = 'Use letters only (spaces, hyphens, apostrophes and periods are fine).';
+  }
   need('middleName', 'Enter your middle name.');
   need('dateOfBirth', 'Select your date of birth.');
   need('placeOfBirth', 'Enter your place of birth.');
@@ -196,6 +208,8 @@ export function draftToPayload(d: ProfileDraft) {
     yearLevel: d.yearLevel,
     section: d.section.trim().toUpperCase(),
     gpa: d.gpa.trim() ? Number(d.gpa).toFixed(2) : '',
+    firstName: d.firstName.trim().replace(/\s+/g, ' '),
+    lastName: d.lastName.trim().replace(/\s+/g, ' '),
     middleName: d.middleName.trim(),
     nameSuffix: d.nameSuffix,
     dateOfBirth: d.dateOfBirth,

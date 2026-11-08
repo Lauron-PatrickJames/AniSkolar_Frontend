@@ -7,7 +7,7 @@ import {
 } from '../../utils/grantForms';
 import {
   Block, CheckboxField, CheckboxListField, ChoiceField, ComputedField, FieldError, FileSlotField,
-  NumberField, RepeatableList, SelectField, SubHeading, TextField, labelClass, useGrantForm
+  NumberField, RepeatableList, SchoolDatalist, SchoolField, SelectField, SubHeading, TextField, labelClass, useGrantForm
 } from './fields';
 
 // The POLCA "Financial Aid Grantee Personal Information Sheet" (7-page
@@ -25,11 +25,14 @@ export function EducationSection() {
   ];
   return (
     <div className="space-y-6">
+      <SchoolDatalist />
       {levels.map(level => (
         <Block key={level.key}>
           <SubHeading>{level.label}</SubHeading>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <TextField path={`${P}.education.${level.key}.schoolName`} label="Name of School" required className="sm:col-span-2" />
+            {level.key === 'elementary'
+              ? <TextField path={`${P}.education.${level.key}.schoolName`} label="Name of School" required className="sm:col-span-2" />
+              : <SchoolField path={`${P}.education.${level.key}.schoolName`} typePath={`${P}.education.${level.key}.type`} addressPath={`${P}.education.${level.key}.address`} label="Name of School" required className="sm:col-span-2" />}
             <TextField path={`${P}.education.${level.key}.yearGraduated`} label="Year Graduated" required placeholder="e.g. 2020" maxLength={4} />
             <TextField path={`${P}.education.${level.key}.address`} label="Address" required className="sm:col-span-2" />
             <ChoiceField path={`${P}.education.${level.key}.type`} label="Type of School" required options={SCHOOL_TYPES_3} />

@@ -40,7 +40,7 @@ export default function Footer() {
                 <a href="#scholarships" className="hover:text-brand-green transition-colors text-slate-400">Available Grants</a>
               </li>
               <li>
-                <a href="#how-it-works" className="hover:text-brand-green transition-colors text-slate-400">Application Process</a>
+                <a href="#how-to-apply" className="hover:text-brand-green transition-colors text-slate-400">Application Process</a>
               </li>
               <li>
                 <a href="#faqs" className="hover:text-brand-green transition-colors text-slate-400">Frequently Asked Questions</a>

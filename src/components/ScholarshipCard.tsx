@@ -7,9 +7,15 @@ const APPLICATION_STATUS_STYLES: Record<Application['status'], string> = {
   Approved: 'bg-emerald-50 text-emerald-800 border-emerald-200',
   Rejected: 'bg-rose-50 text-rose-800 border-rose-200',
 };
-import { Calendar, Award, DollarSign, Dumbbell, Users, CheckCircle, ChevronRight, AlertCircle, Bookmark } from 'lucide-react';
+import { Ban, Calendar, Award, DollarSign, Dumbbell, Users, CheckCircle, ChevronRight, AlertCircle, Bookmark } from 'lucide-react';
 import { motion } from 'motion/react';
 import { acceptsOnlineApplications, handlingOffice } from '../data/scholarships';
+
+// "Admissions and Scholarship Office (AdSO)" → "Apply at the AdSO".
+function officeShortName(office: string): string {
+  const short = /\(([^)]+)\)\s*$/.exec(office)?.[1];
+  return short ? `Apply at the ${short}` : `Apply at the ${office}`;
+}
 
 interface ScholarshipCardProps {
   scholarship: Scholarship;
@@ -18,6 +24,10 @@ interface ScholarshipCardProps {
   isApplied?: boolean;
   // The student's application status, shown on the card.
   applicationStatus?: Application['status'];
+  // Approved, then declined by the student or ended; and whether the
+  // office added the student without an application.
+  applicationEndReason?: Application['endReason'];
+  awardedDirectly?: boolean;
   // e.g. the student's profile GPA is below the scholarship's minimum.
   warning?: string | null;
   // Why the student can't apply (e.g. they hold the SFAG).
@@ -32,6 +42,8 @@ export default function ScholarshipCard({
   onApply,
   isApplied = false,
   applicationStatus,
+  applicationEndReason,
+  awardedDirectly,
   warning,
   blockedReason,
   id
@@ -104,12 +116,19 @@ export default function ScholarshipCard({
           {scholarship.name}
         </h3>
 
-        {applicationStatus && (
+        {applicationStatus && (applicationStatus === 'Approved' && applicationEndReason ? (
+          <p className="mb-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold bg-slate-100 text-slate-600 border-slate-200">
+            <Ban className="w-3.5 h-3.5" aria-hidden />
+            {applicationEndReason === 'Declined' ? 'Declined by you' : 'Scholarship ended'}
+          </p>
+        ) : (
           <p className={`mb-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-bold ${APPLICATION_STATUS_STYLES[applicationStatus]}`}>
             <CheckCircle className="w-3.5 h-3.5" aria-hidden />
-            Your application: {applicationStatus === 'Under Evaluation' ? 'Under evaluation' : applicationStatus === 'Needs Revision' ? 'Needs revision' : applicationStatus}
+            {applicationStatus === 'Approved' && awardedDirectly
+              ? 'You’re a scholar'
+              : `Your application: ${applicationStatus === 'Under Evaluation' ? 'Under evaluation' : applicationStatus === 'Needs Revision' ? 'Needs revision' : applicationStatus}`}
           </p>
-        )}
+        ))}
 
         {/* Description */}
         <p className="text-sm text-slate-600 line-clamp-3 leading-relaxed mb-4">
@@ -161,7 +180,10 @@ export default function ScholarshipCard({
         <div className="flex items-center space-x-1.5 self-start min-w-0">
           <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
           <div className="text-left">
-            <p className="text-xs text-slate-500 font-bold ">Deadline</p>
+            {/* Dates are an application period; otherwise it says how and when. */}
+            <p className="text-xs text-slate-500 font-bold">
+              {scholarship.directAward ? 'How scholars are chosen' : scholarship.opensOn || scholarship.closesOn ? 'Application period' : 'Schedule'}
+            </p>
             <p className="text-xs text-slate-700 font-semibold">{scholarship.deadline}</p>
           </div>
         </div>
@@ -170,20 +192,25 @@ export default function ScholarshipCard({
         <div className="flex items-center gap-2 w-full">
           <button
             onClick={() => onViewDetails(scholarship.id)}
-            className="flex-1 text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-3.5 py-2 rounded-lg transition-colors focus:outline-hidden"
+            className="flex-1 h-10 text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-3.5 rounded-lg transition-colors focus:outline-hidden"
           >
             Details
           </button>
           {onApply && !acceptsOnlineApplications(scholarship) && (
-            <span className="min-w-0 flex-1 text-xs font-semibold leading-snug px-3.5 py-2 rounded-lg text-slate-500 bg-slate-100 border border-slate-200 text-center">
-              Through the {handlingOffice(scholarship).replace(/\s*\([^)]*\)\s*$/, '')}
+            // One line, like the other buttons: the office's short name, the
+            // full name on hover ("Apply at the AdSO").
+            <span
+              title={`Apply through the ${handlingOffice(scholarship)}`}
+              className="min-w-0 flex-1 h-10 inline-flex items-center justify-center px-3.5 rounded-lg text-xs font-semibold text-slate-500 bg-slate-100 border border-slate-200"
+            >
+              <span className="truncate">{officeShortName(handlingOffice(scholarship))}</span>
             </span>
           )}
           {onApply && acceptsOnlineApplications(scholarship) && (
             <button
               onClick={() => onApply(scholarship.id)}
               disabled={isApplied || blocked || scholarship.status === 'Closed'}
-              className={`flex-1 text-xs font-semibold px-4 py-2 rounded-lg flex items-center justify-center space-x-1.5 transition-colors focus:outline-hidden ${
+              className={`flex-1 h-10 text-xs font-semibold px-4 rounded-lg flex items-center justify-center space-x-1.5 transition-colors focus:outline-hidden ${
                 isApplied || blocked
                   ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                   : 'bg-brand-green text-white hover:bg-brand-green-dark shadow-sm'

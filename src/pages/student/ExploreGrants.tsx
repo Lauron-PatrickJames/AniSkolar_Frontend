@@ -180,6 +180,8 @@ export default function ExploreGrants({
               onApply={onApply}
               isApplied={applicationByScholarship.has(scholarship.id)}
               applicationStatus={applicationByScholarship.get(scholarship.id)?.status}
+              applicationEndReason={applicationByScholarship.get(scholarship.id)?.endReason}
+              awardedDirectly={applicationByScholarship.get(scholarship.id)?.awardedDirectly}
               warning={applicationByScholarship.has(scholarship.id) ? null : holdingNotice(scholarship.id, holdings) ?? profileGpaWarning(scholarship, student)}
               blockedReason={applyBlock(scholarship.id, holdings)}
             />

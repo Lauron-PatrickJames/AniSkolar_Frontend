@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowRight, CheckCircle2, Clock, FileText, RotateCcw, Search, XCircle, AlertTriangle, Ban } from 'lucide-react';
 import { Application } from '../../types';
+import { officeDisplayName } from '../../data/scholarships';
 
 // Every application the student has submitted, newest first, with its
 // status, the office's message and what to do next.
 
-type Filter = 'All' | 'Under Evaluation' | 'Needs Revision' | 'Approved' | 'Rejected';
+// 'Ended': approved, then declined by the student, graduated or stopped.
+type Filter = 'All' | 'Under Evaluation' | 'Needs Revision' | 'Approved' | 'Rejected' | 'Ended';
 
 const STATUS: Record<string, { label: string; className: string; icon: React.ElementType }> = {
   'Under Evaluation': { label: 'Under evaluation', className: 'bg-sky-50 text-sky-700 ring-sky-200', icon: Clock },
@@ -13,7 +15,13 @@ const STATUS: Record<string, { label: string; className: string; icon: React.Ele
   Approved: { label: 'Approved', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200', icon: CheckCircle2 },
   Rejected: { label: 'Not approved', className: 'bg-rose-50 text-rose-700 ring-rose-200', icon: XCircle },
   Declined: { label: 'Declined by you', className: 'bg-slate-100 text-slate-600 ring-slate-200', icon: Ban },
+  Graduated: { label: 'Graduated', className: 'bg-slate-100 text-slate-600 ring-slate-200', icon: CheckCircle2 },
+  Stopped: { label: 'Ended', className: 'bg-slate-100 text-slate-600 ring-slate-200', icon: Ban },
+  Ended: { label: 'Declined or ended', className: '', icon: Ban },
 };
+
+// Which filter an application is under.
+const tabOf = (a: Application): Exclude<Filter, 'All'> => (a.status === 'Approved' && a.endReason ? 'Ended' : a.status);
 
 const formatDate = (value?: string) => {
   if (!value) return '';
@@ -28,14 +36,15 @@ export default function MyApplications({ applications, onViewScholarship, onResu
   onNavigate: (page: string) => void;
 }) {
   const [filter, setFilter] = useState<Filter>('All');
-  const stateOf = (a: Application) => (a.endReason === 'Declined' ? 'Declined' : a.status);
+  const stateOf = (a: Application) => (a.status === 'Approved' && a.endReason ? a.endReason : a.status);
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    applications.forEach(a => { c[a.status] = (c[a.status] ?? 0) + 1; });
+    applications.forEach(a => { const t = tabOf(a); c[t] = (c[t] ?? 0) + 1; });
     return c;
   }, [applications]);
-  const shown = applications.filter(a => filter === 'All' || a.status === filter);
-  const filters: Filter[] = ['All', 'Under Evaluation', 'Needs Revision', 'Approved', 'Rejected'];
+  const shown = applications.filter(a => filter === 'All' || tabOf(a) === filter);
+  // "Declined or ended" only when there is one.
+  const filters: Filter[] = ['All', 'Under Evaluation', 'Needs Revision', 'Approved', 'Rejected', ...(counts.Ended ? ['Ended' as const] : [])];
 
   if (!applications.length) {
     return (
@@ -85,7 +94,10 @@ export default function MyApplications({ applications, onViewScholarship, onResu
                     <h3 className="font-display text-base font-bold text-slate-900">{a.scholarshipName}</h3>
                     <p className="text-xs text-slate-500">
                       {a.referenceCode && <span className="font-mono font-semibold text-slate-700">{a.referenceCode}</span>}
-                      {a.referenceCode && ' · '}Submitted {formatDate(a.submittedAt)}
+                      {a.referenceCode && ' · '}
+                      {a.awardedDirectly
+                        ? `Added by the ${officeDisplayName(a.office).replace(/^.*\(([^)]+)\)$/, '$1')} · ${formatDate(a.submittedAt)}`
+                        : `Submitted ${formatDate(a.submittedAt)}`}
                     </p>
                   </div>
                   <span className={`inline-flex shrink-0 items-center gap-1.5 self-start rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${meta.className}`}>

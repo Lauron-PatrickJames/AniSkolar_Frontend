@@ -9,6 +9,9 @@ import {
 } from '../../utils/dutyHours';
 import { StatsTableSkeleton } from '../../components/Skeletons';
 
+// "55" rather than "55.00"; half hours keep their decimal ("55.5").
+const wholeHours = (n: number | null | undefined) => (n === null || n === undefined ? '—' : String(Math.round(n * 100) / 100));
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 // Duty hours for SFAG scholars, replacing the office's "SFAG Duty
@@ -208,14 +211,17 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
 
       {evaluation && <EvaluationSummary evaluation={evaluation} defaultOpen />}
 
+      {/* Details on the left; progress with the duty form under it on the
+          right, so neither column leaves a gap. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <DetailsCard log={log} rule={rule} onSave={save} saveState={saveState} />
-        <SummaryCard summary={summary} />
+        <div className="lg:col-span-2 space-y-6 min-w-0">
+          <SummaryCard summary={summary} />
+          {/* Duty is rendered in the office the AdSO assigns, so logging opens
+              once there is one (the server refuses new duties before that). */}
+          {log.officeAssigned ? <AddDutyForm log={log} onSave={save} confirmationRequired={confirmationRequired} /> : <AwaitingOfficeCard />}
+        </div>
       </div>
-
-      {/* Duty is rendered in the office the AdSO assigns, so logging opens
-          once there is one (the server refuses new duties before that). */}
-      {log.officeAssigned ? <AddDutyForm log={log} onSave={save} confirmationRequired={confirmationRequired} /> : <AwaitingOfficeCard />}
       {!!log.expiredEntries?.length && <ExpiredDutiesNote entries={log.expiredEntries} />}
 
       {(log.officeAssigned || log.entries.length > 0) && (
@@ -267,19 +273,22 @@ function DetailsCard({ log, rule, onSave, saveState }: {
           )}
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
         <div>
           <span className={labelClass}>Deadline</span>
           <p className="mt-1.5 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-900">
             <Lock className="w-3.5 h-3.5 shrink-0 text-slate-400" aria-hidden />
-            {log.deadline ? formatDutyDate(log.deadline, true) : <span className="font-normal text-slate-500">Not set yet</span>}
+            {log.deadline ? <span className="whitespace-nowrap">{formatDutyDate(log.deadline, true)}</span> : <span className="font-normal text-slate-500">Not set yet</span>}
           </p>
           <p className="mt-1 text-xs text-slate-500">Set by the scholarship office for everyone.</p>
         </div>
         {hoursFromAdso ? (
           <div>
             <span className={labelClass}>Required hours</span>
-            <p className="mt-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-900">{formatHours(rule.requiredHours)}</p>
+            <p className="mt-1.5 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-900 tabular-nums">
+              <Lock className="w-3.5 h-3.5 shrink-0 text-slate-400" aria-hidden />
+              {wholeHours(rule.requiredHours)} hours
+            </p>
           </div>
         ) : (
           <label className="block">
@@ -292,7 +301,7 @@ function DetailsCard({ log, rule, onSave, saveState }: {
         <p className="text-xs text-slate-500">
           {rule.percentage}% grant{rule.yearGroup ? `, ${yearGroupLabel(rule.yearGroup)}` : ''}
           {hoursFromAdso
-            ? `: ${formatHours(rule.requiredHours)} hours a term, set by the scholarship office.`
+            ? `: ${wholeHours(rule.requiredHours)} hours a term, set by the scholarship office.`
             : rule.yearGroup
               ? '. Enter the hours the scholarship office gave you.'
               : ". Add your year level to your profile so the office's hours apply, or enter the hours you were given."}
@@ -308,24 +317,27 @@ function SummaryCard({ summary }: { summary: DutySummary }) {
   const stats = [
     {
       label: summary.confirmationRequired ? 'Hours confirmed' : 'Hours completed',
-      value: formatHours(summary.completed),
+      value: wholeHours(summary.completed),
       hint: [
-        summary.specialHours ? `incl. ${formatHours(summary.specialHours)} from events` : '',
-        summary.waitingHours ? `${formatHours(summary.waitingHours)} waiting for your office to confirm` : '',
+        summary.specialHours ? `incl. ${wholeHours(summary.specialHours)} from events` : '',
+        summary.waitingHours ? `${wholeHours(summary.waitingHours)} waiting for your office to confirm` : '',
         summary.flaggedCount ? `${summary.flaggedCount} flagged by your office` : '',
       ].filter(Boolean).join(' · ') || undefined,
     },
-    { label: 'Hours remaining', value: summary.remaining === null ? '—' : formatHours(Math.max(0, summary.remaining)), hint: summary.remaining !== null && summary.remaining < 0 ? `${formatHours(-summary.remaining)} over the requirement` : summary.required === null ? 'Enter the required hours' : undefined },
-    { label: 'Weekly hours needed', value: formatHours(summary.weeklyNeeded), hint: summary.weeklyNeeded === null ? (summary.required === null ? undefined : 'Shown once the office sets the deadline') : 'to finish by the deadline' },
+    { label: 'Hours remaining', value: summary.remaining === null ? '—' : wholeHours(Math.max(0, summary.remaining)), hint: summary.remaining !== null && summary.remaining < 0 ? `${wholeHours(-summary.remaining)} over the requirement` : summary.required === null ? 'Enter the required hours' : undefined },
+    // Once the requirement is met there's nothing left to plan per week.
+    done
+      ? { label: 'Weekly hours needed', value: '—', hint: 'None, the requirement is met' }
+      : { label: 'Weekly hours needed', value: wholeHours(summary.weeklyNeeded), hint: summary.weeklyNeeded === null ? (summary.required === null ? undefined : 'Shown once the office sets the deadline') : 'to finish by the deadline' },
   ];
   return (
-    <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-5">
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-5">
       <h3 className="flex items-center gap-2 font-display font-bold text-base text-slate-900"><Target className="w-4 h-4 text-brand-green" aria-hidden />Your progress</h3>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {stats.map(s => (
           <div key={s.label}>
             <p className="text-xs font-semibold text-slate-500">{s.label}</p>
-            <p className="font-display font-black text-3xl text-slate-900 mt-1">{s.value}</p>
+            <p className="font-display font-black text-3xl text-slate-900 mt-1 tabular-nums">{s.value}</p>
             {s.hint && <p className="text-xs text-slate-500 mt-0.5">{s.hint}</p>}
           </div>
         ))}
@@ -336,7 +348,7 @@ function SummaryCard({ summary }: { summary: DutySummary }) {
             <div className={`h-full rounded-full ${done ? 'bg-brand-green' : 'bg-emerald-400'}`} style={{ width: `${pct}%` }} />
           </div>
           <p className="mt-1.5 text-xs font-semibold text-slate-500">
-            {done ? 'Requirement completed' : `${Math.round(pct)}% of ${formatHours(summary.required)} hours`}
+            {done ? 'Requirement completed' : `${Math.round(pct)}% of ${wholeHours(summary.required)} hours`}
           </p>
         </div>
       )}

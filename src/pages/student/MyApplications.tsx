@@ -60,7 +60,7 @@ export default function MyApplications({ applications, onViewScholarship, onResu
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
+    <div className="space-y-5">
       <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Filter by status">
         {filters.map(f => {
           const n = f === 'All' ? applications.length : counts[f] ?? 0;

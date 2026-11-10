@@ -1,6 +1,13 @@
 import React from 'react';
 import { Mail, Phone, MapPin, ExternalLink, ShieldCheck } from 'lucide-react';
 
+// The team, each name linking to their LinkedIn.
+const DEVELOPERS = [
+  { name: 'Paula Ng', url: 'https://www.linkedin.com/in/paula-ng-7b11473b6/' },
+  { name: 'Allyson Martin', url: 'https://www.linkedin.com/in/allyson-martin-908914392/' },
+  { name: 'Patrick Lauron', url: 'https://www.linkedin.com/in/patjeyms/' },
+];
+
 export default function Footer() {
   return (
     <footer id="main-footer" className="bg-slate-900 text-slate-300 pt-12 sm:pt-16 pb-8 border-t border-slate-800">
@@ -91,9 +98,22 @@ export default function Footer() {
           <p id="copyright">
             © {new Date().getFullYear()} De La Salle University–Dasmariñas. All Rights Reserved.
           </p>
-          <p className="flex items-center justify-center space-x-1">
-            <span>Developed by </span>
-            <span className="text-brand-green font-semibold">Paula Ng, Allyson Martin, and Patrick Lauron</span>
+          <p>
+            Developed by{' '}
+            {DEVELOPERS.map((d, i) => (
+              <React.Fragment key={d.url}>
+                {i > 0 && (i === DEVELOPERS.length - 1 ? ', and ' : ', ')}
+                <a
+                  href={d.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${d.name} on LinkedIn`}
+                  className="font-semibold text-brand-green underline-offset-2 hover:text-emerald-400 hover:underline focus:outline-hidden focus-visible:underline"
+                >
+                  {d.name}
+                </a>
+              </React.Fragment>
+            ))}
           </p>
         </div>
       </div>

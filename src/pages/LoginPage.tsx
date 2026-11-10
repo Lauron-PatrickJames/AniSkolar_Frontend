@@ -309,26 +309,30 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
     setError('');
   };
 
-  // Admin (password) and student (Microsoft SSO) both drive the same shared
-  // `signIn` resource from useSignIn(). A failed attempt in one mode (e.g. a
-  // dlsud.edu.ph email — which has no password, only SSO — submitted through
-  // the admin form) can leave that shared resource in a state a different
-  // strategy can't cleanly recover from afterward, which is why the Microsoft
-  // button can silently stop responding until a real sign-in + sign-out fully
-  // resets Clerk's client-side session state. Switching modes is rare and
-  // cheap to hard-reload, so force a full reload instead of trusting the
-  // shared signIn resource to reset itself.
-  const switchToAdmin = () => {
+  // Admin (password) and student (Microsoft SSO) share one `signIn`
+  // resource from useSignIn(). A failed attempt in one mode (e.g. a
+  // dlsud.edu.ph email, which has no password, submitted through the admin
+  // form) can leave it mid-attempt, so switching clears it, along with the
+  // form. The Microsoft button also resets it before every attempt. The
+  // switch happens in place (no reload), so the page doesn't flash the
+  // app's loading screen.
+  const switchMode = (mode: LoginMode) => {
+    void signIn.reset().catch(() => {});
+    setError('');
+    setPassword('');
+    setShowPassword(false);
+    setVerifyStep(null);
+    setResetStep(null);
+    setCode('');
+    setCodeNotice('');
+    setLoginMode(mode);
     const url = new URL(window.location.href);
-    url.searchParams.set('mode', 'admin');
-    window.location.href = url.toString();
+    if (mode === 'admin') url.searchParams.set('mode', 'admin');
+    else url.searchParams.delete('mode');
+    window.history.replaceState(window.history.state, '', url.toString());
   };
-
-  const switchToStudent = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.delete('mode');
-    window.location.href = url.toString();
-  };
+  const switchToAdmin = () => switchMode('admin');
+  const switchToStudent = () => switchMode('student');
 
   return (
     <div

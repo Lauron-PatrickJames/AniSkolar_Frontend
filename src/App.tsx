@@ -926,7 +926,7 @@ export default function App() {
                   <ExploreGrants
                     scholarships={scholarships}
                     applications={applications}
-                    student={student}   // add this line
+                    student={student}
                     holdings={holdings}
                     onViewDetails={handleViewScholarship}
                     onApply={handleApplyScholarship}

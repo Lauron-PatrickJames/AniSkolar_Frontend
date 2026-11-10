@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { OFFICE_LABELS } from '../../data/scholarships';
 import { useAuth } from '@clerk/react';
-import { AlertCircle, Award, CalendarCheck, CheckCircle2, Clock, FileText, Hash, Percent, RefreshCw, Search, ShieldCheck } from 'lucide-react';
+import { AlertCircle, Award, CalendarCheck, CheckCircle2, ChevronRight, Clock, FileText, Hash, Hourglass, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import { Application, Scholarship } from '../../types';
 import { Holdings, SFAG_ID } from '../../utils/eligibility';
 
@@ -16,6 +16,17 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 
 const OFFICE_NAMES: Record<string, string> = { ...OFFICE_LABELS, LSO: 'Admissions and Scholarship Office' };
 
+// "3 weeks", "2 months": how long the student has been a scholar.
+function scholarFor(iso?: string | null): string {
+  if (!iso) return '—';
+  const days = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+  if (days < 1) return 'Since today';
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'}`;
+  if (days < 60) return `${Math.floor(days / 7)} weeks`;
+  if (days < 730) return `${Math.floor(days / 30)} months`;
+  return `${Math.floor(days / 365)} years`;
+}
+
 const formatDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Manila' }) : '—');
 
 export default function MyScholarship({ holdings, scholarships, applications, onNavigate, onViewScholarship, onChosen }: {
@@ -29,6 +40,10 @@ export default function MyScholarship({ holdings, scholarships, applications, on
 }) {
   const held = holdings?.held ?? [];
   const mustChoose = held.length > 1;
+  // Scholarships an office added the student to weren't submitted by them.
+  const submitted = applications.filter(a => !a.awardedDirectly).length;
+  const added = applications.length - submitted;
+  const applicationsHint = [submitted ? `${submitted} submitted` : '', added ? `${added} added by an office` : ''].filter(Boolean).join(' · ') || 'None yet';
 
   if (!holdings) {
     return (
@@ -49,7 +64,7 @@ export default function MyScholarship({ holdings, scholarships, applications, on
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="space-y-4">
       {mustChoose && <ChoosePanel holdings={holdings} scholarships={scholarships} onChosen={onChosen} />}
 
       {!mustChoose && held.map(h => {
@@ -59,28 +74,41 @@ export default function MyScholarship({ holdings, scholarships, applications, on
         const keep = s?.retentionConditions ?? [];
         return (
           <section key={h.scholarshipId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-            <div className="bg-linear-to-br from-brand-green to-emerald-700 p-6 text-white">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold ring-1 ring-white/25">
-                <ShieldCheck className="h-3.5 w-3.5" /> Active scholar
-              </span>
-              <h2 className="mt-3 font-display text-2xl font-bold leading-tight">{h.scholarshipName}</h2>
-              <p className="mt-1 text-sm text-emerald-50">{OFFICE_NAMES[s?.office ?? 'LSO'] ?? s?.provider?.office ?? ''}</p>
+            {/* Hero: name and office on the left, the grant as a big number on
+                the right, with a faint award mark behind. */}
+            <div className="relative overflow-hidden bg-linear-to-br from-brand-green via-emerald-700 to-emerald-800 px-6 py-5 text-white sm:px-8">
+              <Award className="pointer-events-none absolute -right-6 -bottom-10 h-56 w-56 text-white/[0.07]" aria-hidden />
+              <div className="pointer-events-none absolute -top-16 -left-10 h-48 w-48 rounded-full bg-white/5" aria-hidden />
+              <div className="relative flex flex-wrap items-end justify-between gap-6">
+                <div className="min-w-0">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold ring-1 ring-white/25">
+                    <ShieldCheck className="h-3.5 w-3.5" /> Active scholar
+                  </span>
+                  <h2 className="mt-2.5 font-display text-2xl font-bold leading-tight sm:text-3xl">{h.scholarshipName}</h2>
+                  <p className="mt-1 text-sm text-emerald-50">{OFFICE_NAMES[s?.office ?? 'LSO'] ?? s?.provider?.office ?? ''}</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 px-5 py-3 text-right ring-1 ring-white/20 backdrop-blur-sm">
+                  <p className="font-display text-4xl font-bold leading-none">{d?.grantPercentage != null ? `${d.grantPercentage}%` : '—'}</p>
+                  <p className="mt-1 text-xs font-medium text-emerald-50">{d?.grantPercentage != null ? 'tuition discount' : isSfag ? 'grant set by the office' : 'grant'}</p>
+                </div>
+              </div>
             </div>
 
             <dl className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              <Stat icon={Percent} label="Grant" value={d?.grantPercentage != null ? `${d.grantPercentage}%` : isSfag ? 'Set by the office' : '—'} />
               <Stat icon={CalendarCheck} label="Approved on" value={formatDate(d?.approvedAt)} />
+              <Stat icon={Hourglass} label="Scholar for" value={scholarFor(d?.approvedAt)} />
               <Stat icon={Hash} label="Reference" value={d?.referenceCode ?? '—'} mono />
             </dl>
 
-            <div className="grid gap-6 border-t border-slate-100 p-6 lg:grid-cols-2 [&>*]:min-w-0">
+            <div className="space-y-5 border-t border-slate-100 px-6 py-5">
               <div className="space-y-3">
                 <h3 className="text-sm font-bold text-slate-900">To keep your scholarship</h3>
                 {keep.length ? (
-                  <ul className="space-y-2">
+                  <ul className="grid gap-3 sm:grid-cols-2">
                     {keep.map(k => (
-                      <li key={k} className="flex items-start gap-2 text-sm text-slate-600">
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" /> {k}
+                      <li key={k} className="flex items-center gap-3 rounded-xl bg-emerald-50/60 px-4 py-2.5 text-sm font-medium text-slate-700 ring-1 ring-emerald-100">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-brand-green shadow-xs"><CheckCircle2 className="h-4 w-4" /></span>
+                        {k}
                       </li>
                     ))}
                   </ul>
@@ -88,11 +116,11 @@ export default function MyScholarship({ holdings, scholarships, applications, on
               </div>
               <div className="space-y-3">
                 <h3 className="text-sm font-bold text-slate-900">Shortcuts</h3>
-                <div className="grid gap-2">
-                  {!s?.noRenewal && <Shortcut icon={RefreshCw} label="Renew for next semester" hint="Submit your grades each semester" onClick={() => onNavigate('renewals')} />}
-                  {isSfag && <Shortcut icon={Clock} label="Duty hours" hint="Log your duties and see your progress" onClick={() => onNavigate('duty-hours')} />}
-                  <Shortcut icon={FileText} label="My applications" hint={`${applications.length} submitted`} onClick={() => onNavigate('applications')} />
-                  <Shortcut icon={Award} label="Scholarship details" hint="Benefits, requirements and contacts" onClick={() => onViewScholarship(h.scholarshipId)} />
+                <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+                  {!s?.noRenewal && <Shortcut icon={RefreshCw} color="emerald" label="Renew for next semester" hint="Submit your grades each semester" onClick={() => onNavigate('renewals')} />}
+                  {isSfag && <Shortcut icon={Clock} color="amber" label="Duty hours" hint="Log your duties and see your progress" onClick={() => onNavigate('duty-hours')} />}
+                  <Shortcut icon={FileText} color="sky" label="My applications" hint={applicationsHint} onClick={() => onNavigate('applications')} />
+                  <Shortcut icon={Award} color="violet" label="Scholarship details" hint="Benefits, requirements and contacts" onClick={() => onViewScholarship(h.scholarshipId)} />
                 </div>
               </div>
             </div>
@@ -112,7 +140,7 @@ export default function MyScholarship({ holdings, scholarships, applications, on
 
 function Stat({ icon: Icon, label, value, mono }: { icon: React.ElementType; label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center gap-3 p-5">
+    <div className="flex items-center gap-3 px-5 py-3.5">
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-brand-green"><Icon className="h-5 w-5" /></span>
       <div className="min-w-0">
         <dt className="text-xs font-medium text-slate-500">{label}</dt>
@@ -122,14 +150,22 @@ function Stat({ icon: Icon, label, value, mono }: { icon: React.ElementType; lab
   );
 }
 
-function Shortcut({ icon: Icon, label, hint, onClick }: { icon: React.ElementType; label: string; hint: string; onClick: () => void }) {
+const SHORTCUT_COLORS = {
+  emerald: 'bg-emerald-50 text-emerald-700 group-hover:bg-emerald-100',
+  amber: 'bg-amber-50 text-amber-700 group-hover:bg-amber-100',
+  sky: 'bg-sky-50 text-sky-700 group-hover:bg-sky-100',
+  violet: 'bg-violet-50 text-violet-700 group-hover:bg-violet-100',
+};
+
+function Shortcut({ icon: Icon, color, label, hint, onClick }: { icon: React.ElementType; color: keyof typeof SHORTCUT_COLORS; label: string; hint: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-left transition-colors hover:border-brand-green/40 hover:bg-emerald-50/40 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green">
-      <Icon className="h-5 w-5 shrink-0 text-brand-green" />
-      <span className="min-w-0">
+    <button type="button" onClick={onClick} className="group flex items-center gap-3 rounded-xl border border-slate-200 px-3.5 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green">
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${SHORTCUT_COLORS[color]}`}><Icon className="h-5 w-5" /></span>
+      <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold text-slate-800">{label}</span>
         <span className="block truncate text-xs text-slate-500">{hint}</span>
       </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500" />
     </button>
   );
 }

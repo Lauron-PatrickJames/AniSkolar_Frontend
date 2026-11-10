@@ -101,15 +101,21 @@ export default function Sidebar({
       >
         {/* University branding */}
         <div className="px-5 py-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-md border-2 border-white overflow-hidden shrink-0">
-              <img src={logo} alt="AniSkolar logo" className="w-4/5 h-4/5 object-contain" />
+          {/* The logo goes home (the dashboard). */}
+          <button
+            type="button"
+            onClick={() => go('dashboard')}
+            aria-label="AniSkolar, go to Dashboard"
+            className="group -m-1 flex items-center gap-2.5 min-w-0 rounded-xl p-1 text-left focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green"
+          >
+            <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-md border-2 border-white overflow-hidden shrink-0 transition-transform group-hover:scale-105">
+              <img src={logo} alt="" className="w-4/5 h-4/5 object-contain" />
             </div>
             <div className="min-w-0">
-              <h1 className="font-display text-lg font-extrabold leading-none text-brand-green tracking-tight truncate">AniSkolar</h1>
+              <p className="font-display text-lg font-extrabold leading-none text-brand-green tracking-tight truncate">AniSkolar</p>
               <p className="text-xs text-slate-500 font-medium mt-1 truncate">DLSU-Dasmariñas</p>
             </div>
-          </div>
+          </button>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 md:hidden focus:outline-hidden shrink-0"

@@ -259,15 +259,21 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
         }`}
       >
         <div className="flex h-topbar shrink-0 items-center justify-between gap-2 border-b border-line px-4 md:max-lg:justify-center md:max-lg:px-0">
-          <div className="flex min-w-0 items-center gap-2.5">
+          {/* The logo goes home. */}
+          <button
+            type="button"
+            onClick={() => onNavigate('home')}
+            aria-label="AniSkolar, go to Home"
+            className="-m-1 flex min-w-0 items-center gap-2.5 rounded-lg p-1 text-left focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
+          >
             <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface ring-1 ring-line">
               <img src={logo} alt="" className="size-6 object-contain" />
             </span>
-            <div className="min-w-0 md:max-lg:sr-only">
-              <p className="truncate text-sm font-semibold leading-tight text-accent">AniSkolar</p>
-              <p className="truncate text-xs leading-tight text-ink-subtle">Admin console</p>
-            </div>
-          </div>
+            <span className="min-w-0 md:max-lg:sr-only">
+              <span className="block truncate text-sm font-semibold leading-tight text-accent">AniSkolar</span>
+              <span className="block truncate text-xs leading-tight text-ink-subtle">Admin console</span>
+            </span>
+          </button>
           <IconButton ref={closeRef} icon={X} label="Close navigation" onClick={onClose} className="md:hidden" />
         </div>
 

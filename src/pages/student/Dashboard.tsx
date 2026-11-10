@@ -265,8 +265,8 @@ export default function Dashboard({
       {/* Announcements */}
       <section className="rounded-2xl border border-slate-200 bg-white shadow-xs lg:col-span-2">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h3 className="font-display text-base font-bold text-slate-900">Latest from the scholarship office</h3>
-          <button type="button" onClick={() => onNavigate('announcements')} className="inline-flex items-center gap-1 text-sm font-semibold text-brand-green hover:text-brand-green-dark">All announcements <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
+          <h3 className="font-display text-base font-bold text-slate-900"><span className="sm:hidden">Latest news</span><span className="hidden sm:inline">Latest from the scholarship office</span></h3>
+          <button type="button" onClick={() => onNavigate('announcements')} className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-green hover:text-brand-green-dark">See all<span className="hidden sm:inline">&nbsp;announcements</span> <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
         </div>
         {announcements.length === 0 ? (
           <p className="px-5 py-6 text-center text-sm text-slate-500">No announcements yet.</p>

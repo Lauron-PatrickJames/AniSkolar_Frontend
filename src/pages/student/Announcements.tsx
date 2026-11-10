@@ -140,7 +140,7 @@ function Featured({ announcement: a, onOpen }: { announcement: Announcement; onO
   const scholarship = scholarshipName(a);
   return (
     <article className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md lg:grid lg:h-[24rem] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-      <Cover announcement={a} className="aspect-[16/10] lg:aspect-auto lg:h-full" />
+      <Cover announcement={a} className="aspect-[16/7] sm:aspect-[16/10] lg:aspect-auto lg:h-full" />
       <div className="flex min-h-0 flex-col p-6 sm:p-8">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-brand-green/10 px-2.5 py-0.5 text-xs font-semibold text-brand-green">Latest</span>

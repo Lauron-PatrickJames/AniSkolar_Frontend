@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useSession, useUser } from '@clerk/react';
+import { useReverification, useSession, useUser } from '@clerk/react';
+import { isReverificationCancelledError } from '@clerk/react/errors';
 import { KeyRound, Laptop, LogOut, Smartphone } from 'lucide-react';
 import { Alert, Badge, Button, Card, Checkbox, ConfirmDialog, Field, Skeleton, TextInput } from '../pages/admin/AdminUI';
 
@@ -11,7 +12,12 @@ import { Alert, Badge, Button, Card, Checkbox, ConfirmDialog, Field, Skeleton, T
 
 type SessionRow = Awaited<ReturnType<NonNullable<ReturnType<typeof useUser>['user']>['getSessions']>>[number];
 
+// Signing out a device, turning on two-step and changing the password are
+// sensitive: Clerk may ask the user to confirm it's them first. The
+// actions go through useReverification, which shows Clerk's prompt and
+// retries; closing the prompt isn't an error.
 const errorText = (err: unknown, fallback: string) => {
+  if (isReverificationCancelledError(err)) return '';
   const e = err as { errors?: { longMessage?: string; message?: string }[]; message?: string };
   return e?.errors?.[0]?.longMessage || e?.errors?.[0]?.message || e?.message || fallback;
 };
@@ -39,6 +45,7 @@ function PasswordCard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
+  const updatePassword = useReverification((params: Parameters<NonNullable<typeof user>['updatePassword']>[0]) => user!.updatePassword(params));
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +57,7 @@ function PasswordCard() {
     setBusy(true);
     setError('');
     try {
-      await user.updatePassword({ currentPassword: current, newPassword: next, signOutOfOtherSessions: signOutOthers });
+      await updatePassword({ currentPassword: current, newPassword: next, signOutOfOtherSessions: signOutOthers });
       setCurrent(''); setNext(''); setConfirm('');
       setDone(true);
     } catch (err) {
@@ -87,6 +94,9 @@ function TwoStepCard() {
   const [confirmOff, setConfirmOff] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const createTOTP = useReverification(() => user!.createTOTP());
+  const createBackupCode = useReverification(() => user!.createBackupCode());
+  const disableTOTP = useReverification(() => user!.disableTOTP());
   if (!user) return null;
 
   const run = async (fn: () => Promise<void>, fallback: string) => {
@@ -101,7 +111,7 @@ function TwoStepCard() {
     } finally { setBusy(false); }
   };
   const start = () => run(async () => {
-    const totp = await user.createTOTP();
+    const totp = await createTOTP();
     setSetup({ secret: totp.secret ?? '', uri: totp.uri ?? '' });
     setCode('');
   }, 'Couldn’t start the setup.');
@@ -115,9 +125,9 @@ function TwoStepCard() {
       await user.reload();
     }, 'That code didn’t work. Check the app and try again.');
   };
-  const newBackupCodes = () => run(async () => setBackupCodes((await user.createBackupCode()).codes), 'Couldn’t make new backup codes.');
+  const newBackupCodes = () => run(async () => setBackupCodes((await createBackupCode()).codes), 'Couldn’t make new backup codes.');
   const turnOff = () => run(async () => {
-    await user.disableTOTP();
+    await disableTOTP();
     await user.reload();
     setConfirmOff(false);
     setBackupCodes(null);
@@ -184,6 +194,7 @@ function DevicesCard() {
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const revoke = useReverification((s: SessionRow) => s.revoke());
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -199,7 +210,7 @@ function DevicesCard() {
   const signOut = async (s: SessionRow) => {
     setBusyId(s.id);
     setError('');
-    try { await s.revoke(); await load(); } catch (err) { setError(errorText(err, 'Couldn’t sign that device out.')); } finally { setBusyId(null); }
+    try { await revoke(s); await load(); } catch (err) { setError(errorText(err, 'Couldn’t sign that device out.')); } finally { setBusyId(null); }
   };
 
   return (

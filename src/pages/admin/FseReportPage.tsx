@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Calculator, Download, FileSpreadsheet, Trash2, Upload } from 'lucide-react';
 import { API_BASE_URL, academicYearOf, authHeaders, formatDate, formatDateTime } from './adminData';
 import { ResultDialog,
@@ -6,16 +6,21 @@ import { ResultDialog,
   SearchInput, Select, Table, TableSkeleton, Td, TextInput, Th, Toast, Tr
 } from './AdminUI';
 import {
-  CATEGORY_LABELS, FSE_TERMS, FseCategory, FseReport, FseScholarship, FseSpecialFunding, FseTerm, ParseResult, SPECIAL_FUNDING_LABELS, exportAcademicYear, formatFse,
+  CATEGORY_LABELS, FSE_TERMS, FseCategory, FseReport, FseScholarship, FseSpecialFunding, FseTerm, ParseResult, SPECIAL_FUNDING_LABELS, formatFse,
   guessSpecialFunding,
-  formatPct, parseRegistrarWorkbook, summarize
+  formatPct, parseRegistrarWorkbook, rememberCategories, summarize
 } from './fse';
+import { exportAcademicYear } from './fseExport';
 
 // AdSO page for the Full Scholarship Equivalent: upload a term's registrar
 // export, review how each scholarship is counted, save it, and read or
 // export the FSE summary.
 
-interface SavedSummary { id: string; academicYear: string; term: FseTerm; population: number; updatedAt?: string; updatedBy?: string }
+// A saved term from GET /api/fse: its scholarships come without their scholar rows.
+interface SavedSummary {
+  id: string; academicYear: string; term: FseTerm; population: number; updatedAt?: string; updatedBy?: string;
+  scholarships?: Pick<FseScholarship, 'code' | 'category' | 'specialFunding'>[];
+}
 
 const termLabel = (r: { academicYear: string; term: string }) => `${r.academicYear} · ${r.term}`;
 
@@ -80,7 +85,7 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
         if (!res.ok) throw new Error(body.error || 'Failed to load the other semester.');
         return body.report as FseReport;
       }));
-      exportAcademicYear(report.academicYear, reports.length ? reports : [report]);
+      await exportAcademicYear(report.academicYear, reports.length ? reports : [report]);
     } catch (err) {
       setReportError(err instanceof Error ? err.message : 'Export failed.');
     }
@@ -135,7 +140,7 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
           <EmptyState
             icon={Calculator}
             title="No FSE reports yet"
-            description="Upload the registrar's scholarship export (.xls)."
+            description="Upload the registrar's scholarship export or the office's FSE workbook (.xls, .xlsx)."
             action={<Button variant="primary" icon={Upload} onClick={() => setUploading(true)}>Upload term</Button>}
           />
         </Card>
@@ -288,16 +293,30 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
   const [attempted, setAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  // Categories filled in from the reports saved before.
+  const [remembered, setRemembered] = useState(0);
 
   const onFile = async (file: File | undefined) => {
     setParseError('');
     setParsed(null);
+    setRemembered(0);
     if (!file) return;
     setFileName(file.name);
     try {
-      const result = parseRegistrarWorkbook(await file.arrayBuffer());
+      const result = parseRegistrarWorkbook(await file.arrayBuffer(), term);
+      // Where the file names no category (the registrar's report), use what
+      // the scholarship was counted as last time. A category in the file wins.
+      const memory = rememberCategories(existing);
+      let filled = 0;
+      setRows(result.scholarships.map(s => {
+        const last = memory.get(s.code);
+        const category = s.category ?? last?.category ?? null;
+        if (!s.category && category) filled++;
+        const specialFunding = guessSpecialFunding(s.subcategory) ?? (category === 'special' ? last?.specialFunding ?? null : null);
+        return { ...s, category, include: true, specialFunding };
+      }));
       setParsed(result);
-      setRows(result.scholarships.map(s => ({ ...s, include: true, specialFunding: guessSpecialFunding(s.subcategory) })));
+      setRemembered(filled);
     } catch (err) {
       setParseError(err instanceof Error ? err.message : "Couldn't read that file.");
     }
@@ -321,9 +340,23 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
   const replacing = existing.find(r => r.academicYear === academicYear && r.term === term);
   const preview = parsed && !errors.population ? summarize({ scholarships: included, population: pop }) : null;
 
+  // Scrolls to the first thing that's missing and puts the cursor on it.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const goToFirstMissing = () => {
+    requestAnimationFrame(() => {
+      const target = bodyRef.current?.querySelector<HTMLElement>('[data-missing="true"]');
+      if (!target) return;
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      // The control to fill in: the last select in a row (funding, else
+      // category), or the field's input.
+      const controls = target.querySelectorAll<HTMLElement>('select:not([disabled]), input:not([type="checkbox"]):not([disabled])');
+      (controls[controls.length - 1] ?? target).focus({ preventScroll: true });
+    });
+  };
+
   const save = async () => {
     setAttempted(true);
-    if (Object.values(errors).some(Boolean)) return;
+    if (Object.values(errors).some(Boolean)) { goToFirstMissing(); return; }
     setSaving(true);
     setSaveError('');
     try {
@@ -332,7 +365,7 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
         headers: await authHeaders(getToken, true),
         body: JSON.stringify({
           academicYear, term, population: pop, spoonRecipients: spoonCount, asOf: asOf || undefined, fileName,
-          scholarships: included.map(({ include: _include, part: _part, discountRule: _rule, ...s }) => ({ ...s, specialFunding: s.category === 'special' ? s.specialFunding : null }))
+          scholarships: included.map(({ include: _include, part: _part, partLabel: _label, discountRule: _rule, ...s }) => ({ ...s, specialFunding: s.category === 'special' ? s.specialFunding : null }))
         })
       });
       const body = await res.json().catch(() => ({}));
@@ -360,8 +393,8 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
         </>
       }
     >
-      <div className="space-y-5">
-        <Field label="Registrar export" error={parseError || undefined}>
+      <div ref={bodyRef} className="space-y-5">
+        <Field label="Registrar export or FSE workbook" helper={!parseError && !parsed ? 'A workbook with the tabs Internal Academic, Internal Non Academic, Externally Funded and Special Program is read tab by tab.' : undefined} error={parseError || undefined}>
           <input
             type="file"
             accept=".xls,.xlsx"
@@ -374,8 +407,10 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
           <>
             <p className="flex items-center gap-2 text-sm text-ink-muted">
               <FileSpreadsheet className="size-4 text-accent" aria-hidden />
-              Sheet “{parsed.sheetName}”: {rows.length} scholarships, {rows.reduce((n, r) => n + r.scholars.length, 0).toLocaleString()} scholars.
+              {parsed.fromTabs ? 'Tabs' : 'Sheet'} “{parsed.sheetName}”: {rows.length} scholarships, {rows.reduce((n, r) => n + r.scholars.length, 0).toLocaleString()} scholars.
             </p>
+            {parsed.fromTabs && <p className="text-xs text-ink-subtle">Each scholarship is counted under its tab’s category. Change one below if needed.</p>}
+            {remembered > 0 && <p className="text-xs text-ink-subtle">{remembered} {remembered === 1 ? 'category was' : 'categories were'} filled in from the last saved report. Check them below.</p>}
             {parsed.warnings.length > 0 && (
               <Alert tone="warning"><ul className="list-disc space-y-0.5 pl-4">{parsed.warnings.map(w => <li key={w}>{w}</li>)}</ul></Alert>
             )}
@@ -392,13 +427,13 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
                 </Select>
               </Field>
               <Field label="Student population" helper="Total enrolled (or FTE) for the term." error={attempted && errors.population ? errors.population : undefined}>
-                <TextInput type="number" min={1} inputMode="numeric" value={population} onChange={e => setPopulation(e.target.value)} placeholder="e.g. 8541" />
+                <TextInput data-missing={attempted && !!errors.population} type="number" min={1} inputMode="numeric" value={population} onChange={e => setPopulation(e.target.value)} placeholder="e.g. 8541" />
               </Field>
               <Field label="As of" optional>
                 <TextInput type="date" value={asOf} onChange={e => setAsOf(e.target.value)} />
               </Field>
               <Field label="Lasallian SPOON recipients" optional error={attempted && errors.spoon ? errors.spoon : undefined}>
-                <TextInput type="number" min={0} inputMode="numeric" value={spoon} onChange={e => setSpoon(e.target.value)} placeholder="e.g. 18" />
+                <TextInput data-missing={attempted && !!errors.spoon} type="number" min={0} inputMode="numeric" value={spoon} onChange={e => setSpoon(e.target.value)} placeholder="e.g. 18" />
               </Field>
             </div>
             {replacing && <Alert tone="warning">A report for {termLabel(replacing)} is already saved. Saving replaces it.</Alert>}
@@ -407,7 +442,9 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
               <p className="mb-1 text-sm font-medium text-ink">Scholarships</p>
               <p className="mb-2 text-xs text-ink-subtle">
                 Leave out any the office doesn't count in the FSE, and set a category where the export has none.
-                {parts.length > 1 && ' The export comes in parts (one per report page); “Set all to” classifies a whole part at once.'}
+                {parts.length > 1 && (parsed.fromTabs
+                  ? ' Grouped by tab; “Set all to” changes a whole tab at once.'
+                  : ' The export comes in parts (one per report page); “Set all to” classifies a whole part at once.')}
               </p>
               {attempted && (errors.category || errors.funding || errors.empty) && <p className="mb-2 text-sm text-danger-fg">{errors.category || errors.funding || errors.empty}</p>}
               <ul className="max-h-96 overflow-y-auto rounded-control ring-1 ring-inset ring-line">
@@ -418,12 +455,12 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
                       {parts.length > 1 && (
                         <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-muted px-3 py-2">
                           <span className="text-xs font-medium text-ink">
-                            Part {part} <span className="font-normal text-ink-subtle">· {partRows.length} scholarships · {partRows.reduce((n, r) => n + r.scholars.length, 0).toLocaleString()} scholars</span>
+                            {partRows[0]?.partLabel ?? `Part ${part}`} <span className="font-normal text-ink-subtle">· {partRows.length} scholarships · {partRows.reduce((n, r) => n + r.scholars.length, 0).toLocaleString()} scholars</span>
                           </span>
                           <Select
                             value=""
                             onChange={v => v && setRows(prev => prev.map(r => ((r.part ?? 1) === part && r.include ? { ...r, category: v as FseCategory } : r)))}
-                            label={`Set the category for all of part ${part}`}
+                            label={`Set the category for all of ${partRows[0]?.partLabel ?? `part ${part}`}`}
                             className="w-56"
                           >
                             <option value="">Set all to…</option>
@@ -432,8 +469,15 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
                         </div>
                       )}
                       <ul className="divide-y divide-line">
-                {partRows.map(r => (
-                  <li key={r.code} className={`flex flex-wrap items-center gap-3 px-3 py-2 ${r.include ? '' : 'opacity-60'}`}>
+                {partRows.map(r => {
+                  // Missing its category or, for a special program, who funds it.
+                  const missing = attempted && r.include && (!r.category || (r.category === 'special' && !r.specialFunding));
+                  return (
+                  <li
+                    key={r.code}
+                    data-missing={missing}
+                    className={`flex flex-wrap items-center gap-3 px-3 py-2 scroll-mt-14 ${r.include ? '' : 'opacity-60'} ${missing ? 'bg-warning-bg ring-2 ring-inset ring-warning-solid' : ''}`}
+                  >
                     <Checkbox checked={r.include} onChange={include => set(r.code, { include })} label={<span className="font-mono text-xs">{r.code}</span>} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm text-ink" title={r.name}>{r.name}</span>
@@ -465,7 +509,8 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
                     {r.include && !r.category && <Badge tone="warning">Needs category</Badge>}
                     {r.include && r.category === 'special' && !r.specialFunding && <Badge tone="warning">Needs funding</Badge>}
                   </li>
-                ))}
+                  );
+                })}
                       </ul>
                     </li>
                   );

@@ -40,10 +40,10 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
 }) {
   const program = findProgram(draft.programCode);
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 @2xl:space-y-4">
+      <div className="space-y-5 @2xl:grid @2xl:grid-cols-[13rem_minmax(0,1fr)] @2xl:items-start @2xl:gap-4 @2xl:space-y-0">
       {extra}
       {locked.program ?? (
-        <>
           <Slot name="programCode">
             <Field label="Program" error={errorFor('programCode')} helper={!errorFor('programCode') ? 'Search by name or code, e.g. “BSIT” or “accountancy”.' : undefined}>
               <Combobox
@@ -56,18 +56,19 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
               />
             </Field>
           </Slot>
-          {program && (
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-control bg-surface-muted px-3 py-2.5 text-sm sm:grid-cols-[auto_1fr]">
+      )}
+      </div>
+      {!locked.program && program && (
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-control bg-surface-muted px-3 py-2.5 text-sm sm:grid-cols-[auto_1fr] @2xl:grid-cols-[auto_1fr_auto_auto] @2xl:py-2">
               <dt className="text-ink-subtle">Department</dt>
               <dd className="text-ink">{collegeName(program.college)}</dd>
               <dt className="text-ink-subtle">Program code</dt>
               <dd className="text-ink">{program.code}</dd>
             </dl>
-          )}
-        </>
       )}
+      <div className="space-y-5 @2xl:grid @2xl:grid-cols-3 @2xl:items-start @2xl:gap-4 @2xl:space-y-0">
       {locked.enrollment ?? (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:col-span-2 @2xl:gap-4">
           <Slot name="yearLevel">
             <Field label="Year level" error={errorFor('yearLevel')}>
               <Select value={draft.yearLevel} onChange={v => { update({ yearLevel: v }); touch('yearLevel'); }}>
@@ -84,7 +85,7 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
         </div>
       )}
       {locked.gpa ?? (
-        <Slot name="gpa" className="sm:max-w-[calc(50%-0.625rem)]">
+        <Slot name="gpa" className="sm:max-w-[calc(50%-0.625rem)] @2xl:max-w-none">
           <Field label="Cumulative GPA" optional={draft.yearLevel === '1st Year'} error={errorFor('gpa')} helper={!errorFor('gpa') ? (draft.yearLevel === '1st Year' ? '0.00 to 4.00. Incoming freshmen without a college GPA yet can leave this blank.' : '0.00 to 4.00, as on your latest grades.') : undefined}>
             <TextInput
               value={draft.gpa}
@@ -101,6 +102,7 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
           </Field>
         </Slot>
       )}
+      </div>
     </div>
   );
 }
@@ -133,11 +135,13 @@ export function PersonalFields({ draft, update, errorFor, touch, lockNames = fal
   const today = new Date();
   const maxDob = `${today.getFullYear() - 10}-12-31`;
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 @2xl:space-y-4">
+      {/* Wide forms: first, last | middle, suffix on one row. */}
+      <div className="space-y-5 @2xl:grid @2xl:grid-cols-2 @2xl:items-start @2xl:gap-4 @2xl:space-y-0">
       <div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:gap-4">
           <Slot name="firstName">
-            <Field label="First name" error={lockNames ? undefined : errorFor('firstName')} helper={!lockNames && !errorFor('firstName') ? 'All of your given names, e.g. “Paolo Stephen”.' : undefined}>
+            <Field label="First name" error={lockNames ? undefined : errorFor('firstName')} helper={!lockNames && !errorFor('firstName') ? 'All of your given names, e.g. “Juan Miguel”.' : undefined}>
               <TextInput value={draft.firstName} onChange={e => update({ firstName: e.target.value })} onBlur={() => touch('firstName')} maxLength={60} autoComplete="given-name" readOnly={lockNames} disabled={lockNames} />
             </Field>
           </Slot>
@@ -147,9 +151,9 @@ export function PersonalFields({ draft, update, errorFor, touch, lockNames = fal
             </Field>
           </Slot>
         </div>
-        {nameHint && <p className="mt-1.5 text-xs text-ink-subtle">{nameHint}</p>}
+        {nameHint && <p className="mt-1.5 text-xs text-ink-subtle @2xl:hidden">{nameHint}</p>}
       </div>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-[1fr_10rem]">
+      <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] gap-3 sm:grid-cols-[1fr_10rem] sm:gap-5 @2xl:grid-cols-[minmax(0,1fr)_6.5rem] @2xl:gap-4">
         <Slot name="middleName">
           <Field label="Middle name" error={errorFor('middleName')} helper={!errorFor('middleName') ? 'Your full middle name, not just the initial.' : undefined}>
             <TextInput value={draft.middleName} onChange={e => update({ middleName: e.target.value })} onBlur={() => touch('middleName')} maxLength={60} autoComplete="additional-name" />
@@ -164,7 +168,9 @@ export function PersonalFields({ draft, update, errorFor, touch, lockNames = fal
           </Field>
         </Slot>
       </div>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+      {nameHint && <p className="hidden text-xs text-ink-subtle @2xl:col-span-2 @2xl:-mt-2 @2xl:block">{nameHint}</p>}
+      </div>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:gap-4 @3xl:grid-cols-4">
         <Slot name="dateOfBirth">
           <Field label="Date of birth" error={errorFor('dateOfBirth')}>
             <DatePicker value={draft.dateOfBirth} onChange={v => update({ dateOfBirth: v })} onBlur={() => touch('dateOfBirth')} min="1925-01-01" max={maxDob} defaultMonth={`${today.getFullYear() - 18}-01-01`} placeholder="Select your birthday" />
@@ -199,13 +205,13 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
   const ph = draft.country === PHILIPPINES;
   const cityOptions: ComboboxOption[] = (CITIES_BY_PROVINCE[draft.province] ?? []).map(c => ({ value: c, label: c }));
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 @2xl:space-y-4">
       {email && (
         <Field label="University email" helper="From your university account.">
           <TextInput value={email} readOnly disabled />
         </Field>
       )}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:gap-4">
         <Slot name="mobileNumber">
           <Field label="Mobile number" error={errorFor('mobileNumber')} helper={!errorFor('mobileNumber') ? 'The office uses this to reach you about your application.' : undefined}>
             <TextInput
@@ -226,14 +232,14 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
         </Slot>
       </div>
 
-      <fieldset className="space-y-5">
+      <fieldset className="space-y-5 @2xl:space-y-4">
         <legend className="mb-3 text-sm font-semibold text-ink">Home address</legend>
         <Slot name="homeAddress">
           <Field label="Street address" error={errorFor('homeAddress')} helper="House or unit number, street, subdivision and barangay.">
             <TextInput value={draft.homeAddress} onChange={e => update({ homeAddress: e.target.value })} onBlur={() => touch('homeAddress')} autoComplete="street-address" maxLength={200} />
           </Field>
         </Slot>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:gap-4 @3xl:grid-cols-4">
           <Slot name="country">
             <Field label="Country" error={errorFor('country')}>
               <Select
@@ -323,7 +329,7 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
             label="Deceased"
           />
         </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] @2xl:gap-4">
           <Slot name={nameKey}>
             <Field label="Full name" error={errorFor(nameKey)}>
               <TextInput value={draft[nameKey]} onChange={e => update({ [nameKey]: e.target.value })} onBlur={() => touch(nameKey)} maxLength={120} placeholder="First, middle and last name" />
@@ -362,7 +368,7 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 @2xl:space-y-5">
       {parent('father')}
       {parent('mother')}
       <fieldset data-field="guardianType" className="space-y-3">
@@ -376,7 +382,7 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
         {errorFor('guardianType') && <p className="text-xs font-medium text-danger">{errorFor('guardianType')}</p>}
         {draft.guardianType === 'other' && (
           <div className="space-y-5 pt-2">
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:grid-cols-3 @2xl:gap-4">
               <Slot name="guardianName">
                 <Field label="Full name" error={errorFor('guardianName')}>
                   <TextInput value={draft.guardianName} onChange={e => update({ guardianName: e.target.value })} onBlur={() => touch('guardianName')} maxLength={120} />

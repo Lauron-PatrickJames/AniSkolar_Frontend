@@ -1,16 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
 import {
-  Award, Bell, Calendar, CalendarClock, Clock, Facebook, FileEdit, ImagePlus, Mail, Megaphone, Pencil, Pin, PinOff,
+  Award, Bell, Calendar, CalendarClock, ChevronLeft, ChevronRight, Clock, Eye, Facebook, FileEdit, ImagePlus, Mail, Megaphone, Pencil, Pin, PinOff,
   Plus, RotateCw, Send, Trash2, X
 } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatShortDate } from './adminData';
-import { mockScholarships, officeOf } from '../../data/scholarships';
-import { ScholarshipOffice } from '../../types';
+import { OFFICE_LABELS, mockScholarships, officeOf } from '../../data/scholarships';
+import { Announcement, ScholarshipOffice } from '../../types';
+import { AnnouncementArticle } from '../../components/AnnouncementCard';
 import EmailAudience, { DEFAULT_EMAIL_TARGET, EmailTarget, describeTarget } from './EmailAudience';
 import {
   Alert, Badge, Button, Card, Checkbox, ConfirmDialog, DropdownMenu, EmptyState, ErrorState, Field, IconButton, Modal,
-  PageHeader, SearchInput, Select, TableSkeleton, Tabs, TextInput, Textarea, Toolbar, Tooltip
+  PageHeader, SearchInput, SegmentedControl, Select, TableSkeleton, Tabs, TextInput, Textarea, Toolbar, Tooltip
 } from './AdminUI';
 import { ScheduleFields, ScheduleState, formatScheduled, initialSchedule, scheduleToIso } from './announcementSchedule';
 
@@ -195,6 +196,88 @@ function PreviewImages({ images }: { images: string[] }) {
   );
 }
 
+// A student-feed card for the preview, matching the student Announcements
+// page: the first image shown whole over a blur of itself, or a plain panel.
+function StudentPreview({ title, description, category, images, pinned, scholarship }: {
+  title: string; description: string; category: Category; images: string[]; pinned: boolean; scholarship?: string;
+}) {
+  const Icon = CATEGORY_ICONS[category];
+  return (
+    <div className="overflow-hidden rounded-card bg-surface ring-1 ring-line" aria-label="Student feed preview">
+      <div className="relative aspect-[16/10] overflow-hidden bg-accent-subtle">
+        {images[0] ? (
+          <>
+            <img src={images[0]} alt="" className="absolute inset-0 size-full scale-110 object-cover opacity-60 blur-2xl" />
+            <img src={images[0]} alt="" className="relative mx-auto h-full w-auto max-w-full object-contain" />
+          </>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-accent">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-surface shadow-card ring-1 ring-accent/15"><Icon className="size-5" aria-hidden /></span>
+            <span className="text-[11px] font-semibold uppercase tracking-widest">{category}</span>
+          </div>
+        )}
+        {images.length > 1 && (
+          <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">{images.length} photos</span>
+        )}
+        {pinned && (
+          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-surface/95 px-2 py-0.5 text-[11px] font-semibold text-ink shadow-card"><Pin className="size-3" aria-hidden />Pinned</span>
+        )}
+      </div>
+      <div className="space-y-1.5 p-4">
+        <p className="text-[11px] text-ink-subtle"><span className="font-semibold text-ink-muted">{category}</span> · Today{scholarship ? ` · ${scholarship}` : ''}</p>
+        <p className="line-clamp-2 font-display text-base font-semibold leading-snug text-ink">
+          {title.trim() || <span className="text-ink-subtle">Your title</span>}
+        </p>
+        <p className="line-clamp-3 text-sm leading-relaxed text-ink-muted">
+          {description.trim() || <span className="text-ink-subtle">Your summary appears here, under the title.</span>}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// A titled group in the editor.
+function EditorSection({ title, description, children, aside }: { title: string; description?: string; children: React.ReactNode; aside?: React.ReactNode }) {
+  return (
+    <section className="space-y-4">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-ink">{title}</h3>
+          {description && <p className="mt-0.5 text-xs text-ink-subtle">{description}</p>}
+        </div>
+        {aside}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+// A switch-style card for "also email" and "also post to Facebook".
+function ShareOption({ icon: Icon, title, description, checked, onChange, disabled, children }: {
+  icon: React.ElementType; title: string; description: React.ReactNode; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; children?: React.ReactNode;
+}) {
+  const id = React.useId();
+  return (
+    <div className={`rounded-control bg-surface ring-1 transition-colors ${checked ? 'ring-accent/40' : 'ring-line'}`}>
+      <label htmlFor={id} className={`flex items-start gap-3 p-3.5 ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+        <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${checked ? 'bg-accent-subtle text-accent' : 'bg-neutral-bg text-ink-subtle'}`}>
+          <Icon className="size-4" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-ink">{title}</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-ink-subtle">{description}</span>
+        </span>
+        <span className="relative mt-1 inline-flex shrink-0">
+          <input id={id} type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={e => onChange(e.target.checked)} className="peer sr-only" />
+          <span aria-hidden className="h-5 w-9 rounded-full bg-line-strong transition-colors peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2" />
+          <span aria-hidden className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
+        </span>
+      </label>
+      {children && <div className="border-t border-line px-3.5 pb-3.5 pt-3">{children}</div>}
+    </div>
+  );
+}
+
 function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToken, ownOffice }: {
   initial: EditorState;
   ownOffice: ScholarshipOffice;
@@ -212,6 +295,9 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
     initial.existingImages.map(img => ({ key: img.id, existingId: img.id, src: imageSrc(img.url) }))
   );
   const [imageError, setImageError] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [previewTab, setPreviewTab] = useState<'students' | 'facebook'>('students');
   // Errors stay hidden until the first save attempt, then update live.
   const [attempted, setAttempted] = useState(false);
   const [savingAs, setSavingAs] = useState<'draft' | 'publish' | null>(null);
@@ -228,6 +314,24 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
   const errors = attempted ? validate(form) : {};
   const scheduleError = attempted && scheduling ? scheduleToIso(form.schedule).error : undefined;
   const errorFields = Object.keys(errors) as TextField[];
+  const showFb = isAdso && form.fbEnabled;
+  const tab = showFb ? previewTab : 'students';
+
+  // Anything typed or changed since the editor opened.
+  const dirty = useMemo(() => {
+    const { schedule: s0, existingImages: _e0, ...a } = initial;
+    const { schedule: s1, existingImages: _e1, ...b } = form;
+    return JSON.stringify(a) !== JSON.stringify(b)
+      || JSON.stringify(s0) !== JSON.stringify(s1)
+      || images.length !== initial.existingImages.length
+      || images.some((img, i) => img.existingId !== initial.existingImages[i]?.id);
+  }, [form, images, initial]);
+
+  const requestClose = () => {
+    if (isSaving) return;
+    if (dirty) setConfirmDiscard(true);
+    else onClose();
+  };
 
   // Object URLs for newly picked images are released when they're removed
   // (removeImage) or when the editor closes (here).
@@ -239,9 +343,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
 
   const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setForm(f => ({ ...f, [key]: value }));
 
-  const pickImages = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = '';
+  const addFiles = (files: File[]) => {
     if (files.length === 0) return;
     const problems: string[] = [];
     const accepted = files.filter(file => {
@@ -260,6 +362,12 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
     setImages(prev => [...prev, ...added]);
   };
 
+  const pickImages = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    addFiles(files);
+  };
+
   const removeImage = (key: string) => {
     setImageError('');
     setImages(prev => {
@@ -268,6 +376,15 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
       return prev.filter(img => img.key !== key);
     });
   };
+
+  // Images keep the order shown; the first is the cover.
+  const moveImage = (from: number, to: number) => setImages(prev => {
+    if (to < 0 || to >= prev.length) return prev;
+    const next = [...prev];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    return next;
+  });
 
   const submit = (publish: boolean) => {
     if (isSaving) return;
@@ -283,187 +400,303 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
     onSave(form, images, publish);
   };
 
-  const counter = (key: TextField) => `${form[key].length}/${LIMITS[key]}`;
+  // The first sentence or two of the body, as a starting summary.
+  const summaryFromBody = () => {
+    const text = form.content.trim().replace(/\s+/g, ' ');
+    const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [text];
+    let out = '';
+    for (const s of sentences) {
+      if ((out + s).length > 220) break;
+      out += s;
+    }
+    set('description', (out || text.slice(0, 220)).trim());
+  };
+
+  // Shown only once a field gets close to its limit.
+  const counter = (key: TextField) => (form[key].length >= LIMITS[key] * 0.8 ? `${form[key].length}/${LIMITS[key]}` : undefined);
   const primaryLabel = isEdit && isLive
     ? 'Save changes'
     : scheduling
       ? (wasScheduled ? 'Save schedule' : 'Schedule')
       : wasScheduled
         ? 'Publish now'
-        : form.fbEnabled ? 'Publish and post to Facebook' : 'Publish';
+        : 'Publish';
   const fbHelp = isLive && form.fbEnabled
     ? 'Saving updates the Facebook post. Turning this off deletes it from the Page.'
     : scheduling
       ? 'Posts to the Page when it publishes at the scheduled time.'
       : 'Posts to the Page when you publish. Saving a draft never posts.';
 
+  // One line in the footer saying exactly what the main button will do.
+  const when = isEdit && isLive ? 'Updates the live post' : scheduling ? `Publishes ${formatScheduled(scheduleToIso(form.schedule).iso) || 'at the scheduled time'}` : 'Publishes right away';
+  const channels = ['AniSkolar', ...(form.emailEnabled && !form.emailLocked ? ['email'] : []), ...(showFb ? ['Facebook'] : [])];
+  const summaryLine = `${when} · ${channels.join(', ').replace(/, ([^,]*)$/, ' and $1')}`;
+
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
   return (
-    <Modal
-      title={isEdit ? 'Edit announcement' : 'New announcement'}
-      onClose={onClose}
-      dismissible={!isSaving}
-      initialFocusRef={refs.title}
-      size="lg"
-      footer={
-        <>
-          <Button onClick={onClose} disabled={isSaving}>Cancel</Button>
-          <Button icon={FileEdit} loading={isSaving && savingAs === 'draft'} disabled={isSaving} onClick={() => submit(false)}>
-            {isLive ? 'Unpublish to draft' : wasScheduled ? 'Unschedule to draft' : 'Save as draft'}
-          </Button>
-          <Button variant="primary" icon={scheduling ? CalendarClock : Send} loading={isSaving && savingAs === 'publish'} disabled={isSaving} onClick={() => submit(true)}>
-            {primaryLabel}
-          </Button>
-        </>
-      }
-    >
-      <form className="grid grid-cols-1 gap-6 lg:grid-cols-5" onSubmit={e => { e.preventDefault(); submit(true); }} noValidate>
-        <div className="space-y-5 lg:col-span-3">
-          {error && <Alert tone="danger" title="Couldn't save the announcement">{error}</Alert>}
-          {errorFields.length > 0 && (
-            <Alert tone="danger" title={`Fix ${errorFields.length === 1 ? 'this field' : `these ${errorFields.length} fields`} before saving`}>
-              {errorFields.map(k => FIELD_LABELS[k]).join(', ')}
-            </Alert>
-          )}
+    <>
+      <Modal
+        title={isEdit ? 'Edit announcement' : 'New announcement'}
+        description={isEdit ? undefined : 'Write it once, then choose where it goes.'}
+        onClose={requestClose}
+        dismissible={!isSaving}
+        initialFocusRef={refs.title}
+        size="xl"
+        sheet
+        bodyClassName="p-0"
+        footer={
+          <>
+            <p className="hidden min-w-0 flex-1 items-center gap-2 text-xs text-ink-muted sm:flex">
+              <Send className="size-3.5 shrink-0 text-ink-subtle" aria-hidden />
+              <span className="truncate">{summaryLine}</span>
+              <kbd className="ml-1 hidden shrink-0 rounded border border-line-strong bg-surface px-1 font-sans text-[11px] text-ink-subtle lg:inline">{isMac ? '⌘' : 'Ctrl'}+Enter</kbd>
+            </p>
+            <Button onClick={requestClose} disabled={isSaving}>Cancel</Button>
+            <Button icon={FileEdit} loading={isSaving && savingAs === 'draft'} disabled={isSaving} onClick={() => submit(false)}>
+              {isLive ? 'Unpublish to draft' : wasScheduled ? 'Unschedule to draft' : 'Save as draft'}
+            </Button>
+            <Button variant="primary" icon={scheduling ? CalendarClock : Send} loading={isSaving && savingAs === 'publish'} disabled={isSaving} onClick={() => submit(true)}>
+              {primaryLabel}
+            </Button>
+          </>
+        }
+      >
+        <form
+          className="grid min-h-full grid-cols-1 lg:h-full lg:grid-cols-[minmax(0,1fr)_23rem]"
+          onSubmit={e => { e.preventDefault(); submit(true); }}
+          onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(true); } }}
+          noValidate
+        >
+          {/* Compose */}
+          <div className="space-y-7 px-5 py-5 lg:overflow-y-auto lg:px-7 lg:py-6">
+            {error && <Alert tone="danger" title="Couldn't save the announcement">{error}</Alert>}
+            {errorFields.length > 0 && (
+              <Alert tone="danger" title={`Fix ${errorFields.length === 1 ? 'this field' : `these ${errorFields.length} fields`} before saving`}>
+                {errorFields.map(k => FIELD_LABELS[k]).join(', ')}
+              </Alert>
+            )}
 
-          <Field label="Title" error={errors.title} labelAside={counter('title')}>
-            <TextInput
-              ref={refs.title}
-              value={form.title}
-              onChange={e => set('title', e.target.value)}
-              maxLength={LIMITS.title}
-              placeholder="e.g. 1st Semester Scholarship Application Window Now Open"
-              disabled={isSaving}
-            />
-          </Field>
+            <EditorSection title="Write">
+              <Field label="Title" error={errors.title} labelAside={counter('title')}>
+                <TextInput
+                  ref={refs.title}
+                  value={form.title}
+                  onChange={e => set('title', e.target.value)}
+                  maxLength={LIMITS.title}
+                  placeholder="e.g. 1st Semester Scholarship Application Window Now Open"
+                  disabled={isSaving}
+                  className="h-11 text-base font-semibold"
+                />
+              </Field>
 
-          <Field label="Summary" error={errors.description} labelAside={counter('description')}>
-            <Textarea
-              ref={refs.description}
-              value={form.description}
-              onChange={e => set('description', e.target.value)}
-              rows={2}
-              maxLength={LIMITS.description}
-              placeholder="One or two sentences summarizing the announcement…"
-              className="resize-none"
-              disabled={isSaving}
-            />
-          </Field>
-
-          <Field label="Body" error={errors.content} labelAside={counter('content')}>
-            <Textarea
-              ref={refs.content}
-              value={form.content}
-              onChange={e => set('content', e.target.value)}
-              rows={8}
-              maxLength={LIMITS.content}
-              placeholder="Write the full announcement…"
-              className="resize-y"
-              disabled={isSaving}
-            />
-          </Field>
-
-          <Field
-            label="Images"
-            optional
-            helper={`Up to ${MAX_IMAGES} JPG or PNG images, 10MB each.`}
-            error={imageError || undefined}
-            labelAside={images.length > 0 ? `${images.length}/${MAX_IMAGES}` : undefined}
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              {images.map((img, i) => (
-                <div key={img.key} className="relative">
-                  <img src={img.src} alt={`Image ${i + 1}`} className="size-16 rounded-control object-cover ring-1 ring-line" />
-                  <button
-                    type="button"
-                    onClick={() => removeImage(img.key)}
-                    disabled={isSaving}
-                    aria-label={`Remove image ${i + 1}`}
-                    className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-surface text-ink-muted shadow-sm ring-1 ring-line hover:text-danger-fg disabled:opacity-50"
-                  >
-                    <X className="size-3" aria-hidden />
-                  </button>
+              <Field label="Category">
+                <div role="radiogroup" aria-label="Category" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {CATEGORIES.map(c => {
+                    const Icon = CATEGORY_ICONS[c];
+                    const active = form.category === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => set('category', c)}
+                        disabled={isSaving}
+                        className={`flex h-10 items-center justify-center gap-2 rounded-control text-sm font-medium ring-1 ring-inset transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                          active ? 'bg-accent-subtle text-accent ring-accent' : 'bg-surface text-ink-muted ring-line-strong hover:bg-surface-muted hover:text-ink'}`}
+                      >
+                        <Icon className="size-4" aria-hidden />{c}
+                      </button>
+                    );
+                  })}
                 </div>
-              ))}
-              <input ref={fileInput} type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple className="hidden" onChange={pickImages} disabled={isSaving} />
-              {images.length < MAX_IMAGES && (
-                <Button size="sm" icon={ImagePlus} onClick={() => fileInput.current?.click()} disabled={isSaving}>
-                  {images.length > 0 ? 'Add more' : 'Add images'}
-                </Button>
-              )}
-            </div>
-          </Field>
+              </Field>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <Field label="Category">
-              <Select value={form.category} onChange={v => set('category', v as Category)} disabled={isSaving}>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </Select>
-            </Field>
-            <div className="sm:pt-7">
+              <Field label="Body" error={errors.content} labelAside={counter('content')} helper={!errors.content ? 'Leave a blank line between paragraphs. Web links become clickable for students.' : undefined}>
+                <Textarea
+                  ref={refs.content}
+                  value={form.content}
+                  onChange={e => set('content', e.target.value)}
+                  rows={9}
+                  maxLength={LIMITS.content}
+                  placeholder="Write the full announcement…"
+                  className="resize-y text-[15px] leading-relaxed"
+                  disabled={isSaving}
+                />
+              </Field>
+
+              <Field
+                label="Summary"
+                error={errors.description}
+                labelAside={counter('description') ?? (form.content.trim() && !form.description.trim() ? (
+                  <button type="button" onClick={summaryFromBody} disabled={isSaving} className="font-medium text-accent hover:underline">Use start of body</button>
+                ) : undefined)}
+                helper={!errors.description ? 'Shown under the title on the student feed card.' : undefined}
+              >
+                <Textarea
+                  ref={refs.description}
+                  value={form.description}
+                  onChange={e => set('description', e.target.value)}
+                  rows={2}
+                  maxLength={LIMITS.description}
+                  placeholder="One or two sentences students see before opening it…"
+                  className="resize-none"
+                  disabled={isSaving}
+                />
+              </Field>
+            </EditorSection>
+
+            <EditorSection
+              title="Images"
+              description={`Optional. Up to ${MAX_IMAGES} JPG or PNG images, 10MB each. The first one is the cover.`}
+              aside={images.length > 0 ? <span className="text-xs tabular-nums text-ink-subtle">{images.length}/{MAX_IMAGES}</span> : undefined}
+            >
+              <input ref={fileInput} type="file" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple className="hidden" onChange={pickImages} disabled={isSaving} />
+              {images.length > 0 && (
+                <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 xl:grid-cols-5" aria-label="Images, in order">
+                  {images.map((img, i) => (
+                    <li key={img.key} className="group relative">
+                      <img src={img.src} alt={`Image ${i + 1}`} className="aspect-square w-full rounded-control object-cover ring-1 ring-line" />
+                      {i === 0 && <span className="absolute left-1.5 top-1.5 rounded-badge bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white">Cover</span>}
+                      <div className="absolute inset-x-1.5 bottom-1.5 flex justify-between opacity-100 transition-opacity sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+                        <span className="flex gap-1">
+                          <button type="button" onClick={() => moveImage(i, i - 1)} disabled={isSaving || i === 0} aria-label={`Move image ${i + 1} earlier`} className="flex size-6 items-center justify-center rounded-md bg-surface/95 text-ink-muted shadow-sm ring-1 ring-line hover:text-ink disabled:opacity-40">
+                            <ChevronLeft className="size-3.5" aria-hidden />
+                          </button>
+                          <button type="button" onClick={() => moveImage(i, i + 1)} disabled={isSaving || i === images.length - 1} aria-label={`Move image ${i + 1} later`} className="flex size-6 items-center justify-center rounded-md bg-surface/95 text-ink-muted shadow-sm ring-1 ring-line hover:text-ink disabled:opacity-40">
+                            <ChevronRight className="size-3.5" aria-hidden />
+                          </button>
+                        </span>
+                        <button type="button" onClick={() => removeImage(img.key)} disabled={isSaving} aria-label={`Remove image ${i + 1}`} className="flex size-6 items-center justify-center rounded-md bg-surface/95 text-ink-muted shadow-sm ring-1 ring-line hover:text-danger-fg disabled:opacity-40">
+                          <Trash2 className="size-3.5" aria-hidden />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {images.length < MAX_IMAGES && (
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={e => { e.preventDefault(); setDragging(false); if (!isSaving) addFiles(Array.from(e.dataTransfer.files)); }}
+                  disabled={isSaving}
+                  className={`flex w-full flex-col items-center justify-center gap-1.5 rounded-control border-2 border-dashed px-4 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 ${
+                    images.length ? 'py-4' : 'py-8'} ${dragging ? 'border-accent bg-accent-subtle' : 'border-line-strong hover:border-accent/60 hover:bg-surface-muted'}`}
+                >
+                  <ImagePlus className={`size-6 ${dragging ? 'text-accent' : 'text-ink-subtle'}`} aria-hidden />
+                  <span className="text-sm font-medium text-ink">{dragging ? 'Drop to add' : images.length ? 'Add more images' : 'Drag images here, or click to choose'}</span>
+                  {!images.length && <span className="text-xs text-ink-subtle">Posters and photos show in full on the student feed.</span>}
+                </button>
+              )}
+              {imageError && <p role="alert" className="text-xs font-medium text-danger">{imageError}</p>}
+            </EditorSection>
+
+            <EditorSection title="Details">
+              <Field label="Related scholarship" optional helper="It also shows on that scholarship's page.">
+                <Select value={form.scholarshipId} onChange={v => set('scholarshipId', v)} disabled={isSaving}>
+                  <option value="">None</option>
+                  {scholarshipOptions.map(sch => <option key={sch.id} value={sch.id}>{sch.name}</option>)}
+                </Select>
+              </Field>
               <Checkbox
                 checked={form.isPinned}
                 onChange={v => set('isPinned', v)}
                 disabled={isSaving}
                 label="Pin to top of feed"
+                description="Keeps it above newer announcements until you unpin it."
               />
-            </div>
+            </EditorSection>
           </div>
 
-          {!isLive && (
-            <ScheduleFields value={form.schedule} onChange={v => set('schedule', v)} disabled={isSaving} error={scheduleError} />
-          )}
-
-          <Field label="Related scholarship" optional>
-            <Select value={form.scholarshipId} onChange={v => set('scholarshipId', v)} disabled={isSaving}>
-              <option value="">None</option>
-              {scholarshipOptions.map(sch => <option key={sch.id} value={sch.id}>{sch.name}</option>)}
-            </Select>
-          </Field>
-        </div>
-
-        <div className="space-y-3 lg:col-span-2">
-          <div className="space-y-3 rounded-control bg-surface-muted p-4 ring-1 ring-inset ring-line">
-            <Checkbox
-              checked={form.emailEnabled}
-              onChange={v => set('emailEnabled', v)}
-              disabled={isSaving || form.emailLocked}
-              label="Also email students (Outlook)"
-              description={form.emailLocked
-                ? 'Already emailed. Edits show on AniSkolar but are not emailed again.'
-                : 'Sent once to their school email when this is published (for a scheduled one, at its time), a few batches a minute.'}
-            />
-            {form.emailEnabled && !form.emailLocked && (
-              <EmailAudience
-                value={form.emailTarget}
-                onChange={t => set('emailTarget', t)}
-                relatedScholarshipId={form.scholarshipId}
-                getToken={getToken}
-                disabled={isSaving}
-                onlyScholarshipIds={isAdso ? undefined : scholarshipOptions.map(s => s.id)}
-              />
+          {/* Publish options and preview */}
+          <aside className="space-y-6 border-t border-line bg-surface-muted px-5 py-5 lg:overflow-y-auto lg:border-l lg:border-t-0 lg:px-6 lg:py-6">
+            {!isLive && (
+              <EditorSection title="When">
+                <ScheduleFields value={form.schedule} onChange={v => set('schedule', v)} disabled={isSaving} error={scheduleError} />
+              </EditorSection>
             )}
-            {form.emailLocked && <p className="text-xs text-ink-muted">Sent to: {describeTarget(form.emailTarget)}</p>}
-          </div>
-          {isAdso && (
-            <div className="rounded-control bg-surface-muted p-4 ring-1 ring-inset ring-line">
-              <Checkbox
-                checked={form.fbEnabled}
-                onChange={v => set('fbEnabled', v)}
-                disabled={isSaving}
-                label="Also post to Facebook"
-                description={fbHelp}
-              />
-            </div>
-          )}
-          {isAdso && form.fbEnabled && (
-            <>
-              <p className="text-xs font-medium text-ink-muted">Preview on Facebook</p>
-              <FacebookPreview title={form.title} content={form.content} images={images.map(img => img.src)} />
-            </>
-          )}
-        </div>
-      </form>
-    </Modal>
+
+            <EditorSection title="Also share" description="It always shows on AniSkolar.">
+              <div className="space-y-2.5">
+                <ShareOption
+                  icon={Mail}
+                  title="Email students (Outlook)"
+                  description={form.emailLocked
+                    ? 'Already emailed. Edits show on AniSkolar but are not emailed again.'
+                    : 'Sent once to their school email when this publishes, a few batches a minute.'}
+                  checked={form.emailEnabled}
+                  onChange={v => set('emailEnabled', v)}
+                  disabled={isSaving || form.emailLocked}
+                >
+                  {form.emailEnabled && !form.emailLocked ? (
+                    <EmailAudience
+                      value={form.emailTarget}
+                      onChange={t => set('emailTarget', t)}
+                      relatedScholarshipId={form.scholarshipId}
+                      getToken={getToken}
+                      disabled={isSaving}
+                      onlyScholarshipIds={isAdso ? undefined : scholarshipOptions.map(s => s.id)}
+                    />
+                  ) : form.emailLocked ? (
+                    <p className="text-xs text-ink-muted">Sent to: {describeTarget(form.emailTarget)}</p>
+                  ) : undefined}
+                </ShareOption>
+                {isAdso && (
+                  <ShareOption
+                    icon={Facebook}
+                    title="Post to the Facebook Page"
+                    description={fbHelp}
+                    checked={form.fbEnabled}
+                    onChange={v => set('fbEnabled', v)}
+                    disabled={isSaving}
+                  />
+                )}
+              </div>
+            </EditorSection>
+
+            <EditorSection title="Preview">
+              {showFb && (
+                <SegmentedControl<'students' | 'facebook'>
+                  options={['students', 'facebook']}
+                  value={tab}
+                  onChange={v => v && setPreviewTab(v)}
+                  label="Preview"
+                  renderLabel={o => (o === 'students' ? 'Student feed' : 'Facebook')}
+                />
+              )}
+              {tab === 'students' ? (
+                <StudentPreview
+                  title={form.title}
+                  description={form.description}
+                  category={form.category}
+                  images={images.map(img => img.src)}
+                  pinned={form.isPinned}
+                  scholarship={form.scholarshipId ? scholarshipName(form.scholarshipId) : undefined}
+                />
+              ) : (
+                <FacebookPreview title={form.title} content={form.content} images={images.map(img => img.src)} />
+              )}
+            </EditorSection>
+          </aside>
+        </form>
+      </Modal>
+
+      {confirmDiscard && (
+        <ConfirmDialog
+          title={isEdit ? 'Discard your changes?' : 'Discard this announcement?'}
+          description={isEdit ? 'Your edits will be lost. The saved announcement stays as it was.' : 'What you wrote will be lost. Save it as a draft to finish later.'}
+          confirmLabel="Discard"
+          confirmIcon={Trash2}
+          tone="danger"
+          onConfirm={() => { setConfirmDiscard(false); onClose(); }}
+          onCancel={() => setConfirmDiscard(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -504,6 +737,8 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
   const [saveError, setSaveError] = useState('');
 
   const [pendingDelete, setPendingDelete] = useState<AdminAnnouncement | null>(null);
+  // The announcement open in "Student view".
+  const [viewing, setViewing] = useState<AdminAnnouncement | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
@@ -825,6 +1060,7 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
                 retrying={retryingId === a.id}
                 retryDisabled={!!retryingId}
                 onEdit={() => openEdit(a)}
+                onView={() => setViewing(a)}
                 onTogglePin={() => togglePin(a)}
                 onRetry={() => retryFacebook(a)}
                 onRetryEmail={() => retryEmail(a)}
@@ -844,6 +1080,15 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
           error={saveError}
           getToken={getToken}
           ownOffice={ownOffice}
+        />
+      )}
+
+      {viewing && (
+        <StudentViewDialog
+          a={viewing}
+          office={ownOffice}
+          onClose={() => setViewing(null)}
+          onEdit={() => { const a = viewing; setViewing(null); openEdit(a); }}
         />
       )}
 
@@ -872,8 +1117,74 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
 
 // --- Row -----------------------------------------------------------------------
 
-function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onTogglePin, onRetry, onRetryEmail, onDelete }: {
+// --- Student view -----------------------------------------------------------------
+
+// How the feed formats dates ("July 01, 2026"), matching the backend.
+const feedDate = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }) : '';
+
+// The announcement shaped like GET /api/announcements/feed returns it.
+function toStudentShape(a: AdminAnnouncement, office: ScholarshipOffice): Announcement {
+  return {
+    id: a.id,
+    title: a.title,
+    date: feedDate(a.publishedAt ?? a.scheduledFor ?? a.createdAt),
+    description: a.description,
+    content: a.content,
+    category: a.category,
+    scholarshipId: a.scholarshipId ?? null,
+    postedBy: OFFICE_LABELS[office] ?? null,
+    imageUrls: a.images.map(img => imageSrc(img.url)),
+    fbPermalink: a.fbStatus === 'posted' ? a.fbPermalink : null,
+    publishedAt: a.publishedAt ?? a.scheduledFor ?? a.createdAt
+  };
+}
+
+// Exactly what a student sees when they open the post. Scholars and
+// applicants get the same feed, so one view covers both.
+function StudentViewDialog({ a, office, onClose, onEdit }: { a: AdminAnnouncement; office: ScholarshipOffice; onClose: () => void; onEdit: () => void }) {
+  const notice = a.status === 'draft'
+    ? 'This is a draft, so students can’t see it yet. This is how it will look once published.'
+    : a.status === 'scheduled'
+      ? `Students will see this from ${formatScheduled(a.scheduledFor)}. This is how it will look.`
+      : null;
+  // Start at the top of the post, not on its first link.
+  const topRef = useRef<HTMLDivElement>(null);
+  return (
+    <Modal
+      title="Student view"
+      description="What scholars and applicants see when they open this announcement."
+      icon={<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-accent"><Eye className="size-4" aria-hidden /></span>}
+      onClose={onClose}
+      size="lg"
+      initialFocusRef={topRef}
+      bodyClassName="bg-canvas"
+      footer={
+        <>
+          <Button onClick={onClose}>Close</Button>
+          <Button variant="primary" icon={Pencil} onClick={onEdit}>Edit</Button>
+        </>
+      }
+    >
+      <div ref={topRef} tabIndex={-1} className="space-y-4 p-4 outline-none sm:p-6">
+        {notice && <Alert tone="info">{notice}</Alert>}
+        {/* Framed like the student reading window. */}
+        <div className="mx-auto max-w-[52rem] overflow-hidden rounded-2xl bg-white shadow-overlay ring-1 ring-line">
+          <div className="border-b border-slate-100 px-5 py-3 sm:px-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-green">Announcement</p>
+          </div>
+          <div className="px-5 pb-8 pt-5 sm:px-8">
+            <AnnouncementArticle announcement={toStudentShape(a, office)} />
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onView, onTogglePin, onRetry, onRetryEmail, onDelete }: {
   a: AdminAnnouncement;
+  onView: () => void;
   pinBusy: boolean;
   retrying: boolean;
   retryDisabled: boolean;
@@ -896,7 +1207,7 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onToggle
   ].filter(Boolean).join(' · ');
 
   return (
-    <li className="flex gap-3 px-4 py-3.5 sm:gap-4 sm:px-5">
+    <li className="relative flex gap-3 px-4 py-3.5 transition-colors hover:bg-surface-muted sm:gap-4 sm:px-5">
       {thumb ? (
         <img src={thumb} alt="" onError={() => setThumbFailed(true)} className="size-10 shrink-0 rounded-control object-cover ring-1 ring-line" />
       ) : (
@@ -914,11 +1225,12 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onToggle
                 <span className="sr-only">Pinned: </span>
               </>
             )}
+            {/* The whole row opens the Student view; the actions sit above it. */}
             <button
               type="button"
-              onClick={onEdit}
-              title={a.title}
-              className="min-w-0 truncate rounded-badge text-left text-sm font-medium text-ink hover:text-accent"
+              onClick={onView}
+              title={`See “${a.title}” as students do`}
+              className="min-w-0 truncate rounded-badge text-left text-sm font-medium text-ink after:absolute after:inset-0 hover:text-accent focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent"
             >
               {a.title}
             </button>
@@ -927,7 +1239,7 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onToggle
           <p className="mt-1 truncate text-xs text-ink-subtle tabular-nums">{meta}</p>
         </div>
 
-        <div className="mt-2 flex items-center gap-2 sm:mt-0 sm:shrink-0">
+        <div className="relative z-10 mt-2 flex items-center gap-2 sm:mt-0 sm:shrink-0">
           {published ? <Badge tone="success" dot>Published</Badge> : scheduled ? <Badge tone="info" icon={CalendarClock}>Scheduled</Badge> : <Badge dot>Draft</Badge>}
           <EmailIndicator a={a} retrying={retrying} retryDisabled={retryDisabled} onRetry={onRetryEmail} />
           <FacebookIndicator a={a} retrying={retrying} retryDisabled={retryDisabled} onRetry={onRetry} />
@@ -938,6 +1250,7 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onToggle
               loading={pinBusy}
               onClick={onTogglePin}
             />
+            <IconButton icon={Eye} label="Student view" onClick={onView} />
             <IconButton icon={Pencil} label="Edit" onClick={onEdit} disabled={retrying} />
             <DropdownMenu
               label={`More actions for "${a.title}"`}

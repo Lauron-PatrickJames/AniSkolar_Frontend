@@ -171,9 +171,17 @@ export default function Dashboard({
               <p className="flex items-center gap-2 text-sm font-medium text-slate-500"><Clock className="h-4 w-4" aria-hidden />Duty hours</p>
               {!duty ? <div className="mt-3 h-14 animate-pulse rounded-lg bg-slate-100" /> : (
                 <>
-                  <p className="mt-3 text-sm text-slate-500">
-                    <span className="font-display text-2xl font-extrabold text-slate-900 tabular-nums">{hrs(duty.summary.completed)}</span>
-                    {duty.summary.required ? ` of ${hrs(duty.summary.required)} h` : ' h'}
+                  {/* Past the requirement: "55 of 55 h" plus the extra, not "114.5 of 55 h". */}
+                  <p className="mt-3 flex flex-wrap items-baseline gap-x-1 text-sm text-slate-500">
+                    <span className="font-display text-2xl font-extrabold text-slate-900 tabular-nums">
+                      {hrs(dutyDone && duty.summary.required ? duty.summary.required : duty.summary.completed)}
+                    </span>
+                    {duty.summary.required ? `of ${hrs(duty.summary.required)} h` : 'h'}
+                    {dutyDone && duty.summary.required && duty.summary.completed > duty.summary.required && (
+                      <span className="ml-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-brand-green ring-1 ring-emerald-100 tabular-nums">
+                        +{hrs(duty.summary.completed - duty.summary.required)} h extra
+                      </span>
+                    )}
                   </p>
                   {dutyPct !== null && (
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100" aria-hidden>
@@ -266,7 +274,7 @@ export default function Dashboard({
       <section className="rounded-2xl border border-slate-200 bg-white shadow-xs lg:col-span-2">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <h3 className="font-display text-base font-bold text-slate-900"><span className="sm:hidden">Latest news</span><span className="hidden sm:inline">Latest from the scholarship office</span></h3>
-          <button type="button" onClick={() => onNavigate('announcements')} className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-green hover:text-brand-green-dark">See all<span className="hidden sm:inline">&nbsp;announcements</span> <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
+          <button type="button" onClick={() => onNavigate('announcements')} className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-green hover:text-brand-green-dark">See all<span className="hidden sm:inline">announcements</span> <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
         </div>
         {announcements.length === 0 ? (
           <p className="px-5 py-6 text-center text-sm text-slate-500">No announcements yet.</p>

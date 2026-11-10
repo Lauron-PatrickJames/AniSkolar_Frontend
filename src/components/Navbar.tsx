@@ -250,6 +250,9 @@ export default function Navbar({
               setShowProfileMenu(!showProfileMenu);
               setShowNotifications(false);
             }}
+            aria-label="Account menu"
+            aria-haspopup="menu"
+            aria-expanded={showProfileMenu}
             className="flex items-center space-x-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-left focus:outline-hidden"
           >
             {student.avatarUrl && !avatarFailed ? (

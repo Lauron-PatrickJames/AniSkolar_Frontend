@@ -604,6 +604,8 @@ export interface Application {
   // the student for another one.
   endedAt?: string | null;
   endReason?: 'Graduated' | 'Stopped' | 'Declined' | null;
+  // Added by the office without an application (the SDO's tryouts).
+  awardedDirectly?: boolean;
   // SFAG: the tuition discount applied for, and the one granted.
   sfagPercentageRequested?: number | null;
   sfagPercentage?: number | null;

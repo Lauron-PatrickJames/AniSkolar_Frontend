@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /sso-callback
+
+Sitemap: https://www.aniskolar.com/sitemap.xml

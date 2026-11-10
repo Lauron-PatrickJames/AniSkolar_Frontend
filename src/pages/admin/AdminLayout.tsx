@@ -277,7 +277,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
           <IconButton ref={closeRef} icon={X} label="Close navigation" onClick={onClose} className="md:hidden" />
         </div>
 
-        <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4 md:max-lg:overflow-visible md:max-lg:px-2">
+        <nav aria-label="Main" className="flex-1 space-y-5 overflow-y-auto px-3 py-4 md:max-lg:overflow-visible md:max-lg:px-2">
           {sections.map(section => (
             <div key={section.title || 'top'}>
               {section.title && <p className="mb-1 px-2.5 text-xs font-medium text-ink-subtle md:max-lg:sr-only">{section.title}</p>}

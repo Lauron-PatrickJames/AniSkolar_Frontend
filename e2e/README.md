@@ -21,6 +21,10 @@ First time on a new computer: `npx playwright install chromium`.
   My Scholarship, Duty Hours, the logo going home, and the account menu
   opening under the profile photo. Every page is checked for sideways
   scrolling.
+- `admin.spec.ts`: the admin console. As the AdSO: every section is in the
+  menu, every page opens without JavaScript errors or sideways scrolling,
+  the applications list opens an application, and the logo goes home. As
+  a partner office (POLCA): the AdSO-only sections are hidden.
 
 ## Signed-in tests
 
@@ -31,7 +35,8 @@ account's real records are never read or changed. Each test signs out when
 it's done.
 
 Copy `.env.e2e.example` to `.env.e2e` (git-ignored) and set
-`E2E_STUDENT_EMAIL`. The secret key is read from `.env.e2e` or, if it's not
+`E2E_STUDENT_EMAIL` (and `E2E_ADSO_EMAIL` / `E2E_OFFICE_EMAIL` for the admin
+tests, which use `mockAdminApi.ts`). The secret key is read from `.env.e2e` or, if it's not
 there, from `../AniSkolar_Backend/.env`. Without both, the signed-in tests
 are skipped.
 

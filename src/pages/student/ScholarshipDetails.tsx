@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Scholarship, Application, Announcement } from '../../types';
 import AnnouncementCard from '../../components/AnnouncementCard';
-import { ArrowLeft, ArrowRight, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info, Megaphone } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info, Megaphone, Ban } from 'lucide-react';
 import { motion } from 'motion/react';
 import { OFFICE_SHORT_LABELS, acceptsOnlineApplications, handlingOffice, officeOf } from '../../data/scholarships';
 import { officeFormFor } from '../../data/officeForms';
@@ -98,7 +98,26 @@ export default function ScholarshipDetails({
   const relatedAnnouncements = announcements.filter(a => a.scholarshipId === scholarship.id);
   const hasDocuments = Boolean(scholarship.documentSlots?.length || scholarship.requirements.length);
   const baseMeta = STATUS_META[status] ?? STATUS_META['Under Evaluation'];
-  const meta = { ...baseMeta, description: baseMeta.description.replace(/\b([Tt])he AdSO\b/, (_, t) => `${t}he ${officeShort}`) };
+  // An approved scholarship the student declined, or that ended; and one the
+  // office added without an application (the SDO's tryouts).
+  const endReason = status === 'Approved' ? existingApplication?.endReason ?? null : null;
+  const direct = !!existingApplication?.awardedDirectly;
+  const withOffice = (text: string) => text.replace(/\b([Tt])he AdSO\b/, (_, t) => `${t}he ${officeShort}`);
+  const meta = endReason
+    ? {
+        ...baseMeta,
+        label: endReason === 'Declined' ? 'Declined by you' : endReason === 'Graduated' ? 'Scholarship ended: graduated' : 'Scholarship ended',
+        description: endReason === 'Declined'
+          ? `You declined this scholarship${existingApplication?.endedAt ? ` on ${new Date(existingApplication.endedAt).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}, so it no longer applies to you.`
+          : `You’re no longer a scholar of this program. Contact the ${officeShort} if this is wrong.`,
+        badgeClass: 'bg-slate-100 text-slate-600 border border-slate-200',
+        cardClass: 'bg-slate-50 border-slate-200',
+        iconWrapClass: 'bg-slate-200 text-slate-600',
+        icon: Ban
+      }
+    : status === 'Approved' && direct
+      ? { ...baseMeta, label: 'You’re a scholar', description: `Congratulations — the ${officeShort} added you as a scholar.` }
+      : { ...baseMeta, description: withOffice(baseMeta.description) };
   const StatusIcon = meta.icon;
   const hasNote = !!existingApplication?.reviewNote && (status === 'Rejected' || status === 'Needs Revision');
   // Reference, date and (SFAG) grant, under the status.
@@ -106,7 +125,7 @@ export default function ScholarshipDetails({
   const grantGiven = status === 'Approved' ? existingApplication?.sfagPercentage ?? null : null;
   const facts = existingApplication ? [
     existingApplication.referenceCode && ['Reference', existingApplication.referenceCode],
-    existingApplication.submittedAt && ['Submitted', new Date(existingApplication.submittedAt).toString() === 'Invalid Date' ? existingApplication.submittedAt : new Date(existingApplication.submittedAt).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })],
+    existingApplication.submittedAt && [direct ? 'Added' : 'Submitted', new Date(existingApplication.submittedAt).toString() === 'Invalid Date' ? existingApplication.submittedAt : new Date(existingApplication.submittedAt).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })],
     grantGiven ? ['Grant', `${grantGiven}% tuition discount`] : grantApplied ? ['Grant applied for', `${grantApplied}%`] : null,
   ].filter(Boolean) as [string, string][] : [];
   // Process items written "Step N: …" are numbered steps (the number is
@@ -320,10 +339,11 @@ export default function ScholarshipDetails({
           <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs">
             <h3 className="font-display font-extrabold text-lg text-slate-900 border-b border-slate-100 pb-3 mb-4 flex items-center space-x-2">
               <FileCheck className="w-5 h-5 text-brand-green" />
-              <span>Required Documents</span>
+              <span>{scholarship.directAward ? 'Documents from your coach' : 'Required Documents'}</span>
             </h3>
-            <p className="text-xs text-slate-500 mb-2">
-              {scholarship.directAward ? 'Your coach prepares the one that applies to you; you don’t upload anything.'
+            <p className="text-sm text-slate-600 mb-2">
+              {scholarship.directAward
+                ? `You don’t upload anything. Your coach prepares the one that applies to you${officeFormFor(scholarship.id) ? ` and sends it to the ${officeFormFor(scholarship.id)!.approver} for approval` : ''}:`
                 : officeFormFor(scholarship.id)?.documents ? 'Upload only the one that applies to you, as a JPG file up to 10 MB.' : 'Upload each one as a JPG file, up to 10 MB.'}
             </p>
             <ul className="divide-y divide-slate-100">
@@ -344,8 +364,8 @@ export default function ScholarshipDetails({
                 </li>
               ))}
             </ul>
-            {officeFormFor(scholarship.id) && (
-              <p className="mt-3 text-xs font-semibold text-slate-600">Approved by the {officeFormFor(scholarship.id)!.approver}.</p>
+            {officeFormFor(scholarship.id) && !scholarship.directAward && (
+              <p className="mt-3 text-sm text-slate-600">The {officeFormFor(scholarship.id)!.approver} approves it.</p>
             )}
             {scholarship.submissionNote && (
               <p className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-100 text-xs font-semibold text-amber-800 flex items-start gap-1.5">

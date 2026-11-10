@@ -289,7 +289,9 @@ export default function Navbar({
                   exit={{ opacity: 0, y: 8, scale: 0.97 }}
                   transition={dropdownTransition}
                   style={{ transformOrigin: 'top right' }}
-                  className="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-16 sm:top-auto sm:mt-2 w-auto sm:w-56 bg-white rounded-xl border border-slate-200 shadow-xl z-20 py-1 divide-y divide-slate-100"
+                  // Hangs from the profile photo on every screen; on phones a
+                  // small arrow points up at the photo.
+                  className="absolute right-0 top-full mt-2 w-[min(18rem,calc(100vw-1.5rem))] sm:w-56 bg-white rounded-xl border border-slate-200 shadow-xl z-20 py-1 divide-y divide-slate-100"
                 >
                   <div className="p-4 text-left min-w-0">
                     <p className="text-xs font-bold text-slate-800 leading-tight truncate" title={fullName}>{fullName}</p>
@@ -337,6 +339,7 @@ export default function Navbar({
                       <span>Log Out</span>
                     </button>
                   </div>
+                  <span className="absolute -top-1.5 right-4 h-3 w-3 rotate-45 !border-b-0 !border-r-0 border-l border-t border-slate-200 bg-white sm:hidden" aria-hidden />
                 </motion.div>
               </>
             )}

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/react';
 import {
   ArrowRight, Award, Bell, Calculator, Calendar, ChevronRight, Clock, Compass,
-  FileText, MessageSquare, RefreshCw, ShieldCheck, UserCheck
+  FileText, GraduationCap, Hash, MessageSquare, RefreshCw, ShieldCheck, UserCheck
 } from 'lucide-react';
 import { Scholarship, Announcement, Application, StudentProfile } from '../../types';
 import { Holdings, getAvailableScholarships, isSfagScholar } from '../../utils/eligibility';
@@ -40,6 +40,15 @@ const STATUS_STYLE: Record<string, string> = {
   Rejected: 'bg-rose-50 text-rose-700 ring-rose-200',
 };
 const STATUS_LABEL: Record<string, string> = { 'Under Evaluation': 'Under evaluation', 'Needs Revision': 'Needs revision', Approved: 'Approved', Rejected: 'Not approved' };
+
+function HeroChip({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 ring-1 ring-white/15">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-emerald-100" aria-hidden />
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
 
 function greeting(): string {
   const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', hour: 'numeric', hour12: false }).format(new Date()));
@@ -95,23 +104,48 @@ export default function Dashboard({
   return (
     <div id={id} className="space-y-6">
       {/* Greeting */}
-      <section className="rounded-2xl bg-gradient-to-br from-brand-green to-emerald-700 px-5 py-6 sm:px-8 text-white">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <section className="relative overflow-hidden rounded-2xl bg-linear-to-br from-brand-green via-emerald-700 to-emerald-800 px-5 py-5 text-white sm:px-8 sm:py-6">
+        {/* Soft shapes behind, like My Scholarship's header. */}
+        <div className="pointer-events-none absolute -top-20 -right-16 h-64 w-64 rounded-full bg-white/[0.06]" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-24 right-40 hidden h-48 w-48 rounded-full bg-white/[0.04] sm:block" aria-hidden />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
           <div className="min-w-0">
-            <p className="text-sm text-emerald-100">{greeting()},</p>
-            <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight">{firstName || 'there'}</h2>
-            <p className="mt-1 text-sm text-emerald-50 truncate tabular-nums">
-              {[student.course, student.yearLevel, student.studentNumber, gpa && `GPA ${gpa}`].filter(Boolean).join(' · ')}
-            </p>
+            <div className="min-w-0">
+              <p className="text-sm text-emerald-100">{greeting()},</p>
+              <h2 className="truncate font-display text-2xl font-extrabold tracking-tight sm:text-3xl">{firstName || 'there'}</h2>
+              {/* Phones: one quiet line. Wider: chips. */}
+              <p className="truncate text-xs text-emerald-100 tabular-nums sm:hidden">
+                {[student.yearLevel, student.studentNumber, gpa && `GPA ${gpa}`].filter(Boolean).join(' · ')}
+              </p>
+              <div className="mt-2.5 hidden flex-wrap gap-1.5 text-xs font-medium tabular-nums sm:flex">
+                {student.course && <HeroChip icon={GraduationCap}>{student.course}</HeroChip>}
+                {student.yearLevel && <HeroChip icon={Calendar}>{student.yearLevel}</HeroChip>}
+                {student.studentNumber && <HeroChip icon={Hash}>{student.studentNumber}</HeroChip>}
+                {gpa && <HeroChip icon={Award}>GPA {gpa}</HeroChip>}
+              </div>
+            </div>
           </div>
           {held.length === 1 ? (
-            <button type="button" onClick={() => onNavigate('my-scholarship')} className="inline-flex items-center gap-2 self-start rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold ring-1 ring-white/20 hover:bg-white/20 sm:self-auto">
-              <ShieldCheck className="h-4 w-4" aria-hidden />
-              {held[0].scholarshipName.match(/\(([^)]+)\)\s*$/)?.[1] ?? held[0].scholarshipName} scholar
-              {sfagDetail?.grantPercentage ? <span className="text-emerald-100">· {sfagDetail.grantPercentage}%</span> : null}
+            <button type="button" onClick={() => onNavigate('my-scholarship')} className="group flex w-full shrink-0 items-center justify-between gap-3 rounded-xl bg-white/10 px-4 py-2.5 text-left ring-1 ring-white/20 backdrop-blur-sm transition-colors hover:bg-white/20 sm:block sm:w-auto sm:rounded-2xl sm:px-5 sm:py-3 sm:text-right">
+              <span className="flex items-center gap-1.5 text-sm font-semibold sm:justify-end sm:text-xs sm:text-emerald-100">
+                <ShieldCheck className="h-4 w-4 sm:h-3.5 sm:w-3.5" aria-hidden />
+                <span className="sm:hidden">
+                  {held[0].scholarshipName.match(/\(([^)]+)\)\s*$/)?.[1] ?? held[0].scholarshipName} scholar
+                  {sfagDetail?.grantPercentage ? <span className="text-emerald-100"> · {sfagDetail.grantPercentage}%</span> : null}
+                </span>
+                <span className="hidden sm:inline">Active scholar</span>
+              </span>
+              <span className="mt-0.5 hidden font-display text-xl font-bold leading-tight sm:block">
+                {held[0].scholarshipName.match(/\(([^)]+)\)\s*$/)?.[1] ?? held[0].scholarshipName}
+                {sfagDetail?.grantPercentage ? <span className="text-emerald-100"> · {sfagDetail.grantPercentage}%</span> : null}
+              </span>
+              <span className="flex shrink-0 items-center gap-1 text-xs text-emerald-100 sm:mt-0.5 sm:justify-end">
+                <span className="sm:hidden">View</span><span className="hidden sm:inline">View my scholarship</span>
+                <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+              </span>
             </button>
           ) : held.length === 0 ? (
-            <button type="button" onClick={() => onNavigate('explore')} className="inline-flex items-center gap-2 self-start rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-brand-green hover:bg-emerald-50 sm:self-auto">
+            <button type="button" onClick={() => onNavigate('explore')} className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-brand-green hover:bg-emerald-50 sm:self-auto">
               <Compass className="h-4 w-4" aria-hidden /> Explore scholarships
             </button>
           ) : null}

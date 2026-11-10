@@ -884,17 +884,17 @@ export default function App() {
       }
     } else {
       const pageTitleMap: Record<string, string> = {
-        dashboard: 'Student Portal Dashboard',
-        explore: 'Scholarship Opportunities',
+        dashboard: 'Dashboard',
+        explore: 'Explore Grants',
         'my-scholarship': 'My Scholarship',
         applications: 'My Applications',
         'gpa-calculator': 'GPA Calculator',
-        renewals: 'Scholarship Renewal',
+        renewals: 'Renewal',
         'duty-hours': 'Duty Hours',
         messages: 'Messages',
         'scholarship-details': 'Scholarship Details',
         'apply-scholarship': 'Scholarship Digital Application',
-        announcements: 'Office Announcements',
+        announcements: 'Announcements',
         profile: 'Profile',
         notifications: 'Notifications',
         'account-security': 'Account Security'

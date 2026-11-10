@@ -37,7 +37,7 @@ export default function Announcements({ announcements, id }: AnnouncementsProps)
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-green">Admissions and Scholarship Office</p>
           <h2 className="mt-1 font-display text-2xl font-bold text-slate-900 sm:text-3xl">News and announcements</h2>
-          <p className="mt-1 text-sm text-slate-500">Updates for scholars and applicants of DLSU-D · {total}</p>
+          <p className="mt-1 text-sm text-slate-500">Updates for scholars and applicants of DLSU-D</p>
         </div>
         <div role="search" className="relative w-full sm:w-72">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden />

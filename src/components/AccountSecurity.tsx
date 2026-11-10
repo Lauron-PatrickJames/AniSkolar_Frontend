@@ -221,9 +221,11 @@ function DevicesCard() {
                     {[a?.browserName, a?.deviceType].filter(Boolean).join(' on ') || 'Unknown device'}
                     {current && <Badge tone="success" className="ml-2">This device</Badge>}
                   </p>
-                  <p className="text-xs text-ink-muted">{[place, a?.ipAddress, `last active ${lastActive(s.lastActiveAt)}`].filter(Boolean).join(' · ')}</p>
+                  <p className="text-xs text-ink-muted">{[place, `last active ${lastActive(s.lastActiveAt)}`].filter(Boolean).join(' · ')}</p>
+                  {/* IPv6 addresses are long with no spaces: their own line, cut with "…". */}
+                  {a?.ipAddress && <p className="truncate font-mono text-[11px] text-ink-subtle" title={a.ipAddress}>{a.ipAddress}</p>}
                 </div>
-                {!current && <Button size="sm" variant="ghost" icon={LogOut} onClick={() => signOut(s)} loading={busyId === s.id}>Sign out</Button>}
+                {!current && <div className="shrink-0"><Button size="sm" variant="ghost" icon={LogOut} onClick={() => signOut(s)} loading={busyId === s.id}>Sign out</Button></div>}
               </li>
             );
           })}

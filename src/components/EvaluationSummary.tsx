@@ -75,14 +75,15 @@ export default function EvaluationSummary({ evaluation, title = 'Your office’s
               {items.map(i => {
                 const score = evaluation.scores[i.key];
                 return (
-                  <li key={i.key} className="flex items-center gap-3 py-2">
-                    <span className="min-w-0 flex-1 text-sm text-slate-700">{i.label}</span>
+                  <li key={i.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 sm:flex-nowrap">
+                    {/* Phones: the label gets its own line, bars and score under it. */}
+                    <span className="min-w-0 basis-full text-sm text-slate-700 sm:flex-1 sm:basis-0">{i.label}</span>
                     <span className="flex gap-1" aria-hidden>
                       {[1, 2, 3, 4, 5].map(n => (
                         <span key={n} className={`h-1.5 w-4 rounded-full ${n <= score ? (score >= PASSING_AVERAGE ? 'bg-brand-green' : 'bg-amber-500') : 'bg-slate-200'}`} />
                       ))}
                     </span>
-                    <span className="w-36 text-right text-xs text-slate-500">
+                    <span className="ml-auto text-right text-xs text-slate-500 sm:ml-0 sm:w-36">
                       <span className="font-bold text-slate-800">{score}</span> · {RATING_LABELS[score]}
                     </span>
                   </li>

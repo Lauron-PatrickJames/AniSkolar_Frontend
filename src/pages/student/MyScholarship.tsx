@@ -76,31 +76,32 @@ export default function MyScholarship({ holdings, scholarships, applications, on
           <section key={h.scholarshipId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
             {/* Hero: name and office on the left, the grant as a big number on
                 the right, with a faint award mark behind. */}
-            <div className="relative overflow-hidden bg-linear-to-br from-brand-green via-emerald-700 to-emerald-800 px-6 py-5 text-white sm:px-8">
+            <div className="relative overflow-hidden bg-linear-to-br from-brand-green via-emerald-700 to-emerald-800 px-5 py-5 text-white sm:px-8">
               <Award className="pointer-events-none absolute -right-6 -bottom-10 h-56 w-56 text-white/[0.07]" aria-hidden />
               <div className="pointer-events-none absolute -top-16 -left-10 h-48 w-48 rounded-full bg-white/5" aria-hidden />
-              <div className="relative flex flex-wrap items-end justify-between gap-6">
+              <div className="relative flex flex-wrap items-end justify-between gap-4 sm:gap-6">
                 <div className="min-w-0">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold ring-1 ring-white/25">
                     <ShieldCheck className="h-3.5 w-3.5" /> Active scholar
                   </span>
-                  <h2 className="mt-2.5 font-display text-2xl font-bold leading-tight sm:text-3xl">{h.scholarshipName}</h2>
+                  <h2 className="mt-2.5 font-display text-xl font-bold leading-tight sm:text-3xl">{h.scholarshipName}</h2>
                   <p className="mt-1 text-sm text-emerald-50">{OFFICE_NAMES[s?.office ?? 'LSO'] ?? s?.provider?.office ?? ''}</p>
                 </div>
-                <div className="rounded-2xl bg-white/10 px-5 py-3 text-right ring-1 ring-white/20 backdrop-blur-sm">
-                  <p className="font-display text-4xl font-bold leading-none">{d?.grantPercentage != null ? `${d.grantPercentage}%` : '—'}</p>
-                  <p className="mt-1 text-xs font-medium text-emerald-50">{d?.grantPercentage != null ? 'tuition discount' : isSfag ? 'grant set by the office' : 'grant'}</p>
+                {/* Phones: one slim pill. Wider: a block on the right. */}
+                <div className="flex items-baseline gap-2 rounded-xl bg-white/10 px-4 py-2 ring-1 ring-white/20 backdrop-blur-sm sm:block sm:rounded-2xl sm:px-5 sm:py-3 sm:text-right">
+                  <p className="font-display text-2xl font-bold leading-none sm:text-4xl">{d?.grantPercentage != null ? `${d.grantPercentage}%` : '—'}</p>
+                  <p className="text-xs font-medium text-emerald-50 sm:mt-1">{d?.grantPercentage != null ? 'tuition discount' : isSfag ? 'grant set by the office' : 'grant'}</p>
                 </div>
               </div>
             </div>
 
-            <dl className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <dl className="grid grid-cols-2 border-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-slate-100 [&>*:nth-child(3)]:col-span-2 [&>*:nth-child(3)]:border-t [&>*:nth-child(3)]:border-slate-100 sm:[&>*:nth-child(3)]:col-span-1 sm:[&>*:nth-child(3)]:border-t-0">
               <Stat icon={CalendarCheck} label="Approved on" value={formatDate(d?.approvedAt)} />
               <Stat icon={Hourglass} label="Scholar for" value={scholarFor(d?.approvedAt)} />
               <Stat icon={Hash} label="Reference" value={d?.referenceCode ?? '—'} mono />
             </dl>
 
-            <div className="space-y-5 border-t border-slate-100 px-6 py-5">
+            <div className="space-y-5 border-t border-slate-100 px-4 py-5 sm:px-6">
               <div className="space-y-3">
                 <h3 className="text-sm font-bold text-slate-900">To keep your scholarship</h3>
                 {keep.length ? (
@@ -140,8 +141,8 @@ export default function MyScholarship({ holdings, scholarships, applications, on
 
 function Stat({ icon: Icon, label, value, mono }: { icon: React.ElementType; label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center gap-3 px-5 py-3.5">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-brand-green"><Icon className="h-5 w-5" /></span>
+    <div className="flex items-center gap-3 px-4 py-3 sm:px-5 sm:py-3.5">
+      <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-brand-green sm:flex"><Icon className="h-5 w-5" /></span>
       <div className="min-w-0">
         <dt className="text-xs font-medium text-slate-500">{label}</dt>
         <dd className={`truncate text-sm font-bold text-slate-900 ${mono ? 'font-mono' : ''}`}>{value}</dd>

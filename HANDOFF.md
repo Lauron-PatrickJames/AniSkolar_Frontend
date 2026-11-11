@@ -144,7 +144,7 @@ Communication Service with a free Azure-managed domain) connected to
   office handles that by hand. Externally funded grants (DOST, CHED…)
   aren't in AniSkolar and have no limit.
 - **Student numbers:** 9 digits; the first 4 are the year the student
-  first enrolled at DLSU-D (1990 to next year), e.g. 202330864. Students
+  first enrolled at DLSU-D (1990 to next year), e.g. 202312345. Students
   from DLSU-D high school / senior high keep their number into college
   (e.g. a 2017 number in college), so the year says nothing about year
   level or freshman status — don't use it for eligibility. Checked in

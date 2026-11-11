@@ -64,7 +64,7 @@ const stepOf = (field: FieldKey) => STEPS.findIndex(s => s.fields.includes(field
 
 // DLSU-D student numbers are 9 digits: the year the student first enrolled
 // at DLSU-D (possibly in high school, kept into college), then
-// 5 digits, e.g. 202330864 (entered 2023). Same rule as the backend
+// 5 digits, e.g. 202312345 (entered 2023). Same rule as the backend
 // (routes/students.js).
 function studentNumberError(value: string): string | undefined {
   const v = value.trim();

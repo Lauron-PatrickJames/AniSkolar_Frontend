@@ -684,14 +684,18 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
 // --- Messages ---------------------------------------------------------------------
 
 // --- Announcements --------------------------------------------------------------
-// Posted to the scholars assigned to this office: they see it with their
-// announcements, and can get it by email too.
+// For the scholars assigned to this office: they see it with their
+// announcements, and can get it by email too, once the AdSO approves it.
 
 interface OfficeAnnouncement {
   id: string;
   title: string;
   content: string;
-  publishedAt: string;
+  // pending: waiting for the AdSO; draft: the AdSO returned it (review.note).
+  status: 'pending' | 'published' | 'draft' | 'scheduled';
+  review?: { decision: 'approved' | 'returned' | null; note: string | null; decidedAt: string | null } | null;
+  createdAt: string;
+  publishedAt: string | null;
   emailEnabled: boolean;
   emailStatus: string;
   emailSent: number;
@@ -727,7 +731,7 @@ function AnnouncementsTab({ head, getToken, onToast }: { head: OfficeHeadInfo; g
     try {
       await api(getToken, '/api/office/announcements', { method: 'POST', body: { title: title.trim(), content: content.trim(), email } });
       setTitle(''); setContent('');
-      onToast(email ? 'Posted. Your scholars will also get it by email.' : 'Posted to your scholars.');
+      onToast(email ? 'Sent to the AdSO for approval. Once approved, your scholars see it and get it by email.' : 'Sent to the AdSO for approval. Your scholars see it once it’s approved.');
       load();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to post it.');
@@ -758,10 +762,11 @@ function AnnouncementsTab({ head, getToken, onToast }: { head: OfficeHeadInfo; g
           <Field label="Title"><TextInput value={title} onChange={e => setTitle(e.target.value)} maxLength={150} disabled={busy} placeholder="e.g. No duty on Friday" /></Field>
           <Field label="Message"><Textarea value={content} onChange={e => setContent(e.target.value)} rows={6} maxLength={8000} disabled={busy} className="resize-y" /></Field>
           <Checkbox checked={email} onChange={setEmail} disabled={busy} label="Also email them (Outlook)" />
-          <Button type="submit" variant="primary" icon={Send} loading={busy}>Post</Button>
+          <p className="text-xs text-ink-subtle">The Admissions and Scholarship Office approves announcements before your scholars see them.</p>
+          <Button type="submit" variant="primary" icon={Send} loading={busy}>Submit for approval</Button>
         </form>
       </Card>
-      <Card flush title="Posted" className="lg:col-span-3">
+      <Card flush title="Your announcements" className="lg:col-span-3">
         {error && !items ? <ErrorState title="Couldn't load your announcements" message={error} onRetry={load} />
           : !items ? <TableSkeleton rows={3} label="Loading announcements" />
           : !items.length ? <EmptyState icon={Megaphone} title="Nothing posted yet" />
@@ -770,11 +775,22 @@ function AnnouncementsTab({ head, getToken, onToast }: { head: OfficeHeadInfo; g
               {items.map(a => (
                 <li key={a.id} className="flex items-start gap-3 px-5 py-4">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-ink">{a.title}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-ink">{a.title}</p>
+                      {a.status === 'pending' ? <Badge tone="warning" icon={Hourglass}>Waiting for AdSO</Badge>
+                        : a.status === 'draft' ? <Badge tone="danger" dot>Returned</Badge>
+                          : <Badge tone="success" dot>Posted</Badge>}
+                    </div>
                     <p className="mt-1 line-clamp-3 whitespace-pre-line text-sm text-ink-muted">{a.content}</p>
+                    {a.status === 'draft' && a.review?.note && (
+                      <p className="mt-1.5 text-xs text-danger-fg">
+                        <span className="font-semibold">The AdSO returned it:</span> {a.review.note} Delete it and post a corrected one.
+                      </p>
+                    )}
                     <p className="mt-1.5 text-xs text-ink-subtle">
-                      {formatDateTime(a.publishedAt)}
-                      {a.emailEnabled && ` · emailed ${a.emailStatus === 'sent' ? `to ${a.emailSent}` : a.emailStatus === 'failed' ? '(failed)' : '(sending)'}`}
+                      {a.status === 'published' && a.publishedAt ? formatDateTime(a.publishedAt) : `Submitted ${formatDateTime(a.createdAt)}`}
+                      {a.status === 'published' && a.emailEnabled && ` · emailed ${a.emailStatus === 'sent' ? `to ${a.emailSent}` : a.emailStatus === 'failed' ? '(failed)' : '(sending)'}`}
+                      {a.status === 'pending' && a.emailEnabled && ' · emailed once approved'}
                     </p>
                   </div>
                   <Button size="sm" variant="ghost" icon={Trash2} onClick={() => setDeleting(a)} aria-label={`Delete ${a.title}`} />
@@ -786,7 +802,7 @@ function AnnouncementsTab({ head, getToken, onToast }: { head: OfficeHeadInfo; g
       {deleting && (
         <ConfirmDialog
           title="Delete this announcement?"
-          description="Your scholars won't see it any more."
+          description={deleting.status === 'published' ? "Your scholars won't see it any more." : 'It won’t be sent for approval any more.'}
           confirmLabel="Delete"
           tone="danger"
           busy={busy}

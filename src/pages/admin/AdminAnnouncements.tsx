@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
 import {
-  Award, Bell, Calendar, CalendarClock, ChevronLeft, ChevronRight, Clock, Eye, Facebook, FileEdit, ImagePlus, Mail, Megaphone, Pencil, Pin, PinOff,
+  Award, Bell, Calendar, CalendarClock, Check, ChevronLeft, ChevronRight, Clock, CornerUpLeft, Eye, Facebook, FileEdit, Hourglass, ImagePlus, Mail, Megaphone, Pencil, Pin, PinOff,
   Plus, RotateCw, Send, Trash2, X
 } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatShortDate } from './adminData';
@@ -19,7 +19,20 @@ import { ScheduleFields, ScheduleState, formatScheduled, initialSchedule, schedu
 const CATEGORIES = ['General', 'Update', 'Deadline', 'Event'] as const;
 type Category = typeof CATEGORIES[number];
 // 'scheduled' publishes itself at scheduledFor (the backend's timer).
-type AnnouncementStatus = 'draft' | 'scheduled' | 'published';
+// 'pending': an office other than the AdSO asked to publish or schedule it;
+// it waits for the AdSO's approval (review.requestedStatus is what it asked).
+type AnnouncementStatus = 'draft' | 'pending' | 'scheduled' | 'published';
+
+// The AdSO's approval of an office's announcement (backend Announcement.review).
+interface AnnouncementReview {
+  requestedStatus: 'published' | 'scheduled' | null;
+  requestedAt: string | null;
+  requestedBy: string | null;
+  decision: 'approved' | 'returned' | null;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  note: string | null;
+}
 
 // Facebook Page cross-post state, owned by the backend (services/facebook.js):
 //   not_posted — not on the Page (draft, or "Also post to Facebook" off)
@@ -38,6 +51,10 @@ interface AdminAnnouncement {
   category: Category;
   scholarshipId?: string | null;
   status: AnnouncementStatus;
+  review?: AnnouncementReview | null;
+  // Who posted it: a scholarship office code, or a duty office's name.
+  office?: string;
+  dutyOffice?: string | null;
   isPinned: boolean;
   publishedAt: string | null;
   scheduledFor?: string | null;
@@ -123,6 +140,7 @@ interface EditorState {
   emailLocked?: boolean;         // the email already went out (or is going)
   existingImages: AnnouncementImage[];  // images already saved on the announcement
   schedule: ScheduleState;       // publish now or at a set time
+  returnedNote?: string;         // why the AdSO returned it (an office's draft)
 }
 
 // One image in the editor, in display order: either already saved
@@ -308,6 +326,9 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
   };
   const fileInput = useRef<HTMLInputElement>(null);
   const isEdit = !!initial.id;
+  // Offices other than the AdSO submit for the AdSO's approval.
+  const needsApproval = !isAdso;
+  const isPending = initial.status === 'pending';
   const isLive = initial.status === 'published';
   const wasScheduled = initial.status === 'scheduled';
   const scheduling = !isLive && form.schedule.timing === 'Schedule';
@@ -414,7 +435,9 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
 
   // Shown only once a field gets close to its limit.
   const counter = (key: TextField) => (form[key].length >= LIMITS[key] * 0.8 ? `${form[key].length}/${LIMITS[key]}` : undefined);
-  const primaryLabel = isEdit && isLive
+  const primaryLabel = needsApproval
+    ? (isEdit && isLive ? 'Submit changes for approval' : scheduling ? 'Submit schedule for approval' : 'Submit for approval')
+    : isEdit && isLive
     ? 'Save changes'
     : scheduling
       ? (wasScheduled ? 'Save schedule' : 'Schedule')
@@ -430,7 +453,9 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
   // One line in the footer saying exactly what the main button will do.
   const when = isEdit && isLive ? 'Updates the live post' : scheduling ? `Publishes ${formatScheduled(scheduleToIso(form.schedule).iso) || 'at the scheduled time'}` : 'Publishes right away';
   const channels = ['AniSkolar', ...(form.emailEnabled && !form.emailLocked ? ['email'] : []), ...(showFb ? ['Facebook'] : [])];
-  const summaryLine = `${when} · ${channels.join(', ').replace(/, ([^,]*)$/, ' and $1')}`;
+  const summaryLine = needsApproval
+    ? `Goes to the AdSO for approval, then ${when.charAt(0).toLowerCase()}${when.slice(1)} · ${channels.join(', ').replace(/, ([^,]*)$/, ' and $1')}`
+    : `${when} · ${channels.join(', ').replace(/, ([^,]*)$/, ' and $1')}`;
 
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -454,7 +479,7 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
             </p>
             <Button onClick={requestClose} disabled={isSaving}>Cancel</Button>
             <Button icon={FileEdit} loading={isSaving && savingAs === 'draft'} disabled={isSaving} onClick={() => submit(false)}>
-              {isLive ? 'Unpublish to draft' : wasScheduled ? 'Unschedule to draft' : 'Save as draft'}
+              {isPending ? 'Take back to draft' : isLive ? 'Unpublish to draft' : wasScheduled ? 'Unschedule to draft' : 'Save as draft'}
             </Button>
             <Button variant="primary" icon={scheduling ? CalendarClock : Send} loading={isSaving && savingAs === 'publish'} disabled={isSaving} onClick={() => submit(true)}>
               {primaryLabel}
@@ -471,6 +496,16 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
           {/* Compose */}
           <div className="space-y-7 px-5 py-5 lg:overflow-y-auto lg:px-7 lg:py-6">
             {error && <Alert tone="danger" title="Couldn't save the announcement">{error}</Alert>}
+            {initial.returnedNote && (
+              <Alert tone="warning" title="The AdSO returned this announcement">
+                {initial.returnedNote} Make the changes, then submit it again.
+              </Alert>
+            )}
+            {isPending && (
+              <Alert tone="info" title="Waiting for the AdSO's approval">
+                Students won’t see it until the AdSO approves it. Saving changes sends this version instead.
+              </Alert>
+            )}
             {errorFields.length > 0 && (
               <Alert tone="danger" title={`Fix ${errorFields.length === 1 ? 'this field' : `these ${errorFields.length} fields`} before saving`}>
                 {errorFields.map(k => FIELD_LABELS[k]).join(', ')}
@@ -702,10 +737,11 @@ function AnnouncementEditor({ initial, onClose, onSave, isSaving, error, getToke
 
 // --- Page ----------------------------------------------------------------------
 
-type ListTab = 'all' | 'published' | 'scheduled' | 'draft' | 'pinned';
+type ListTab = 'all' | 'pending' | 'published' | 'scheduled' | 'draft' | 'pinned';
 
 const EMPTY_TABS: Record<ListTab, { title: string; description: string }> = {
   all: { title: 'No announcements yet', description: 'Post updates students see on their dashboard and on the Facebook Page.' },
+  pending: { title: 'Nothing waiting for approval', description: 'Announcements you submit wait here until the AdSO approves them.' },
   published: { title: 'Nothing published', description: 'Published announcements show on the student dashboard.' },
   scheduled: { title: 'Nothing scheduled', description: 'Schedule an announcement to publish it later on its own.' },
   draft: { title: 'No drafts', description: 'Save an announcement as a draft to finish it later.' },
@@ -715,8 +751,15 @@ const EMPTY_TABS: Record<ListTab, { title: string; description: string }> = {
 // Refetch when the admin comes back to the tab, at most this often.
 const REFETCH_AFTER_MS = 30_000;
 
-export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: string; ownOffice?: ScholarshipOffice }) {
+export default function AdminAnnouncements({ id, ownOffice = 'LSO', onReviewCountChange }: {
+  id?: string;
+  ownOffice?: ScholarshipOffice;
+  // The AdSO: how many offices' announcements wait for approval (sidebar badge).
+  onReviewCountChange?: (count: number) => void;
+}) {
   const { getToken } = useAuth();
+  // The AdSO approves the other offices' announcements; they submit theirs.
+  const isAdsoOffice = ownOffice === 'LSO';
 
   const [announcements, setAnnouncements] = useState<AdminAnnouncement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -739,6 +782,8 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
   const [pendingDelete, setPendingDelete] = useState<AdminAnnouncement | null>(null);
   // The announcement open in "Student view".
   const [viewing, setViewing] = useState<AdminAnnouncement | null>(null);
+  // An office's announcement opened from the review queue (read-only).
+  const [reviewing, setReviewing] = useState<AdminAnnouncement | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
@@ -805,6 +850,7 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
 
   const counts = useMemo(() => ({
     all: announcements.length,
+    pending: announcements.filter(a => a.status === 'pending').length,
     published: announcements.filter(a => a.status === 'published').length,
     scheduled: announcements.filter(a => a.status === 'scheduled').length,
     draft: announcements.filter(a => a.status === 'draft').length,
@@ -816,6 +862,7 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
     const q = search.trim().toLowerCase();
     return announcements
       .filter(a => {
+        if (tab === 'pending' && a.status !== 'pending') return false;
         if (tab === 'published' && a.status !== 'published') return false;
         if (tab === 'draft' && a.status !== 'draft') return false;
         if (tab === 'scheduled' && a.status !== 'scheduled') return false;
@@ -846,7 +893,8 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
       emailTarget: a.emailTarget ?? DEFAULT_EMAIL_TARGET,
       emailLocked: ['sending', 'sent'].includes(a.emailStatus) || a.emailSent > 0,
       existingImages: a.images,
-      schedule: initialSchedule(a.status === 'scheduled' ? a.scheduledFor : null)
+      schedule: initialSchedule(a.status === 'scheduled' || (a.status === 'pending' && a.review?.requestedStatus === 'scheduled') ? a.scheduledFor : null),
+      returnedNote: a.status === 'draft' && a.review?.decision === 'returned' ? a.review.note ?? undefined : undefined
     });
   };
 
@@ -1004,6 +1052,14 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
       )}
       {actionError && <Alert tone="danger" onDismiss={() => setActionError('')}>{actionError}</Alert>}
 
+      {isAdsoOffice && (
+        <ReviewQueue
+          getToken={getToken}
+          onView={a => setReviewing(a)}
+          onCountChange={onReviewCountChange}
+        />
+      )}
+
       <Card
         flush
         headerSlot={
@@ -1014,6 +1070,7 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
               onChange={setTab}
               tabs={[
                 { key: 'all', label: 'All', count: tabCount(counts.all) },
+                ...(isAdsoOffice ? [] : [{ key: 'pending' as const, label: 'Waiting for approval', count: tabCount(counts.pending) }]),
                 { key: 'published', label: 'Published', count: tabCount(counts.published) },
                 { key: 'scheduled', label: 'Scheduled', count: tabCount(counts.scheduled) },
                 { key: 'draft', label: 'Drafts', count: tabCount(counts.draft) },
@@ -1083,6 +1140,14 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO' }: { id?: str
         />
       )}
 
+      {reviewing && (
+        <StudentViewDialog
+          a={reviewing}
+          office={(reviewing.office ?? 'LSO') as ScholarshipOffice}
+          onClose={() => setReviewing(null)}
+        />
+      )}
+
       {viewing && (
         <StudentViewDialog
           a={viewing}
@@ -1124,6 +1189,131 @@ const feedDate = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }) : '';
 
 // The announcement shaped like GET /api/announcements/feed returns it.
+// --- The AdSO's approval queue ---------------------------------------------------
+// Every other office's announcement waiting for approval (scholarship offices
+// and duty offices), oldest first: approve it (it goes out as the office
+// asked: now, or at its scheduled time) or return it with what to change.
+
+function ReviewQueue({ getToken, onView, onCountChange }: {
+  getToken: () => Promise<string | null>;
+  onView: (a: AdminAnnouncement) => void;
+  onCountChange?: (count: number) => void;
+}) {
+  const [items, setItems] = useState<AdminAnnouncement[] | null>(null);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [returning, setReturning] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+  const [noteError, setNoteError] = useState('');
+  const [done, setDone] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/announcements/review`, { headers: await authHeaders(getToken) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Couldn’t load the announcements to review.');
+      setItems((body.announcements ?? []).map(normalize));
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Couldn’t load the announcements to review.');
+    }
+  }, [getToken]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (items) onCountChange?.(items.length); }, [items, onCountChange]);
+
+  const decide = async (a: AdminAnnouncement, action: 'approve' | 'return') => {
+    if (action === 'return' && !note.trim()) { setNoteError('Tell the office what to change.'); return; }
+    setBusyId(a.id);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/announcements/${a.id}/${action}`, {
+        method: 'POST',
+        headers: { ...(await authHeaders(getToken)), 'Content-Type': 'application/json' },
+        body: action === 'return' ? JSON.stringify({ note: note.trim() }) : undefined,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Couldn’t save your decision.');
+      setItems(prev => (prev ?? []).filter(x => x.id !== a.id));
+      setReturning(null);
+      setNote('');
+      const later = a.review?.requestedStatus === 'scheduled' && a.scheduledFor && new Date(a.scheduledFor) > new Date();
+      setDone(action === 'approve'
+        ? `Approved “${a.title}”. ${later ? `It publishes ${formatScheduled(a.scheduledFor)}.` : 'Students can see it now.'}`
+        : `Returned “${a.title}” to ${posterOf(a)}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Couldn’t save your decision.');
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (!items?.length && !error && !done) return null;
+  return (
+    <Card
+      title={<span className="flex items-center gap-2"><Hourglass className="size-4 text-warning-fg" aria-hidden />Waiting for your approval{items?.length ? <span className="font-normal text-ink-muted tabular-nums">· {items.length}</span> : null}</span>}
+      description="Other offices’ announcements go out only once you approve them."
+      flush
+    >
+      {(error || done) && (
+        <div className="px-5 pt-4 sm:px-6">
+          {error ? <Alert tone="danger" onDismiss={() => setError('')}>{error}</Alert> : <Alert tone="success" onDismiss={() => setDone('')}>{done}</Alert>}
+        </div>
+      )}
+      {items && items.length > 0 ? (
+        <ul className="divide-y divide-line" aria-label="Announcements waiting for approval">
+          {items.map(a => {
+            const busy = busyId === a.id;
+            const scheduledLater = a.review?.requestedStatus === 'scheduled' && a.scheduledFor;
+            const isReturning = returning === a.id;
+            return (
+              <li key={a.id} className="px-5 py-4 sm:px-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-ink-muted">
+                      {posterOf(a)}{a.review?.requestedAt ? ` · submitted ${formatShortDate(a.review.requestedAt)}` : ''}
+                    </p>
+                    <h3 className="mt-0.5 font-semibold text-ink wrap-break-word">{a.title}</h3>
+                    <p className="mt-0.5 line-clamp-2 text-sm text-ink-muted wrap-break-word">{a.description}</p>
+                    <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-subtle">
+                      <span>{scheduledLater ? `Publishes ${formatScheduled(a.scheduledFor)}` : 'Publishes when approved'}</span>
+                      {a.emailEnabled && <span>Emails {a.dutyOffice ? 'the office’s scholars' : 'students'} once approved</span>}
+                      {a.images.length > 0 && <span>{a.images.length} {a.images.length === 1 ? 'image' : 'images'}</span>}
+                    </p>
+                  </div>
+                  {!isReturning && (
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <Button size="sm" icon={Eye} onClick={() => onView(a)}>Read</Button>
+                      <Button size="sm" icon={CornerUpLeft} disabled={busy} onClick={() => { setReturning(a.id); setNote(''); setNoteError(''); }}>Return</Button>
+                      <Button size="sm" variant="primary" icon={Check} loading={busy} onClick={() => decide(a, 'approve')}>Approve</Button>
+                    </div>
+                  )}
+                </div>
+                {isReturning && (
+                  <div className="mt-3 space-y-3 rounded-control bg-surface-muted p-3">
+                    <Field label={`What should ${posterOf(a)} change?`} error={noteError}>
+                      <Textarea rows={2} maxLength={1000} value={note} autoFocus onChange={e => { setNote(e.target.value); setNoteError(''); }} placeholder="e.g. Add the venue and time of the orientation." />
+                    </Field>
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" disabled={busy} onClick={() => setReturning(null)}>Cancel</Button>
+                      <Button size="sm" variant="primary" icon={CornerUpLeft} loading={busy} onClick={() => decide(a, 'return')}>Return to office</Button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="px-5 py-4 text-sm text-ink-muted sm:px-6">Nothing else is waiting.</p>
+      )}
+    </Card>
+  );
+}
+
+// Who posted it: a duty office's name, or a scholarship office's.
+const posterOf = (a: AdminAnnouncement) => a.dutyOffice || OFFICE_LABELS[(a.office ?? 'LSO') as ScholarshipOffice] || 'An office';
+
 function toStudentShape(a: AdminAnnouncement, office: ScholarshipOffice): Announcement {
   return {
     id: a.id,
@@ -1133,7 +1323,7 @@ function toStudentShape(a: AdminAnnouncement, office: ScholarshipOffice): Announ
     content: a.content,
     category: a.category,
     scholarshipId: a.scholarshipId ?? null,
-    postedBy: OFFICE_LABELS[office] ?? null,
+    postedBy: a.dutyOffice || OFFICE_LABELS[office] || null,
     imageUrls: a.images.map(img => imageSrc(img.url)),
     fbPermalink: a.fbStatus === 'posted' ? a.fbPermalink : null,
     publishedAt: a.publishedAt ?? a.scheduledFor ?? a.createdAt
@@ -1142,8 +1332,10 @@ function toStudentShape(a: AdminAnnouncement, office: ScholarshipOffice): Announ
 
 // Exactly what a student sees when they open the post. Scholars and
 // applicants get the same feed, so one view covers both.
-function StudentViewDialog({ a, office, onClose, onEdit }: { a: AdminAnnouncement; office: ScholarshipOffice; onClose: () => void; onEdit: () => void }) {
-  const notice = a.status === 'draft'
+function StudentViewDialog({ a, office, onClose, onEdit }: { a: AdminAnnouncement; office: ScholarshipOffice; onClose: () => void; onEdit?: () => void }) {
+  const notice = a.status === 'pending'
+    ? 'This is waiting for the AdSO’s approval, so students can’t see it yet. This is how it will look once approved.'
+    : a.status === 'draft'
     ? 'This is a draft, so students can’t see it yet. This is how it will look once published.'
     : a.status === 'scheduled'
       ? `Students will see this from ${formatScheduled(a.scheduledFor)}. This is how it will look.`
@@ -1162,7 +1354,7 @@ function StudentViewDialog({ a, office, onClose, onEdit }: { a: AdminAnnouncemen
       footer={
         <>
           <Button onClick={onClose}>Close</Button>
-          <Button variant="primary" icon={Pencil} onClick={onEdit}>Edit</Button>
+          {onEdit && <Button variant="primary" icon={Pencil} onClick={onEdit}>Edit</Button>}
         </>
       }
     >
@@ -1199,6 +1391,8 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onView, 
   const [thumbFailed, setThumbFailed] = useState(false);
   const thumb = thumbFailed || a.images.length === 0 ? null : imageSrc(a.images[0].url);
   const published = a.status === 'published';
+  // An office's draft the AdSO sent back, with its note.
+  const returned = a.status === 'draft' && a.review?.decision === 'returned';
   const scheduled = a.status === 'scheduled';
   const meta = [
     a.category,
@@ -1237,10 +1431,19 @@ function AnnouncementRow({ a, pinBusy, retrying, retryDisabled, onEdit, onView, 
           </div>
           <p className="mt-0.5 line-clamp-1 text-sm text-ink-muted wrap-break-word">{a.description}</p>
           <p className="mt-1 truncate text-xs text-ink-subtle tabular-nums">{meta}</p>
+          {returned && (
+            <p className="mt-1.5 line-clamp-2 text-xs text-danger-fg">
+              <span className="font-semibold">Returned by the AdSO:</span> {a.review?.note}
+            </p>
+          )}
         </div>
 
         <div className="relative z-10 mt-2 flex items-center gap-2 sm:mt-0 sm:shrink-0">
-          {published ? <Badge tone="success" dot>Published</Badge> : scheduled ? <Badge tone="info" icon={CalendarClock}>Scheduled</Badge> : <Badge dot>Draft</Badge>}
+          {published ? <Badge tone="success" dot>Published</Badge>
+            : scheduled ? <Badge tone="info" icon={CalendarClock}>Scheduled</Badge>
+              : a.status === 'pending' ? <Badge tone="warning" icon={Hourglass}>Waiting for AdSO</Badge>
+                : returned ? <Badge tone="danger" dot>Returned</Badge>
+                  : <Badge dot>Draft</Badge>}
           <EmailIndicator a={a} retrying={retrying} retryDisabled={retryDisabled} onRetry={onRetryEmail} />
           <FacebookIndicator a={a} retrying={retrying} retryDisabled={retryDisabled} onRetry={onRetry} />
           <div className="ml-auto flex items-center gap-0.5 sm:ml-2">

@@ -647,7 +647,19 @@ export function formatSchedule(on?: string, time?: string, venue?: string): stri
 
 // null while applications are accepted by date; otherwise why not.
 // Mirrors windowError() in the backend's utils/scholarshipDates.js.
+// Why each scholarship can't be applied for right now, as the backend
+// enforces it (GET /api/scholarships → applyBlocks), with the dates it
+// worked from. Used while a scholarship's dates match those (an admin who
+// just changed them sees the local answer until the list reloads).
+export interface ServerApplyBlock { message: string | null; opensOn: string | null; closesOn: string | null }
+let serverApplyBlocks: Record<string, ServerApplyBlock> = {};
+export function setServerApplyBlocks(blocks: unknown): void {
+  serverApplyBlocks = blocks && typeof blocks === 'object' ? blocks as Record<string, ServerApplyBlock> : {};
+}
+
 export function applicationWindow(s: { id: string; opensOn?: string; closesOn?: string }): string | null {
+  const server = serverApplyBlocks[s.id];
+  if (server && (server.opensOn ?? null) === (s.opensOn ?? null) && (server.closesOn ?? null) === (s.closesOn ?? null)) return server.message;
   if (s.id === 's1' && isSfagOpenAllYear()) return null;
   const today = todayInManila();
   if (s.opensOn && today < s.opensOn) return `Applications open on ${formatDate(s.opensOn)}.`;

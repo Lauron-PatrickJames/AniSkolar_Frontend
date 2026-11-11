@@ -1148,7 +1148,9 @@ function DecisionPanel({ renewal, period, studentName, check, getToken, onUpdate
 
   const first = firstNameOf(studentName);
   const term = periodLabel(period);
-  const options = RENEWAL_DECISIONS.filter(d => d !== renewal.status);
+  // A scholar's own "Not continuing" can only be sent back to them (the
+  // server refuses renewing or refusing it on their behalf).
+  const options = RENEWAL_DECISIONS.filter(d => d !== renewal.status && (renewal.status !== 'Not Continuing' || d === 'Needs Revision'));
   const noteRequired = decision === 'Needs Revision' || decision === 'Not Renewed' || (decision !== '' && decided);
   const evaluationMissing = period.requiresEvaluation && !renewal.evaluation;
   // What the renewal check points to.

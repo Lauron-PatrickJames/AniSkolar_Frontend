@@ -712,7 +712,37 @@ export interface StudentProfile {
   // Academic details are self-reported until an office verifies them,
   // per group; a verified group can't be edited by the student.
   verification?: Partial<Record<VerificationGroup, FieldVerification>>;
-  // Set when the student confirmed their details at sign-up.
+  // Set when the student confirmed their details at the old full sign-up.
   profileConfirmedAt?: string;
+  // Set when the student first saved a complete Personal details section.
+  // Either one locks the identity details (name, birth details, nationality,
+  // civil status): only the AdSO changes them afterwards.
+  identityConfirmedAt?: string;
   correctionRequests?: CorrectionRequest[];
+  // Computed by the backend on every read (utils/profileCompletion.js),
+  // never stored. Missing from older backends: treat as unknown.
+  completion?: ProfileCompletion;
+}
+
+// Profile sections that fill in over time (Profile page, or saved from an
+// application). 'academic' also holds the onboarding core.
+export type ProfileSectionKey = 'academic' | 'personal' | 'contact' | 'family';
+
+export interface ProfileSectionCompletion {
+  key: ProfileSectionKey;
+  label: string;
+  complete: boolean;
+  // Required fields still empty (StudentProfile keys).
+  missing: (keyof StudentProfile)[];
+  required: number;
+}
+
+export interface ProfileCompletion {
+  // Student number, program, year level and GPA (not for 1st years): the
+  // portal sends a student without these to onboarding.
+  coreComplete: boolean;
+  // Required fields filled, across every section (0–100).
+  percent: number;
+  complete: boolean;
+  sections: ProfileSectionCompletion[];
 }

@@ -4,7 +4,8 @@ import {
   ArrowRight, Award, Bell, Calculator, Calendar, ChevronRight, Clock, Compass,
   FileText, GraduationCap, Hash, MessageSquare, RefreshCw, ShieldCheck, UserCheck
 } from 'lucide-react';
-import { Scholarship, Announcement, Application, StudentProfile } from '../../types';
+import { Scholarship, Announcement, Application, ProfileSectionKey, StudentProfile } from '../../types';
+import ProfileCompletionCard from '../../components/ProfileCompletionCard';
 import { Holdings, getAvailableScholarships, isSfagScholar } from '../../utils/eligibility';
 import { DutySummary, formatDutyDate } from '../../utils/dutyHours';
 import { Renewal, RenewalPeriod, deadlineLabel, periodLabel } from '../../utils/renewals';
@@ -26,6 +27,8 @@ interface DashboardProps {
   holdings?: Holdings | null;
   onNavigate: (page: string) => void;
   onViewScholarship: (id: string) => void;
+  // Opens the Profile editor on a section (profile-completion card).
+  onEditProfileSection?: (section: ProfileSectionKey) => void;
   id?: string;
 }
 
@@ -63,6 +66,7 @@ export default function Dashboard({
   holdings = null,
   onNavigate,
   onViewScholarship,
+  onEditProfileSection,
   id
 }: DashboardProps) {
   const { getToken } = useAuth();
@@ -151,6 +155,9 @@ export default function Dashboard({
           ) : null}
         </div>
       </section>
+
+      {/* Profile completion: hidden once complete. */}
+      {onEditProfileSection && <ProfileCompletionCard completion={student.completion} onEditSection={onEditProfileSection} />}
 
       {/* Where they stand */}
       {held.length > 0 || isScholar ? (

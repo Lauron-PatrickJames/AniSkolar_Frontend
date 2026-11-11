@@ -276,19 +276,22 @@ export function DraftIndicator({ status, savedAt, onSave, localOnly }: {
   );
 }
 
-export function SubmittedScreen({ isResubmit, referenceCode, scholarshipName, officeLabel, submissionNote, onBack }: {
+export function SubmittedScreen({ isResubmit, referenceCode, scholarshipName, officeLabel, submissionNote, onBack, after }: {
   isResubmit: boolean;
   referenceCode?: string;
   scholarshipName: string;
   officeLabel: string;
   submissionNote?: string;
   onBack: () => void;
+  // Under the confirmation, e.g. "Save these details to your profile?".
+  after?: React.ReactNode;
 }) {
   return (
+    <div className="max-w-xl mx-auto my-8 space-y-4">
     <motion.div
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="bg-white rounded-2xl border border-slate-200 p-8 md:p-12 text-center max-w-xl mx-auto space-y-6 shadow-xl my-8"
+      className="bg-white rounded-2xl border border-slate-200 p-8 md:p-12 text-center space-y-6 shadow-xl"
     >
       <div className="w-16 h-16 rounded-full bg-emerald-100 text-brand-green flex items-center justify-center mx-auto shadow-md">
         <CheckCircle className="w-10 h-10" />
@@ -325,5 +328,7 @@ export function SubmittedScreen({ isResubmit, referenceCode, scholarshipName, of
         Back to Scholarship
       </button>
     </motion.div>
+    {after}
+    </div>
   );
 }

@@ -12,7 +12,7 @@ import { GrantApplicationDetails, PolcaAdminFields, Scholarship, SfagApplication
 import { isGrantFormType, toGrantDetails } from '../../utils/grantForms';
 import { downloadZip, useDocumentUrl } from '../../utils/documents';
 import {
-  API_BASE_URL, AdminApplication, AdminDocument, AppStatus, applicantEmail, applicantName, applicantPhone,
+  API_BASE_URL, AdminApplication, AdminDocument, AppStatus, applicantEmail, applicantPhone, submittedName,
   applicantProgram, applicantYearLevel, authHeaders, formatBytes, formatDate, formatDateTime,
   historyLabel, isOfficeApp, normalizeApplication, titleCaseName
 } from './adminData';
@@ -66,7 +66,8 @@ export default function ApplicationReview({
   const isGrant = isGrantFormType(app.applicationFormType);
   const scholarship = mockScholarships.find(s => s.id === app.scholarshipId);
   const grantDetails = isGrant && scholarship ? toGrantDetails(app, scholarship) : null;
-  const name = titleCaseName(applicantName(app));
+  // As submitted: the application's snapshot, not the profile now.
+  const name = titleCaseName(submittedName(app));
   const officeApp = isOfficeApp(app);
   const events = useMemo(() => buildApplicationHistory(app, name), [app, name]);
   const missing = useMemo(() => missingDocuments(app, scholarship, grantDetails), [app, scholarship, grantDetails]);

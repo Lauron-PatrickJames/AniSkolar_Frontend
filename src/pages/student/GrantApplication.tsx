@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
 import { AlertCircle, CheckCircle, FileText } from 'lucide-react';
-import { Application, DocumentSlot, GrantApplicationDetails, Scholarship, StoredDocument, StudentProfile } from '../../types';
+import { Application, DocumentSlot, GrantApplicationDetails, ProfileChanges, SaveResult, Scholarship, StoredDocument, StudentProfile } from '../../types';
+import SaveToProfilePrompt from '../../components/SaveToProfilePrompt';
+import { GRANT_PROFILE_MAP, ProfileFieldChange, profileChangesFromForm } from '../../utils/profileSync';
 import { OFFICE_LABELS, officeOf } from '../../data/scholarships';
 import {
   FieldErrors, GRANT_PART_LABELS, GrantPart, GrantSectionKey, getGrantSections, initialGrantValues,
@@ -46,6 +48,9 @@ interface GrantApplicationProps {
   onSubmitApplication: (application: Application) => void;
   onResubmitApplication?: (application: Application) => void;
   existingApplication?: Application;
+  // After a submission: save details from the form to the profile
+  // (PATCH /api/students/me), once the student confirms.
+  onUpdateProfile?: (changes: ProfileChanges) => Promise<SaveResult>;
   id?: string;
 }
 
@@ -119,6 +124,7 @@ export default function GrantApplication({
   onSubmitApplication,
   onResubmitApplication,
   existingApplication,
+  onUpdateProfile,
   id
 }: GrantApplicationProps) {
   const { getToken } = useAuth();
@@ -147,6 +153,9 @@ export default function GrantApplication({
   const [banner, setBanner] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState<{ referenceCode: string } | null>(null);
+  // Details from the submitted form that the profile lacks or has
+  // differently, offered back to it on the success screen.
+  const [profileOffer, setProfileOffer] = useState<ProfileFieldChange[]>([]);
 
   // --- Draft loading ---------------------------------------------------------
   const [hydrated, setHydrated] = useState(isResubmit);
@@ -446,6 +455,7 @@ export default function GrantApplication({
         storedDocuments: saved.documents
       };
 
+      setProfileOffer(profileChangesFromForm(GRANT_PROFILE_MAP, payload, student));
       setSubmitted({ referenceCode: saved.referenceCode || '' });
       if (isResubmit && onResubmitApplication) onResubmitApplication(application);
       else onSubmitApplication(application);
@@ -466,6 +476,7 @@ export default function GrantApplication({
         officeLabel={officeLabel}
         submissionNote={scholarship.submissionNote}
         onBack={onBack}
+        after={onUpdateProfile && <SaveToProfilePrompt changes={profileOffer} onSave={onUpdateProfile} />}
       />
     );
   }

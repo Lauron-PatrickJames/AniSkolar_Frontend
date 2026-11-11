@@ -14,11 +14,26 @@ export const STUDENT = {
   name: 'Juan Miguel Dela Cruz',
   firstName: 'Juan Miguel',
   lastName: 'Dela Cruz',
+  programCode: 'BSIT',
   course: 'Bachelor of Science in Information Technology',
   college: 'College of Information and Computer Studies',
   yearLevel: '4th Year',
   email: 'dja1234@dlsud.edu.ph',
   gpa: '1.50',
+};
+
+// What the backend computes (utils/profileCompletion.js) for this scholar:
+// the core and contact are done, personal and family details aren't.
+export const COMPLETION = {
+  coreComplete: true,
+  percent: 45,
+  complete: false,
+  sections: [
+    { key: 'academic', label: 'Academic', complete: false, missing: ['section'], required: 4 },
+    { key: 'personal', label: 'Personal details', complete: false, missing: ['middleName', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'], required: 7 },
+    { key: 'contact', label: 'Contact information', complete: true, missing: [], required: 5 },
+    { key: 'family', label: 'Parents and guardian', complete: false, missing: ['fatherName', 'fatherContactNo', 'motherName', 'motherContactNo', 'guardianType'], required: 5 },
+  ],
 };
 
 const SFAG = { scholarshipId: 's1', scholarshipName: 'Student Financial Aid Grant (SFAG)' };
@@ -75,11 +90,25 @@ const ANNOUNCEMENTS = [
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
-export async function mockApi(page: Page) {
+// newStudent: signed in, but no student record yet (onboarding).
+// patches: every PATCH /api/students/me body, for checking what was sent.
+export async function mockApi(page: Page, { newStudent = false, patches = [] as Record<string, unknown>[] } = {}) {
+  let student: Record<string, unknown> | null = newStudent ? null : { ...STUDENT, completion: COMPLETION };
   await page.route(`${API}/api/**`, route => {
     const { pathname } = new URL(route.request().url());
+    const method = route.request().method();
+    if (pathname === '/api/students/complete-profile' && method === 'POST') {
+      student = { ...STUDENT, ...route.request().postDataJSON(), completion: COMPLETION };
+      return json(route, { student }, 201);
+    }
+    if (pathname === '/api/students/me' && method === 'PATCH') {
+      const body = route.request().postDataJSON();
+      patches.push(body);
+      student = { ...student, ...body };
+      return json(route, { student });
+    }
     switch (pathname) {
-      case '/api/students/me': return json(route, { student: STUDENT });
+      case '/api/students/me': return student ? json(route, { student }) : json(route, { error: 'Profile not yet completed.' }, 404);
       case '/api/students/me/holdings':
         return json(route, { held: [SFAG], exclusive: SFAG, slotsFull: [], details: [{ ...SFAG, grantPercentage: 50, approvedAt: '2026-10-29T02:00:00.000Z', referenceCode: 'SFAG-2026-0001' }] });
       case '/api/office/me': return json(route, { error: 'Not an office head' }, 404);

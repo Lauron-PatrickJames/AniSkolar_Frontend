@@ -201,6 +201,24 @@ export function applicantName(app: AdminApplication): string {
   return 'Unknown applicant';
 }
 
+// The name as submitted on this application (its snapshot), for the
+// application's own detail view: later profile edits don't change what
+// was submitted. Falls back to the profile name for an application that
+// stored no name.
+export function submittedName(app: AdminApplication): string {
+  const join = (...parts: (string | undefined)[]) => parts.map(p => (p ?? '').trim()).filter(Boolean).join(' ');
+  if (usesSectionForm(app) && app.personalInfo) {
+    const p = app.personalInfo as SfagPersonalInfo & { middleName?: string };
+    const n = join(p.firstName, p.middleName || p.middleInitial, p.lastName);
+    if (n) return n;
+  }
+  if (app.standardInfo) {
+    const n = join(app.standardInfo.firstName, app.standardInfo.middleName, app.standardInfo.lastName);
+    if (n) return n;
+  }
+  return applicantName(app);
+}
+
 export function applicantEmail(app: AdminApplication): string {
   if (!usesSectionForm(app)) return app.standardInfo?.email ?? '';
   // Grant forms store the email with the student data.

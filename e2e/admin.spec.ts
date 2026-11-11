@@ -11,8 +11,8 @@ const ADSO = process.env.E2E_ADSO_EMAIL;
 const OFFICE = process.env.E2E_OFFICE_EMAIL;
 const hasClerk = !!process.env.CLERK_SECRET_KEY;
 
-async function signIn(page: Page, emailAddress: string) {
-  await mockAdminApi(page);
+async function signIn(page: Page, emailAddress: string, options: Parameters<typeof mockAdminApi>[1] = {}) {
+  await mockAdminApi(page, options);
   await page.goto('/');
   await clerk.signIn({ page, emailAddress });
   // The sidebar (a hidden drawer on phones) is in the page once the console loads.
@@ -92,9 +92,56 @@ test.describe('AdSO', () => {
   });
 });
 
+test.describe('AdSO approves other offices’ announcements', () => {
+  test.skip(!ADSO || !hasClerk, 'Set E2E_ADSO_EMAIL in .env.e2e to run the AdSO tests.');
+
+  test('a waiting announcement shows in the sidebar and can be approved', async ({ page }) => {
+    const decisions: string[] = [];
+    await signIn(page, ADSO!, { decisions });
+    await showMenu(page);
+    // The sidebar counts what's waiting.
+    await expect(navItem(page, 'Announcements')).toHaveAccessibleName(/1 waiting for your approval/);
+    await navItem(page, 'Announcements').click();
+
+    const queue = page.getByRole('list', { name: 'Announcements waiting for approval' });
+    await expect(queue.getByText('POLCA scholars’ orientation')).toBeVisible();
+    await expect(queue.getByText('POLCA Office')).toBeVisible();
+    await expect(queue.getByText(/emails students once approved/i)).toBeVisible();
+
+    await queue.getByRole('button', { name: 'Approve' }).click();
+    await expect(page.getByText(/approved “polca scholars’ orientation”/i)).toBeVisible();
+    expect(decisions).toEqual(['approve']);
+  });
+
+  test('returning needs a note', async ({ page }) => {
+    const decisions: string[] = [];
+    await signIn(page, ADSO!, { decisions });
+    await openView(page, 'Announcements');
+    const queue = page.getByRole('list', { name: 'Announcements waiting for approval' });
+    await queue.getByRole('button', { name: 'Return' }).click();
+    await queue.getByRole('button', { name: 'Return to office' }).click();
+    await expect(queue.getByText('Tell the office what to change.')).toBeVisible();
+    expect(decisions).toEqual([]);
+    await queue.getByRole('textbox').fill('Add the venue.');
+    await queue.getByRole('button', { name: 'Return to office' }).click();
+    await expect(page.getByText(/returned “polca scholars’ orientation” to polca office/i)).toBeVisible();
+    expect(decisions).toEqual(['return']);
+  });
+});
+
 test.describe('Partner office', () => {
   test.skip(!OFFICE || !hasClerk, 'Set E2E_OFFICE_EMAIL in .env.e2e to run the office tests.');
   test.beforeEach(async ({ page }) => signIn(page, OFFICE!));
+
+  test('submits announcements for the AdSO’s approval instead of publishing', async ({ page }) => {
+    await openView(page, 'Announcements');
+    // Only the AdSO reviews.
+    await expect(page.getByRole('list', { name: 'Announcements waiting for approval' })).toHaveCount(0);
+    await page.getByRole('button', { name: /new announcement/i }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'New announcement' });
+    await expect(dialog.getByRole('button', { name: 'Submit for approval' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /^publish$/i })).toHaveCount(0);
+  });
 
   test('sees only its own sections', async ({ page }) => {
     await showMenu(page);

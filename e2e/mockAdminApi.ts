@@ -28,17 +28,37 @@ export const APPLICATIONS = [
   },
 ];
 
+// An office's announcement waiting for the AdSO's approval.
+export const PENDING_ANNOUNCEMENT = {
+  id: 'an-pending', title: 'POLCA scholars’ orientation', date: 'November 10, 2026',
+  description: 'Orientation for new POLCA scholars on Friday.', content: 'Orientation for new POLCA scholars is on Friday at 2 PM in the ICTC lobby.',
+  category: 'Event', scholarshipId: 's3', office: 'POLCA', dutyOffice: null, status: 'pending',
+  review: { requestedStatus: 'published', requestedAt: '2026-11-10T02:00:00.000Z', requestedBy: 'polca@dlsud.edu.ph', decision: null, decidedAt: null, decidedBy: null, note: null },
+  isPinned: false, publishedAt: null, scheduledFor: null, createdBy: 'polca@dlsud.edu.ph', createdAt: '2026-11-10T02:00:00.000Z', updatedAt: '2026-11-10T02:00:00.000Z',
+  images: [], fbEnabled: false, fbStatus: 'not_posted', fbPostId: null, fbPermalink: null, fbError: null, fbLastSyncedAt: null,
+  emailEnabled: true, emailAudience: 'scholars', emailStatus: 'not_sent', emailTotal: 0, emailSent: 0,
+};
+
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
-export async function mockAdminApi(page: Page) {
+// decisions: each "approve" / "return" the AdSO sends.
+export async function mockAdminApi(page: Page, { decisions = [] as string[] } = {}) {
+  let pending = [PENDING_ANNOUNCEMENT];
   await page.route(`${API}/api/**`, route => {
     const { pathname } = new URL(route.request().url());
+    const decided = pathname.match(/^\/api\/announcements\/([^/]+)\/(approve|return)$/);
+    if (decided && route.request().method() === 'POST') {
+      decisions.push(decided[2]);
+      pending = pending.filter(a => a.id !== decided[1]);
+      return json(route, { announcement: { ...PENDING_ANNOUNCEMENT, status: decided[2] === 'approve' ? 'published' : 'draft' } });
+    }
     if (route.request().method() !== 'GET') return json(route, { ok: true });
     switch (pathname) {
       case '/api/applications': return json(route, { applications: APPLICATIONS });
       case '/api/scholarships': case '/api/scholarships/admin': return json(route, { scholarships: [] });
       case '/api/announcements': case '/api/announcements/feed': return json(route, { announcements: [] });
+      case '/api/announcements/review': return json(route, { announcements: pending });
       case '/api/messages/admin/unread': return json(route, { unread: 0 });
       case '/api/messages/admin/threads': return json(route, { threads: [] });
       case '/api/reply-templates': return json(route, { templates: [] });

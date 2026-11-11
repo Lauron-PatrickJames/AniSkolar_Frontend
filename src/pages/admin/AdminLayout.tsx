@@ -51,6 +51,8 @@ interface AdminLayoutProps {
   pendingCount?: number;
   // Unread messages from students, shown on Messages.
   messageCount?: number;
+  // Offices' announcements waiting for the AdSO's approval, on Announcements.
+  announcementCount?: number;
   // Views this admin can't open (e.g. announcements for office admins).
   hiddenViews?: MainView[];
   breadcrumbs: Crumb[];
@@ -63,7 +65,7 @@ interface AdminLayoutProps {
 // and table headers (sticky top-topbar) stay pinned while pages scroll.
 // Sidebar: full width from lg, an icon rail from md to lg, a drawer below md.
 export default function AdminLayout({
-  currentView, onNavigate, onLogout, adminEmail, adminName, adminAvatarUrl, officeLabel, officeShort, pendingCount, messageCount, hiddenViews = [], breadcrumbs, pageKey, children
+  currentView, onNavigate, onLogout, adminEmail, adminName, adminAvatarUrl, officeLabel, officeShort, pendingCount, messageCount, announcementCount, hiddenViews = [], breadcrumbs, pageKey, children
 }: AdminLayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
@@ -93,6 +95,7 @@ export default function AdminLayout({
           officeLabel={officeLabel}
           pendingCount={pendingCount}
           messageCount={messageCount}
+          announcementCount={announcementCount}
           hiddenViews={hiddenViews}
         />
 
@@ -217,7 +220,7 @@ function Breadcrumbs({ items }: { items: Crumb[] }) {
   );
 }
 
-function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail, officeLabel, pendingCount, messageCount, hiddenViews }: {
+function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail, officeLabel, pendingCount, messageCount, announcementCount, hiddenViews }: {
   currentView: MainView;
   onNavigate: (view: MainView) => void;
   open: boolean;
@@ -227,6 +230,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
   officeLabel: string;
   pendingCount?: number;
   messageCount?: number;
+  announcementCount?: number;
   hiddenViews: MainView[];
 }) {
   const sections = SECTIONS
@@ -286,7 +290,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
                   const Icon = item.icon;
                   const active = currentView === item.id;
                   const name = VIEW_TITLES[item.id];
-                  const count = item.id === 'applications' ? pendingCount ?? 0 : item.id === 'messages' ? messageCount ?? 0 : 0;
+                  const count = item.id === 'applications' ? pendingCount ?? 0 : item.id === 'messages' ? messageCount ?? 0 : item.id === 'announcements' ? announcementCount ?? 0 : 0;
                   return (
                     <li key={item.id}>
                       <button
@@ -300,7 +304,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
                         <Icon className={`size-4.5 shrink-0 ${active ? 'text-accent' : 'text-ink-subtle group-hover:text-ink-muted'}`} aria-hidden />
                         <span className="flex-1 truncate text-left md:max-lg:sr-only">
                           {name}
-                          {count > 0 && <span className="sr-only">, {count} {item.id === 'messages' ? 'unread' : 'awaiting review'}</span>}
+                          {count > 0 && <span className="sr-only">, {count} {item.id === 'messages' ? 'unread' : item.id === 'announcements' ? 'waiting for your approval' : 'awaiting review'}</span>}
                         </span>
                         {count > 0 && (
                           <>

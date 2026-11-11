@@ -171,6 +171,24 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     return () => { window.clearInterval(timer); window.removeEventListener(MESSAGES_READ_EVENT, checkMessages); };
   }, [checkMessages]);
   useEffect(() => { checkMessages(); }, [checkMessages, mainView]);
+
+  // Offices' announcements waiting for approval (AdSO only): on every page
+  // change and every minute; the Announcements page reports changes.
+  const [announcementCount, setAnnouncementCount] = useState(0);
+  const checkAnnouncements = useCallback(async () => {
+    if (!isAdso) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/announcements/review`, { headers: await authHeaders(getToken) });
+      if (res.ok && mounted.current) setAnnouncementCount(((await res.json()).announcements ?? []).length);
+    } catch {
+      // keep the last count
+    }
+  }, [isAdso, getToken]);
+  useEffect(() => {
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') checkAnnouncements(); }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [checkAnnouncements]);
+  useEffect(() => { checkAnnouncements(); }, [checkAnnouncements, mainView]);
   // Opens the conversation with a student (AdSO).
   const messageStudent = (studentNumber: string) => { navigate('messages'); setSelectedScholar(studentNumber); };
   const selected = selectedId ? applications.find(a => a._id === selectedId) ?? null : null;
@@ -334,7 +352,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       />
     );
   } else if (mainView === 'announcements') {
-    page = <AdminAnnouncements ownOffice={(adminOffice ?? 'LSO') as ScholarshipOffice} />;
+    page = <AdminAnnouncements ownOffice={(adminOffice ?? 'LSO') as ScholarshipOffice} onReviewCountChange={setAnnouncementCount} />;
   } else if (mainView === 'home') {
     page = (
       <AdminHome
@@ -416,6 +434,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       officeShort={adminOffice ? OFFICE_SHORT_LABELS[adminOffice as keyof typeof OFFICE_SHORT_LABELS] ?? adminOffice : OFFICE_SHORT_LABELS.LSO}
       pendingCount={pendingCount}
       messageCount={messageCount}
+      announcementCount={announcementCount}
       hiddenViews={sidebarHidden}
       breadcrumbs={breadcrumbs}
       pageKey={`${mainView}:${selectedId ?? ''}:${selectedScholar ?? ''}:${selectedScholarship ?? ''}`}

@@ -33,7 +33,10 @@ const DAY_COLORS: Record<string, string> = {
 const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base sm:text-sm focus:border-brand-green focus:outline-hidden focus:ring-2 focus:ring-brand-green/20';
 const labelClass = 'text-xs font-bold text-slate-700';
 
-export default function DutyHours({ student }: { student: StudentProfile }) {
+// canLog: the student holds the SFAG now (holdings from the server). A
+// former scholar (graduated, declined it, or not renewed) still sees their
+// duty hours, read-only; the server refuses changes from them too.
+export default function DutyHours({ student, canLog = true }: { student: StudentProfile; canLog?: boolean }) {
   const { getToken } = useAuth();
   const [term, setTerm] = useState<TermKey | null>(null);
   const [current, setCurrent] = useState<TermKey | null>(null);
@@ -214,22 +217,22 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
       {/* Details on the left; progress with the duty form under it on the
           right, so neither column leaves a gap. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <DetailsCard log={log} rule={rule} onSave={save} saveState={saveState} />
+        <DetailsCard log={log} rule={rule} onSave={canLog ? save : undefined} saveState={saveState} />
         <div className="lg:col-span-2 space-y-6 min-w-0">
           <SummaryCard summary={summary} />
           {/* Duty is rendered in the office the AdSO assigns, so logging opens
               once there is one (the server refuses new duties before that). */}
-          {log.officeAssigned ? <AddDutyForm log={log} onSave={save} confirmationRequired={confirmationRequired} /> : <AwaitingOfficeCard />}
+          {!canLog ? <NoLongerScholarCard /> : log.officeAssigned ? <AddDutyForm log={log} onSave={save} confirmationRequired={confirmationRequired} /> : <AwaitingOfficeCard />}
         </div>
       </div>
       {!!log.expiredEntries?.length && <ExpiredDutiesNote entries={log.expiredEntries} />}
 
       {(log.officeAssigned || log.entries.length > 0) && (
-        <RegularDutyTable log={log} onSave={save} confirmationRequired={confirmationRequired} />
+        <RegularDutyTable log={log} onSave={canLog ? save : undefined} confirmationRequired={confirmationRequired} />
       )}
 
       <div className={`grid grid-cols-1 gap-6 ${log.entries.length > 0 ? 'lg:grid-cols-2' : ''}`}>
-        <EventsCard events={events} claims={claims} busyId={claimBusy} onWithdraw={id => claimEvent(id, true)} />
+        <EventsCard events={events} claims={claims} busyId={claimBusy} onWithdraw={canLog ? id => claimEvent(id, true) : undefined} />
         {log.entries.length > 0 && <WeeklyCard entries={log.entries} />}
       </div>
     </div>
@@ -239,10 +242,11 @@ export default function DutyHours({ student }: { student: StudentProfile }) {
 // --- Details & summary -------------------------------------------------------------
 
 function DetailsCard({ log, rule, onSave, saveState }: {
-  log: DutyLog; rule: DutyRule; onSave: (log: DutyLog) => void; saveState: 'idle' | 'saving' | 'saved';
+  log: DutyLog; rule: DutyRule; onSave?: (log: DutyLog) => void; saveState: 'idle' | 'saving' | 'saved';
 }) {
   // Set by the AdSO for the scholar's grant percentage: shown, not edited.
-  const hoursFromAdso = rule.requiredHours !== null;
+  // Without onSave (no longer a scholar) the value is shown the same way.
+  const hoursFromAdso = rule.requiredHours !== null || !onSave;
   const [required, setRequired] = useState(log.requiredHours !== undefined ? String(log.requiredHours) : '');
   useEffect(() => {
     setRequired(log.requiredHours !== undefined ? String(log.requiredHours) : '');
@@ -252,7 +256,7 @@ function DetailsCard({ log, rule, onSave, saveState }: {
     const req = required.trim() === '' ? undefined : Number(required);
     if (req !== undefined && (!Number.isFinite(req) || req < 0)) return;
     if (hoursFromAdso || req === log.requiredHours) return;
-    onSave({ ...log, requiredHours: req });
+    onSave?.({ ...log, requiredHours: req });
   };
 
   return (
@@ -287,7 +291,7 @@ function DetailsCard({ log, rule, onSave, saveState }: {
             <span className={labelClass}>Required hours</span>
             <p className="mt-1.5 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-900 tabular-nums">
               <Lock className="w-3.5 h-3.5 shrink-0 text-slate-400" aria-hidden />
-              {wholeHours(rule.requiredHours)} hours
+              {wholeHours(rule.requiredHours ?? log.requiredHours ?? null)} hours
             </p>
           </div>
         ) : (
@@ -358,6 +362,18 @@ function SummaryCard({ summary }: { summary: DutySummary }) {
 
 // --- Regular duty ------------------------------------------------------------------
 
+function NoLongerScholarCard() {
+  return (
+    <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-6 sm:p-8 text-center space-y-2">
+      <Lock className="w-8 h-8 text-slate-300 mx-auto" aria-hidden />
+      <h3 className="font-display font-bold text-base text-slate-900">Duty logging is closed</h3>
+      <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+        You no longer hold the SFAG, so you can’t log duties. Your past duty hours stay here for your records.
+      </p>
+    </div>
+  );
+}
+
 function AwaitingOfficeCard() {
   return (
     <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-6 sm:p-8 text-center space-y-2">
@@ -411,15 +427,18 @@ function AddDutyForm({ log, onSave, confirmationRequired = false }: { log: DutyL
     const overlap = log.entries.find(x => x.date === date && timeIn < x.timeOut && x.timeIn < timeOut);
     if (overlap) { setError(`This overlaps your ${format12h(overlap.timeIn)}–${format12h(overlap.timeOut)} duty that day.`); return; }
     setError('');
-    // Correcting a flagged duty: the new one replaces it.
+    // Correcting a flagged duty: it's the same duty with new times (same
+    // id), so the office head sees the correction, not a new duty.
     let entries = log.entries;
+    let replacing: DutyEntry | undefined;
     if (date !== today) {
       const i = entries.findIndex(x => x.status === 'flagged' && x.date === date);
       if (i < 0) { setError('You can only log a duty on the day you render it.'); return; }
+      replacing = entries[i];
       entries = entries.filter((_, j) => j !== i);
       setDate(today);
     }
-    onSave({ ...log, entries: sortEntries([...entries, { date, timeIn, timeOut }]) });
+    onSave({ ...log, entries: sortEntries([...entries, { ...(replacing?._id ? { _id: replacing._id } : {}), date, timeIn, timeOut }]) });
     setTimeIn('');
     setTimeOut('');
   };
@@ -486,11 +505,11 @@ function waitingSuffix(entry: DutyEntry): string {
   return left <= 1 ? ' · removed within the hour' : ` · removed in ${left} h`;
 }
 
-function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: DutyLog; onSave: (log: DutyLog) => void; confirmationRequired?: boolean }) {
+function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: DutyLog; onSave?: (log: DutyLog) => void; confirmationRequired?: boolean }) {
   const entries = sortEntries(log.entries);
   const remove = (entry: DutyEntry) => {
     const i = log.entries.indexOf(entry);
-    onSave({ ...log, entries: log.entries.filter((_, j) => j !== i) });
+    onSave?.({ ...log, entries: log.entries.filter((_, j) => j !== i) });
   };
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -520,9 +539,11 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
                   </p>
                 </div>
                 <span className="shrink-0 text-sm font-bold text-slate-800">{formatHours(entryHours(entry))} h</span>
-                <button type="button" onClick={() => remove(entry)} aria-label={`Delete duty on ${formatDutyDate(entry.date)} ${format12h(entry.timeIn)}`} className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {onSave && (
+                  <button type="button" onClick={() => remove(entry)} aria-label={`Delete duty on ${formatDutyDate(entry.date)} ${format12h(entry.timeIn)}`} className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </li>
             );
           })}
@@ -560,9 +581,11 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
                       </td>
                     )}
                     <td className="pr-4 text-right">
-                      <button type="button" onClick={() => remove(entry)} aria-label={`Delete duty on ${formatDutyDate(entry.date)} ${format12h(entry.timeIn)}`} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {onSave && (
+                        <button type="button" onClick={() => remove(entry)} aria-label={`Delete duty on ${formatDutyDate(entry.date)} ${format12h(entry.timeIn)}`} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -591,7 +614,7 @@ function EventsCard({ events, claims, busyId, onWithdraw }: {
   events: CreditedEvent[];
   claims: EventClaim[];
   busyId: string | null;
-  onWithdraw: (eventId: string) => void;
+  onWithdraw?: (eventId: string) => void;
 }) {
   const today = todayInManila();
   const claimOf = new Map(claims.map(c => [c.eventId, c]));
@@ -624,7 +647,7 @@ function EventsCard({ events, claims, busyId, onWithdraw }: {
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ring-1 ring-inset ${CLAIM_BADGE[claim.status]}`}>
                         {claim.status === 'Pending' ? 'Waiting for approval' : claim.status === 'Approved' ? 'Credited' : claim.status}
                       </span>
-                      {claim.status === 'Pending' && (
+                      {claim.status === 'Pending' && onWithdraw && (
                         <button type="button" onClick={() => onWithdraw(event._id)} disabled={busy} className="text-xs font-bold text-slate-500 hover:text-rose-600 disabled:opacity-50">
                           Withdraw
                         </button>

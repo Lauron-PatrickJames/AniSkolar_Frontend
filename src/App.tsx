@@ -4,7 +4,7 @@ import MyApplications from './pages/student/MyApplications';
 import { AppSkeleton, FormSkeleton } from './components/Skeletons';
 import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, SaveResult } from './types';
-import { acceptsOnlineApplications, applicationWindow, applyScholarshipOverrides, mockScholarships, registerCustomScholarships } from './data/scholarships';
+import { acceptsOnlineApplications, applicationWindow, applyScholarshipOverrides, mockScholarships, registerCustomScholarships, setServerApplyBlocks } from './data/scholarships';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
 import { Holdings, applyBlock, holdingNotice, isSfagScholar, setSfagOpenAllYear } from './utils/eligibility';
 import { DutyNotice } from './utils/notifications';
@@ -233,6 +233,8 @@ export default function App() {
         if (!cancelled && Array.isArray(body.scholarships)) {
           // The backend may lift the SFAG's June–July limit for demos.
           setSfagOpenAllYear(body.sfagOpenAllYear === true);
+          // Why each one can't be applied for now: the backend's own rule.
+          setServerApplyBlocks(body.applyBlocks);
           const all = applyScholarshipOverrides(mockScholarships, body.scholarships as ScholarshipOverride[]);
           // Scholarships the AdSO created become known to every lookup by id.
           registerCustomScholarships(all);
@@ -966,7 +968,8 @@ export default function App() {
               case 'renewals':
                 return isScholar ? <Renewals /> : null;
               case 'duty-hours':
-                return isSfag ? <DutyHours student={student} /> : null;
+                // Former SFAG scholars keep a read-only view; logging needs the SFAG held now.
+                return isSfag ? <DutyHours student={student} canLog={holdings ? holdings.held.some(h => h.scholarshipId === 's1') : true} /> : null;
               case 'messages':
                 return <Messages applications={applications} />;
               case 'scholarship-details':

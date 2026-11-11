@@ -697,9 +697,15 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
         ) : decided && !changing ? (
           <>
             <DecisionSummary app={app} last={last} />
-            <Button variant="ghost" size="sm" className="-ml-2.5" onClick={() => { setChanging(true); setNoteError(''); }}>
-              Change decision
-            </Button>
+            {/* An ended scholarship keeps its decision (the server refuses a
+                change); undoing the end, under Scholar status, reopens it. */}
+            {app.endedAt ? (
+              <p className="text-sm text-ink-muted">This scholarship has ended, so its decision can’t be changed. Undo the end first.</p>
+            ) : (
+              <Button variant="ghost" size="sm" className="-ml-2.5" onClick={() => { setChanging(true); setNoteError(''); }}>
+                Change decision
+              </Button>
+            )}
           </>
         ) : (
           <>

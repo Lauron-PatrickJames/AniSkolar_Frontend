@@ -1,4 +1,4 @@
-import { GuardianType, StudentProfile } from '../../types';
+import { GuardianType, ProfileSectionKey, StudentProfile } from '../../types';
 import { findProgram } from '../../data/programs';
 import { CITIES_BY_PROVINCE } from '../../data/phLocations';
 import { formatPhone, guardianTypeOf, isValidContactNumber, normalizePhMobile, toIsoDate } from '../../utils/profile';
@@ -103,26 +103,43 @@ export function draftFromStudent(s: StudentProfile): ProfileDraft {
   };
 }
 
-// Which section each field is in (for error dots and "go to first error").
-export type DraftSection = 'academic' | 'personal' | 'contact' | 'family';
+// Which section each field is in (for error dots, "go to first error" and
+// saving one section at a time). Same sections as the backend's
+// utils/profileCompletion.js.
+export type DraftSection = ProfileSectionKey;
 export const SECTION_FIELDS: Record<DraftSection, DraftField[]> = {
   academic: ['programCode', 'yearLevel', 'section', 'gpa'],
   personal: ['firstName', 'lastName', 'middleName', 'nameSuffix', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'],
   contact: ['homeAddress', 'country', 'province', 'cityMunicipality', 'zipCode', 'mobileNumber', 'telephoneNumber'],
-  family: ['fatherName', 'fatherContactNo', 'motherName', 'motherContactNo', 'guardianType', 'guardianName', 'guardianRelationship', 'guardianContactNo', 'guardianAddress'],
+  family: ['fatherName', 'fatherContactNo', 'fatherDeceased', 'motherName', 'motherContactNo', 'motherDeceased', 'guardianType', 'guardianName', 'guardianRelationship', 'guardianContactNo', 'guardianAddress', 'guardianAddressSameAsHome'],
 };
+export const ALL_SECTIONS = Object.keys(SECTION_FIELDS) as DraftSection[];
+
+// Sections whose values differ between two drafts (what a save sends).
+export function changedSections(before: ProfileDraft, after: ProfileDraft): DraftSection[] {
+  return ALL_SECTIONS.filter(s => SECTION_FIELDS[s].some(f => before[f] !== after[f]));
+}
+
+// Living parents, both listed: no guardian needed (as the backend's
+// profile completion counts it).
+export const needsGuardian = (d: Pick<ProfileDraft, 'fatherName' | 'fatherDeceased' | 'motherName' | 'motherDeceased'>) =>
+  !(d.fatherName.trim() && !d.fatherDeceased && d.motherName.trim() && !d.motherDeceased);
 
 const isPh = (d: ProfileDraft) => !d.country || d.country === PHILIPPINES;
 
-// Every problem with the draft, by field. Everything is required except
-// the telephone, the name suffix, a 1st year's GPA (incoming freshmen have
-// none yet) and a deceased parent's contact number. Mirrors
-// missingRequired() in the backend's routes/students.js.
-export function validateDraft(d: ProfileDraft, _options: { requireAcademic?: boolean } = {}): DraftErrors {
+// Every problem with the draft, by field. Required fields are checked only
+// in `sections` (the ones being saved; all by default), so a student can
+// save one section while others are still empty; a value that's filled in
+// is always checked. Required: everything except the telephone, the name
+// suffix, a 1st year's GPA (incoming freshmen have none yet), a deceased
+// parent's contact number, and the guardian when both parents are listed.
+// Same fields as the backend's utils/profileCompletion.js.
+export function validateDraft(d: ProfileDraft, { sections = ALL_SECTIONS }: { sections?: DraftSection[] } = {}): DraftErrors {
   const e: DraftErrors = {};
+  const checked = new Set(sections.flatMap(s => SECTION_FIELDS[s]));
   const need = (field: DraftField, message: string) => {
     const v = d[field];
-    if (typeof v === 'string' && !v.trim()) e[field] = message;
+    if (checked.has(field) && typeof v === 'string' && !v.trim()) e[field] = message;
   };
   need('programCode', 'Choose your program.');
   if (d.programCode && !findProgram(d.programCode)) e.programCode = 'Choose your program from the list.';
@@ -148,7 +165,7 @@ export function validateDraft(d: ProfileDraft, _options: { requireAcademic?: boo
   if (!d.fatherDeceased) need('fatherContactNo', 'Enter your father’s contact number, or tick “Deceased”.');
   need('motherName', 'Enter your mother’s full name.');
   if (!d.motherDeceased) need('motherContactNo', 'Enter your mother’s contact number, or tick “Deceased”.');
-  if (!d.guardianType) e.guardianType = 'Choose who your guardian is.';
+  if (checked.has('guardianType') && !d.guardianType && needsGuardian(d)) e.guardianType = 'Choose who your guardian is.';
   if (d.guardianType === 'other') {
     need('guardianContactNo', 'Enter your guardian’s contact number.');
     if (!d.guardianAddressSameAsHome) need('guardianAddress', 'Enter your guardian’s address.');
@@ -188,8 +205,8 @@ export function validateDraft(d: ProfileDraft, _options: { requireAcademic?: boo
   if (d.guardianType === 'father' && d.fatherDeceased) e.guardianType = 'Your father is marked deceased; choose another guardian.';
   if (d.guardianType === 'mother' && d.motherDeceased) e.guardianType = 'Your mother is marked deceased; choose another guardian.';
   if (d.guardianType === 'other') {
-    if (!d.guardianName.trim()) e.guardianName = 'Enter your guardian’s name.';
-    if (!d.guardianRelationship.trim()) e.guardianRelationship = 'Enter how they’re related to you.';
+    need('guardianName', 'Enter your guardian’s name.');
+    need('guardianRelationship', 'Enter how they’re related to you.');
   }
   return e;
 }
@@ -200,8 +217,15 @@ export function errorsIn(errors: DraftErrors, section: DraftSection): DraftField
 
 // The request body for POST /complete-profile and PATCH /me. Phone numbers
 // go as typed (the server normalizes them); "same as father / mother" and
-// "same as my home address" are resolved by the server.
-export function draftToPayload(d: ProfileDraft) {
+// "same as my home address" are resolved by the server. `sections` limits
+// it to those sections' fields (PATCH /me takes partial updates).
+export function draftToPayload(d: ProfileDraft, sections: DraftSection[] = ALL_SECTIONS) {
+  const payload = fullPayload(d);
+  const keep = new Set<string>(sections.flatMap(s => SECTION_FIELDS[s]));
+  return Object.fromEntries(Object.entries(payload).filter(([k]) => keep.has(k))) as Partial<ReturnType<typeof fullPayload>>;
+}
+
+function fullPayload(d: ProfileDraft) {
   const ph = isPh(d);
   return {
     programCode: d.programCode,

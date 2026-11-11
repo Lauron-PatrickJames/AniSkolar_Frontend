@@ -5,7 +5,7 @@ import { CorrectionGroup, ProfileChanges, SaveResult, StudentProfile, Verificati
 import { Alert, Button, Field, Modal, Textarea } from '../../pages/admin/AdminUI';
 import { AcademicFields, ContactFields, FamilyFields, LockedValue, PersonalFields } from './ProfileFormSections';
 import {
-  DraftField, DraftSection, ProfileDraft, SECTION_FIELDS, draftFromStudent, draftToPayload, validateDraft
+  DraftField, DraftSection, ProfileDraft, SECTION_FIELDS, changedSections, draftFromStudent, draftToPayload, validateDraft
 } from './profileForm';
 import { formatGpa, formatLongDate, openCorrectionRequest, programDetails, verificationOf, verificationText } from '../../utils/profile';
 import { titleCaseName } from '../../utils/names';
@@ -33,9 +33,10 @@ const GROUP_FIELDS: Record<CorrectionGroup, DraftField[]> = {
   gpa: ['gpa'],
   personal: ['firstName', 'lastName', 'middleName', 'nameSuffix', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'],
 };
-// Personal details the student can no longer change once they're all set
-// (older accounts can still fill in what's missing).
-const IDENTITY_REQUIRED: (keyof StudentProfile)[] = ['middleName', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'];
+// Personal details lock once the student confirmed them (a complete
+// Personal section saved, or the old full sign-up); until then a new
+// student can still correct a name the university directory split wrongly.
+const identityConfirmed = (s: StudentProfile) => !!(s.identityConfirmedAt || s.profileConfirmedAt);
 
 const sectionOf = (field: DraftField) => (Object.keys(SECTION_FIELDS) as DraftSection[]).find(s => SECTION_FIELDS[s].includes(field));
 
@@ -62,7 +63,7 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
   const panelRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const personalLocked = !adminMode && IDENTITY_REQUIRED.every(f => String(student[f] ?? '').trim());
+  const personalLocked = !adminMode && identityConfirmed(student);
   const programLocked = !adminMode && !!student.programCode;
   const lockedGroups: CorrectionGroup[] = adminMode ? [] : [
     ...(['enrollment', 'gpa'] as VerificationGroup[]).filter(g => verificationOf(student, g)),
@@ -70,10 +71,10 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
     ...(personalLocked ? ['personal' as const] : []),
   ];
   const lockedFields = new Set<DraftField>(lockedGroups.flatMap(g => GROUP_FIELDS[g]));
-  // Names are set at sign-up; afterwards only the AdSO changes them.
-  if (!adminMode) { lockedFields.add('firstName'); lockedFields.add('lastName'); }
-
-  const allErrors = validateDraft(draft, { requireAcademic: true });
+  // Only the sections the student changed are saved, so only their
+  // required fields are asked for: the rest can stay empty for now.
+  const dirtySections = changedSections(initial, draft);
+  const allErrors = validateDraft(draft, { sections: dirtySections });
   const errors = Object.fromEntries(Object.entries(allErrors).filter(([f]) => !lockedFields.has(f as DraftField))) as typeof allErrors;
   const errorFor = (f: DraftField) => (attempted || touched.has(f) ? errors[f] : undefined);
   const touch = (f: DraftField) => setTouched(prev => (prev.has(f) ? prev : new Set(prev).add(f)));
@@ -109,8 +110,9 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
       focusField_(firstBad);
       return;
     }
-    // Everything except verified groups (those can't change here).
-    const payload: ProfileChanges = { ...draftToPayload(draft) };
+    // The changed sections only (PATCH /me takes partial updates), minus
+    // locked groups (those can't change here).
+    const payload: ProfileChanges = { ...draftToPayload(draft, dirtySections) };
     for (const f of lockedFields) delete payload[f];
     setSaving(true);
     const result = await onSave(payload);
@@ -239,8 +241,7 @@ export default function EditProfileDialog({ student, initialSection = 'academic'
         ) : (
           <PersonalFields
             draft={draft} update={update} errorFor={errorFor} touch={touch}
-            lockNames={!adminMode}
-            nameHint={adminMode ? undefined : 'Only the Admissions and Scholarship Office can change your name. Use “Request a change” once your personal details are complete.'}
+            nameHint={adminMode ? undefined : 'Check that your name matches your birth certificate. Once this section is complete, only the Admissions and Scholarship Office can change these details.'}
           />
         ))}
         {section === 'contact' && <ContactFields draft={draft} update={update} errorFor={errorFor} touch={touch} email={student.email} />}

@@ -10,11 +10,15 @@ import {
   SfagSibling,
   SfagAssetsExpenses,
   SfagAgreement,
-  SfagApplicationDetails
+  SfagApplicationDetails,
+  ProfileChanges,
+  SaveResult
 } from '../../types';
 import { AlertCircle, CheckCircle, Plus, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import GrantApplication from './GrantApplication';
+import SaveToProfilePrompt from '../../components/SaveToProfilePrompt';
+import { ProfileFieldChange, SFAG_PROFILE_MAP, STANDARD_PROFILE_MAP, profileChangesFromForm } from '../../utils/profileSync';
 import { isGrantFormType } from '../../utils/grantForms';
 import { OFFICE_LABELS, officeOf } from '../../data/scholarships';
 import { OfficeAnswers, answerText, askedQuestions, officeFormFor } from '../../data/officeForms';
@@ -36,6 +40,9 @@ interface ApplyScholarshipProps {
   onSubmitApplication: (application: Application) => void;
   onResubmitApplication?: (application: Application) => void;
   existingApplication?: Application;
+  // After a submission: save details from the form to the profile
+  // (PATCH /api/students/me), once the student confirms.
+  onUpdateProfile?: (changes: ProfileChanges) => Promise<SaveResult>;
   id?: string;
 }
 
@@ -409,6 +416,7 @@ function StandardApplyScholarship({
   onSubmitApplication,
   onResubmitApplication,
   existingApplication,
+  onUpdateProfile,
   id
 }: ApplyScholarshipProps) {
   const { getToken } = useAuth();
@@ -535,6 +543,9 @@ function StandardApplyScholarship({
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  // Details from the submitted form that the profile lacks or has
+  // differently, offered back to it on the success screen.
+  const [profileOffer, setProfileOffer] = useState<ProfileFieldChange[]>([]);
   const [referenceCode, setReferenceCode] = useState('');
 
   // Document names already on file from the application being resubmitted —
@@ -933,6 +944,9 @@ function StandardApplyScholarship({
 
       clearDraft(scholarship.id, student.studentNumber, student.clerkId);
       setReferenceCode(saved.referenceCode || existingApplication?.id.slice(-8).toUpperCase() || '');
+      setProfileOffer(isSfag
+        ? profileChangesFromForm(SFAG_PROFILE_MAP, { personalInfo, contactSchool, parentsGuardian }, student)
+        : profileChangesFromForm(STANDARD_PROFILE_MAP, { firstName, middleName, lastName, phone, yearLevel, gpa }, student));
       setIsSubmitting(false);
       setIsSuccess(true);
       if (isResubmit && onResubmitApplication) {
@@ -1004,6 +1018,7 @@ function StandardApplyScholarship({
         scholarshipName={scholarship.name}
         officeLabel={officeLabel}
         onBack={onBack}
+        after={onUpdateProfile && <SaveToProfilePrompt changes={profileOffer} onSave={onUpdateProfile} />}
       />
     );
   }

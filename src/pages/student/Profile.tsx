@@ -18,13 +18,16 @@ interface ProfileProps {
   student: StudentProfile;
   onUpdateProfile: (changes: ProfileChanges) => Promise<SaveResult>;
   onStudentUpdated: (student: StudentProfile) => void;
+  // Opens the edit dialog on this section (e.g. from the dashboard's
+  // profile-completion card).
+  initialEdit?: DraftSection | null;
   id?: string;
 }
 
 const GROUPS: VerificationGroup[] = ['program', 'enrollment', 'gpa'];
 
-export default function Profile({ student, onUpdateProfile, onStudentUpdated, id }: ProfileProps) {
-  const [editing, setEditing] = useState<{ section: DraftSection; field?: DraftField } | null>(null);
+export default function Profile({ student, onUpdateProfile, onStudentUpdated, initialEdit, id }: ProfileProps) {
+  const [editing, setEditing] = useState<{ section: DraftSection; field?: DraftField } | null>(initialEdit ? { section: initialEdit } : null);
   const [toast, setToast] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
 

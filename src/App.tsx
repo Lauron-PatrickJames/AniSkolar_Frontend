@@ -3,7 +3,7 @@ import MyScholarship from './pages/student/MyScholarship';
 import MyApplications from './pages/student/MyApplications';
 import { AppSkeleton, FormSkeleton } from './components/Skeletons';
 import { useUser, useAuth, useClerk } from '@clerk/react';
-import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, SaveResult } from './types';
+import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, ProfileSectionKey, SaveResult } from './types';
 import { acceptsOnlineApplications, applicationWindow, applyScholarshipOverrides, mockScholarships, registerCustomScholarships, setServerApplyBlocks } from './data/scholarships';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
 import { Holdings, applyBlock, holdingNotice, isSfagScholar, setSfagOpenAllYear } from './utils/eligibility';
@@ -199,6 +199,9 @@ export default function App() {
   // GET /api/scholarships merged over the defaults in data/scholarships.ts.
   const [scholarships, setScholarships] = useState<Scholarship[]>(mockScholarships);
   const [authPhase, setAuthPhase] = useState<AuthPhase>('loading');
+  // The profile section to open for editing (dashboard → "Complete it").
+  const [profileEdit, setProfileEdit] = useState<ProfileSectionKey | null>(null);
+  const editProfileSection = (section: ProfileSectionKey) => { handleNavigate('profile'); setProfileEdit(section); };
   const [officeHead, setOfficeHead] = useState<OfficeHeadInfo | null>(null);
 
   useEffect(() => {
@@ -479,7 +482,9 @@ export default function App() {
 
         const data = await res.json();
         setStudent(data.student);
-        setAuthPhase('ready');
+        // A record missing part of the core (program, year level, GPA):
+        // onboarding first. Applications still load below.
+        setAuthPhase(data.student.completion?.coreComplete === false ? 'needs-profile' : 'ready');
 
         const token = await getToken();
         const apps = await fetchApplicationsForStudent(data.student.studentNumber, token);
@@ -573,6 +578,9 @@ export default function App() {
   };
 
   const handleNavigate = (page: string) => {
+    // Plain navigation (sidebar, menus) opens Profile without a dialog;
+    // editProfileSection sets the section right after this.
+    setProfileEdit(null);
     setCurrentPage(page);
     if (page !== 'scholarship-details' && page !== 'apply-scholarship') {
       setSelectedScholarshipId(null);
@@ -811,6 +819,7 @@ export default function App() {
   if (isSignedIn && authPhase === 'needs-profile') {
     return (
       <CompleteProfilePage
+        existing={student.studentNumber ? student : undefined}
         onComplete={completedStudent => {
           setStudent(completedStudent);
           setAuthPhase('ready');
@@ -995,6 +1004,7 @@ export default function App() {
                     onSubmitApplication={handleSubmitApplication}
                     onResubmitApplication={handleResubmitApplicationSaved}
                     existingApplication={resubmitApplication ?? undefined}
+                    onUpdateProfile={handleUpdateProfile}
                   />
                 );
               case 'announcements':
@@ -1015,9 +1025,11 @@ export default function App() {
               case 'profile':
                 return (
                   <Profile
+                    key={profileEdit ?? 'profile'}
                     student={student}
                     onUpdateProfile={handleUpdateProfile}
                     onStudentUpdated={setStudent}
+                    initialEdit={profileEdit}
                   />
                 );
               case 'dashboard':
@@ -1031,6 +1043,7 @@ export default function App() {
                     holdings={holdings}
                     onNavigate={handleNavigate}
                     onViewScholarship={handleViewScholarship}
+                    onEditProfileSection={editProfileSection}
                   />
                 );
             }

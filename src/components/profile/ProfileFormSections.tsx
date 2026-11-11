@@ -31,7 +31,9 @@ const tidyPhone = (v: string) => (normalizePhMobile(v) ? formatPhone(v) : v);
 
 // --- Academic ------------------------------------------------------------------------
 
-export function AcademicFields({ draft, update, errorFor, touch, locked = {}, extra }: SectionProps & {
+export function AcademicFields({ draft, update, errorFor, touch, locked = {}, extra, withSection = true }: SectionProps & {
+  // Onboarding leaves the section for later.
+  withSection?: boolean;
   // A verified group shown read-only (with its "Request correction" action)
   // instead of its inputs.
   locked?: Partial<Record<'program' | 'enrollment' | 'gpa', React.ReactNode>>;
@@ -68,7 +70,7 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
       )}
       <div className="space-y-5 @2xl:grid @2xl:grid-cols-3 @2xl:items-start @2xl:gap-4 @2xl:space-y-0">
       {locked.enrollment ?? (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:col-span-2 @2xl:gap-4">
+        <div className={`grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:gap-4 ${withSection ? '@2xl:col-span-2' : ''}`}>
           <Slot name="yearLevel">
             <Field label="Year level" error={errorFor('yearLevel')}>
               <Select value={draft.yearLevel} onChange={v => { update({ yearLevel: v }); touch('yearLevel'); }}>
@@ -77,11 +79,13 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
               </Select>
             </Field>
           </Slot>
-          <Slot name="section">
-            <Field label="Section" error={errorFor('section')}>
-              <TextInput value={draft.section} onChange={e => update({ section: e.target.value })} onBlur={() => touch('section')} placeholder="e.g. BIT44" maxLength={20} autoCapitalize="characters" />
-            </Field>
-          </Slot>
+          {withSection && (
+            <Slot name="section">
+              <Field label="Section" error={errorFor('section')}>
+                <TextInput value={draft.section} onChange={e => update({ section: e.target.value })} onBlur={() => touch('section')} placeholder="e.g. BIT44" maxLength={20} autoCapitalize="characters" />
+              </Field>
+            </Slot>
+          )}
         </div>
       )}
       {locked.gpa ?? (

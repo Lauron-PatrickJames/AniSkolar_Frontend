@@ -98,7 +98,7 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
       const res = await fetch(`${API_BASE_URL}/api/fse/${report.id}`, { method: 'DELETE', headers: await authHeaders(getToken) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to delete.');
       setDeleting(false);
-      setToast(`Deleted ${termLabel(report)}.`);
+      setToast(`Moved ${termLabel(report)} to the Trash.`);
       setSelectedId(null);
       await loadList();
     } catch (err) {
@@ -180,8 +180,8 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
       {deleting && report && (
         <ConfirmDialog
           title={`Delete ${termLabel(report)}?`}
-          description="You can upload it again later."
-          confirmLabel="Delete"
+          description="It moves to the Trash, where it can be restored for 30 days."
+          confirmLabel="Move to Trash"
           confirmIcon={Trash2}
           tone="danger"
           busy={deleteBusy}

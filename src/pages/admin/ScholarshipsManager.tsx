@@ -6,6 +6,7 @@ import {
   OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, formatPeriod, officeOf, registerCustomScholarships, scholarshipDefaults, handlingOffice, OFFICE_SHORT_LABELS } from '../../data/scholarships';
 import { EligibilityRules, lockedRules, ruleLines } from '../../data/requirementCatalog';
 import { DocumentsEditor, ListEditor, OpenToEditor, RulesEditor } from './RequirementEditors';
+import { OFFICE_FORMS, setOfficeNumbers } from '../../data/officeForms';
 import ScholarshipMatrix, { MatrixPatch } from './ScholarshipMatrix';
 import { API_BASE_URL, AppStatus, STATUS_OPTIONS, authHeaders, formatDateTime } from './adminData';
 import {
@@ -158,6 +159,11 @@ interface EditorState {
   referenceCode: string;
   availNote: string;
   handledBy: string;
+  // Slot limit: none, in all, or per college, and how many ('' = none).
+  slotLimit: 'none' | 'total' | 'college';
+  slotCount: string;
+  // The office's amounts / levels (officeForms numbers), as typed.
+  numbers: Record<string, string>;
 }
 
 const CATEGORIES: Scholarship['category'][] = ['Academic', 'Financial', 'Athletic', 'Leadership', 'Others'];
@@ -169,8 +175,12 @@ const rulesKey = (rules: EligibilityRules) => JSON.stringify(
   Object.entries(rules).filter(([k, v]) => v !== undefined && v !== false && !(k === 'applicantType' && v === 'any')).sort(([a], [b]) => a.localeCompare(b))
 );
 
-function editorFrom(s: Scholarship): EditorState {
+// `saved` is the office's saved numbers (the defaults when left out).
+function editorFrom(s: Scholarship, saved?: Record<string, number>): EditorState {
   return {
+    slotLimit: s.slotsPerCollege ? 'college' : s.totalSlots ? 'total' : 'none',
+    slotCount: String(s.slotsPerCollege || s.totalSlots || ''),
+    numbers: Object.fromEntries((OFFICE_FORMS[s.id]?.numbers ?? []).map(n => [n.key, String(saved?.[n.key] ?? n.default)])),
     status: s.setStatus ?? s.status,
     opensOn: s.opensOn ?? '',
     closesOn: s.closesOn ?? '',
@@ -217,7 +227,10 @@ function sameEditor(a: EditorState, b: EditorState): boolean {
     && a.applicationMode === b.applicationMode
     && a.referenceCode.trim().toUpperCase() === b.referenceCode.trim().toUpperCase()
     && a.availNote.trim() === b.availNote.trim()
-    && a.handledBy.trim() === b.handledBy.trim();
+    && a.handledBy.trim() === b.handledBy.trim()
+    && a.slotLimit === b.slotLimit
+    && (a.slotLimit === 'none' || Number(a.slotCount) === Number(b.slotCount))
+    && Object.keys(a.numbers).every(k => Number(a.numbers[k]) === Number(b.numbers[k]));
 }
 
 // Builds the PATCH body. A value equal to the default in code is sent as
@@ -226,7 +239,17 @@ function toPayload(form: EditorState, defaults: Scholarship) {
   const text = (value: string, base: string | undefined) => (value.trim() === (base ?? '').trim() ? null : value.trim());
   const list = (value: string[], base: string[] = []) => (sameList(clean(value), base) ? null : clean(value));
   const slotBased = !!defaults.documentSlots?.length;
+  // Slots: null for both when they match the code's (0 = no limit).
+  const count = Number(form.slotCount) || 0;
+  const totalSlots = form.slotLimit === 'total' ? count : 0;
+  const slotsPerCollege = form.slotLimit === 'college' ? count : 0;
+  const slotsAtDefault = totalSlots === (defaults.totalSlots ?? 0) && slotsPerCollege === (defaults.slotsPerCollege ?? 0);
+  const numberSpec = OFFICE_FORMS[defaults.id]?.numbers ?? [];
+  const numbersAtDefault = numberSpec.every(n => Number(form.numbers[n.key]) === n.default);
   return {
+    totalSlots: slotsAtDefault ? null : totalSlots,
+    slotsPerCollege: slotsAtDefault ? null : slotsPerCollege,
+    ...(numberSpec.length ? { officeNumbers: numbersAtDefault ? null : Object.fromEntries(numberSpec.map(n => [n.key, Number(form.numbers[n.key])])) } : {}),
     status: form.status === (defaults.setStatus ?? defaults.status) ? null : form.status,
     // Picked dates replace any typed deadline from before.
     opensOn: form.opensOn === (defaults.opensOn ?? '') ? null : form.opensOn,
@@ -386,6 +409,9 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
   // Created scholarships are looked up by id across the admin (names in
   // application lists, history, announcements).
   useEffect(() => { registerCustomScholarships(rows.map(r => r.scholarship)); }, [rows]);
+  // The offices' amounts (ROTC ranks, CEAT fund, …) as saved, for the
+  // results worked out in Applications and Add a scholar.
+  useEffect(() => { if (rows.length) setOfficeNumbers(rows.map(r => r.overrides)); }, [rows]);
 
   // A matrix cell: shown right away, saved, and put back if saving fails.
   const patchFromMatrix = async (scholarship: Scholarship, patch: MatrixPatch) => {
@@ -480,7 +506,7 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
           onDeleted={() => {
             loadSeq.current++;
             setRows(prev => prev.filter(r => r.defaults.id !== selected.defaults.id));
-            setNotice({ tone: 'success', text: `Deleted ${selected.scholarship.name}.` });
+            setNotice({ tone: 'success', text: `Moved ${selected.scholarship.name} to the Trash.` });
             onSelect(null);
           }}
         />
@@ -740,7 +766,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
   const s = row.scholarship;
   const isCustom = !!row.defaults.custom;
 
-  const [form, setForm] = useState<EditorState>(() => editorFrom(s));
+  const [form, setForm] = useState<EditorState>(() => editorFrom(s, row.overrides.officeNumbers));
   const [attempted, setAttempted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -757,7 +783,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
   const slotBased = !!row.defaults.documentSlots?.length;
   const locked = lockedRules(row.defaults.applicationFormType);
 
-  const dirty = !sameEditor(form, editorFrom(s));
+  const dirty = !sameEditor(form, editorFrom(s, row.overrides.officeNumbers));
   const atDefaults = sameEditor(form, editorFrom(row.defaults));
 
   const errors: Partial<Record<keyof EditorState, string>> = {};
@@ -767,6 +793,10 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
   if (!form.description.trim()) errors.description = 'Enter a description.';
   if (form.rules.programs && !form.rules.programs.length) errors.rules = 'Tick at least one program, or choose All programs.';
   if (ruleLines(form.rules).length + clean(form.customEligibility).length === 0) errors.customEligibility = 'Tick at least one rule or add a condition, so students know who can apply.';
+  if (form.slotLimit !== 'none' && !(Number.isInteger(Number(form.slotCount)) && Number(form.slotCount) >= 1 && Number(form.slotCount) <= 1000)) errors.slotCount = 'Enter a whole number from 1 to 1000.';
+  const numberSpec = OFFICE_FORMS[s.id]?.numbers ?? [];
+  const badNumber = numberSpec.find(n => { const v = form.numbers[n.key]; const x = Number(v); return v === undefined || v.trim() === '' || !Number.isFinite(x) || x < n.min || x > n.max; });
+  if (badNumber) errors.numbers = `${badNumber.label}: enter ${badNumber.kind === 'rating' ? `a rating from ${badNumber.min} to ${badNumber.max}` : `an amount from 0 to ${badNumber.max.toLocaleString('en-US')}`}.`;
   const errorCount = Object.keys(errors).length;
   const shown = attempted ? errors : {};
 
@@ -979,6 +1009,50 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
               )}
             </div>
           </Card>
+
+          {online && (
+            <Card title="Slots" description="How many current scholars it can have. A scholar keeps their slot until they graduate, stop, or (one-semester grants) the semester ends.">
+              <div className="space-y-4">
+                <SegmentedControl<EditorState['slotLimit']>
+                  options={['none', 'total', 'college'] as const}
+                  renderLabel={o => ({ none: 'No limit', total: 'In all', college: 'Per college' })[o]}
+                  value={form.slotLimit}
+                  onChange={v => v && set('slotLimit', v)}
+                  label="Slot limit"
+                />
+                {form.slotLimit !== 'none' && (
+                  <Field label={form.slotLimit === 'college' ? 'Scholars per college' : 'Scholars in all'} error={shown.slotCount}>
+                    <TextInput type="number" inputMode="numeric" min={1} max={1000} step={1} className="w-32" value={form.slotCount} onChange={e => set('slotCount', e.target.value)} disabled={isSaving} />
+                  </Field>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {numberSpec.length > 0 && (
+            <Card title={OFFICE_FORMS[s.id]?.numbersTitle ?? 'Amounts'} description={OFFICE_FORMS[s.id]?.numbersHint}>
+              <div className="space-y-3">
+                {shown.numbers && <Alert tone="danger">{shown.numbers}</Alert>}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {numberSpec.map(n => (
+                    <Field key={n.key} label={n.kind === 'peso' ? `${n.label} (₱)` : n.label} helper={Number(form.numbers[n.key]) !== n.default ? `Default: ${n.kind === 'peso' ? `₱${n.default.toLocaleString('en-PH')}` : n.default.toFixed(2)}` : undefined}>
+                      <TextInput
+                        type="number"
+                        inputMode="decimal"
+                        min={n.min}
+                        max={n.max}
+                        step={n.step}
+                        className="w-40"
+                        value={form.numbers[n.key] ?? ''}
+                        onChange={e => set('numbers', { ...form.numbers, [n.key]: e.target.value })}
+                        disabled={isSaving}
+                      />
+                    </Field>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          )}
           </fieldset>
         </form>
 
@@ -1012,7 +1086,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
               <p className="text-sm text-ink-muted">
                 {row.applications.total > 0
                   ? 'It has applications, so it can\'t be deleted. Close it instead.'
-                  : 'Removes it for good. Only possible while it has no applications.'}
+                  : 'Moves it to the Trash, where it can be restored for 30 days. Only possible while it has no applications.'}
               </p>
               {row.applications.total === 0 && (
                 <Button className="mt-3" size="sm" variant="danger-secondary" icon={Trash2} onClick={() => { setDeleteError(''); setConfirmDelete(true); }}>
@@ -1074,8 +1148,8 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
       {confirmDelete && (
         <ConfirmDialog
           title={`Delete ${s.name}?`}
-          description="This can't be undone."
-          confirmLabel="Delete scholarship"
+          description="It moves to the Trash, where it can be restored for 30 days."
+          confirmLabel="Move to Trash"
           confirmIcon={Trash2}
           tone="danger"
           busy={deleting}

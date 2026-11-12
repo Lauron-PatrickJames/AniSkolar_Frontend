@@ -352,8 +352,8 @@ export function TemplatesPage({ getToken }: { getToken: GetToken }) {
       {deleting && (
         <ConfirmDialog
           title={`Delete “${deleting.title}”?`}
-          description="It’s removed for everyone in your office."
-          confirmLabel="Delete"
+          description="It’s removed for everyone in your office and moves to the Trash, where it can be restored for 30 days."
+          confirmLabel="Move to Trash"
           tone="danger"
           busy={busy}
           onConfirm={remove}
@@ -384,7 +384,7 @@ function ManageTemplates({ getToken, templates, start, draft, context, vars, onU
   const [savedFromHere, setSavedFromHere] = useState(false);
 
   const remove = async (t: ReplyTemplate) => {
-    if (!window.confirm(`Delete the template “${t.title}”?`)) return;
+    if (!window.confirm(`Move the template “${t.title}” to the Trash? It can be restored for 30 days.`)) return;
     setDeleting(t._id);
     try {
       await api(getToken, `/${t._id}`, { method: 'DELETE' });

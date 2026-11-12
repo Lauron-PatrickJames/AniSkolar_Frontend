@@ -175,28 +175,15 @@ export function checkApplyEligibility(scholarship: Scholarship, answers: GrantEl
 export const SFAG_ID = 's1';
 export const EXCLUSIVE_SCHOLARSHIP_ID = SFAG_ID;
 
-// The SFAG takes new applications in June and July only (Manila time),
-// before the 1st semester enrollment; the rest of the year is for
-// renewals. Mirrors inSfagApplicationWindow() in the backend's
-// utils/academicYear.js. The backend can lift the limit for demos
-// (SFAG_OPEN_ALL_YEAR); App.tsx passes that on from GET /api/scholarships.
+// When the SFAG takes applications is the backend's rule (June and July
+// unless the AdSO set its dates; GET /api/scholarships → applyBlocks). The
+// backend can lift the limit for demos (SFAG_OPEN_ALL_YEAR); App.tsx
+// passes that on.
 let sfagOpenAllYear = false;
 export function setSfagOpenAllYear(value: boolean): void {
   sfagOpenAllYear = value;
 }
 export const isSfagOpenAllYear = () => sfagOpenAllYear;
-export function inSfagApplicationWindow(date = new Date()): boolean {
-  if (sfagOpenAllYear) return true;
-  const month = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', month: 'numeric' }).format(date));
-  return month === 6 || month === 7;
-}
-
-// Why the SFAG can't be applied for right now, or null.
-export function applicationWindowBlock(scholarshipId: string, date = new Date()): string | null {
-  if (scholarshipId !== SFAG_ID || inSfagApplicationWindow(date)) return null;
-  return 'SFAG applications are only accepted in June and July, before the 1st semester enrollment. The rest of the year is for renewals only.';
-}
-
 // Duty hours are for SFAG scholars only (the backend's requireSfagScholar
 // also counts a renewal, which needs an approved application anyway).
 export function isSfagScholar(applications: { scholarshipId: string; status: string }[]): boolean {
@@ -221,13 +208,11 @@ export interface Holdings {
   slotsFull?: { scholarshipId: string; message: string }[];
 }
 
-// Why the student can't apply for a scholarship right now, or null: the
-// SFAG's June–July window, or a full college (POLCA's 2 per college; the
-// server refuses both).
-export function applyBlock(scholarshipId: string, holdings: Holdings | null, date = new Date()): string | null {
-  return applicationWindowBlock(scholarshipId, date)
-    ?? holdings?.slotsFull?.find(s => s.scholarshipId === scholarshipId)?.message
-    ?? null;
+// Why the student can't apply for a scholarship right now beyond its
+// status and dates (those come from the server's applyBlocks): its slots
+// are full (e.g. POLCA's 2 per college; the server refuses it too).
+export function applyBlock(scholarshipId: string, holdings: Holdings | null, _date = new Date()): string | null {
+  return holdings?.slotsFull?.find(s => s.scholarshipId === scholarshipId)?.message ?? null;
 }
 
 // One internally funded scholarship at a time (AdSO, Oct 2026). Every

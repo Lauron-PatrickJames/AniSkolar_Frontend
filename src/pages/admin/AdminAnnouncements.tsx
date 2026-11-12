@@ -1161,18 +1161,16 @@ export default function AdminAnnouncements({ id, ownOffice = 'LSO', onReviewCoun
         <ConfirmDialog
           tone="danger"
           title="Delete announcement?"
-          description="This can't be undone."
-          confirmLabel={pendingDelete.fbPostId ? 'Delete here and on Facebook' : 'Delete'}
+          description="It moves to the Trash, where it can be restored for 30 days."
+          confirmLabel="Move to Trash"
           confirmIcon={Trash2}
           onConfirm={confirmDelete}
           onCancel={() => setPendingDelete(null)}
           busy={isDeleting}
           error={deleteError}
         >
-          {pendingDelete.fbPostId ? (
-            <Alert tone="warning" icon={Facebook}>The post on the Facebook Page is deleted too.</Alert>
-          ) : (
-            <p className="text-sm text-ink-muted">It isn't on the Facebook Page, so nothing changes there.</p>
+          {pendingDelete.fbPostId && (
+            <Alert tone="warning" icon={Facebook}>Its Facebook post stays up until it's deleted for good from the Trash. Remove it on the Page now if it shouldn't stay up.</Alert>
           )}
         </ConfirmDialog>
       )}

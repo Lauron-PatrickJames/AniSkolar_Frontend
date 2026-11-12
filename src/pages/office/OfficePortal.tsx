@@ -6,7 +6,7 @@ import AdminLayout, { NavSection } from '../admin/AdminLayout';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
 import { DutyTerm, format12h, hoursUntilRemoved, formatDutyDate, formatHours, termLabel, weekday } from '../../utils/dutyHours';
-import { EVALUATION_ITEMS, PASSING_AVERAGE, RATING_LABELS, ratingLabel } from '../../utils/renewals';
+import { EVALUATION_ITEMS, passingAverage, RATING_LABELS, ratingLabel } from '../../utils/renewals';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from '../admin/adminData';
 import { ResultDialog,
   Alert, Avatar, Badge, Button, Card, EmptyState, MobileList, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table,
@@ -617,7 +617,7 @@ function EvaluationsTab({ getToken, onChanged, onToast }: { getToken: GetToken; 
           {s.waitingHours ? ` · ${formatHours(s.waitingHours)} h waiting for your confirmation` : ''}
         </span>
       )}
-      {s.evaluation && <Badge tone={s.evaluation.average >= PASSING_AVERAGE ? 'success' : 'warning'} dot>{s.evaluation.average.toFixed(2)} · {ratingLabel(s.evaluation.average)}</Badge>}
+      {s.evaluation && <Badge tone={s.evaluation.average >= passingAverage() ? 'success' : 'warning'} dot>{s.evaluation.average.toFixed(2)} · {ratingLabel(s.evaluation.average)}</Badge>}
       {s.state !== 'in_progress' && (s.locked
         ? <Badge tone="neutral">Renewal already decided</Badge>
         : <Button size="sm" variant={s.evaluation ? 'ghost' : 'primary'} onClick={() => setOpen({ term, scholar: s })}>{s.evaluation ? 'Edit' : 'Evaluate'}</Button>)}
@@ -720,7 +720,7 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
           <Textarea rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} maxLength={2000} disabled={busy} />
         </Field>
       </div>
-      {average !== null && average < PASSING_AVERAGE && (
+      {average !== null && average < passingAverage() && (
         <p className="mt-3 text-sm text-warning-fg">Below 4: the scholarship office will interview the scholar before deciding their renewal.</p>
       )}
     </Modal>

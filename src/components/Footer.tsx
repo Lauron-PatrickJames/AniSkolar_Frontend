@@ -1,5 +1,10 @@
 import React from 'react';
-import { Mail, Phone, MapPin, ExternalLink, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, Mail, MapPin, Phone } from 'lucide-react';
+import logo from '../assets/logo.png';
+
+// The public pages' footer (landing, sign-in, scholarship details): DLSU-D
+// green like the hero and header, the AdSO's contact details as links you
+// can tap (call, email, map), and the team's credits.
 
 // The team, each name linking to their LinkedIn.
 const DEVELOPERS = [
@@ -8,96 +13,105 @@ const DEVELOPERS = [
   { name: 'Patrick Lauron', url: 'https://www.linkedin.com/in/patjeyms/' },
 ];
 
+const EXPLORE = [
+  { label: 'About AniSkolar', href: '#about' },
+  { label: 'Scholarships', href: '#scholarships' },
+  { label: 'How to apply', href: '#how-to-apply' },
+  { label: 'FAQs', href: '#faqs' },
+];
+
+const UNIVERSITY = [
+  { label: 'DLSU-D website', href: 'https://www.dlsud.edu.ph' },
+  { label: 'Schoolbook', href: 'https://www.dlsud.edu.ph/aboutSchoolbook.htm' },
+  { label: 'University Registrar', href: 'https://www.dlsud.edu.ph/registrar/' },
+];
+
+const MAP_URL = 'https://www.google.com/maps/search/?api=1&query=Ayuntamiento+de+Gonzalez+Building+De+La+Salle+University-Dasmari%C3%B1as';
+
+const linkClass = 'rounded-sm text-emerald-50/75 transition-colors hover:text-white focus:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-300';
+const heading = 'mb-4 text-xs font-bold uppercase tracking-[0.12em] text-emerald-200/90';
+
 export default function Footer() {
   return (
-    <footer id="main-footer" className="bg-slate-900 text-slate-300 pt-12 sm:pt-16 pb-8 border-t border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8 sm:gap-10 mb-10 sm:mb-12">
-          {/* Logo & Description */}
-          <div className="sm:col-span-2 md:col-span-1" id="footer-brand">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-brand-green flex items-center justify-center font-display font-bold text-white text-lg shadow-md shrink-0">
-                AS
-              </div>
-              <div className="min-w-0">
-                <span className="font-display font-bold text-xl text-white tracking-tight">AniSkolar</span>
-                <p className="text-xs text-slate-400 font-medium">DLSU-D Portal</p>
-              </div>
-            </div>
-            <p className="text-sm text-slate-400 leading-relaxed mb-4">
-              Providing modern, streamlined scholarship access for Lasallians. Bridging dreams with opportunities for a brighter tomorrow.
+    <footer id="main-footer" className="relative overflow-hidden bg-[#063a22] text-sm text-emerald-50/80">
+      {/* A soft glow so the green isn't flat. */}
+      <div aria-hidden className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[60rem] -translate-x-1/2 rounded-full bg-emerald-400/10 blur-3xl" />
+
+      <div className="relative mx-auto max-w-7xl px-4 pt-14 pb-24 sm:px-6 sm:pt-16 sm:pb-8 lg:px-8">
+        <div className="grid gap-10 lg:grid-cols-12 lg:gap-8">
+          {/* Brand */}
+          <div className="lg:col-span-4" id="footer-brand">
+            <a href="#hero" className="inline-flex items-center gap-3 rounded-lg focus:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-300">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">
+                <img src={logo} alt="" className="size-8 object-contain" />
+              </span>
+              <span>
+                <span className="block font-display text-xl font-bold tracking-tight text-white">AniSkolar</span>
+                <span className="block text-xs font-medium text-emerald-200/80">DLSU-D Scholarship Portal</span>
+              </span>
+            </a>
+            <p className="mt-4 max-w-sm leading-relaxed text-emerald-50/70">
+              Find the scholarships you can apply for, apply online, and follow your application and grant in one place, with your DLSU-D account.
             </p>
           </div>
 
-          {/* Quick Links */}
-          <div id="footer-links-quick">
-            <h3 className="font-display font-semibold text-white mb-4 text-base">Quick Links</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <a href="#about" className="hover:text-brand-green transition-colors text-slate-400">About AniSkolar</a>
-              </li>
-              <li>
-                <a href="#scholarships" className="hover:text-brand-green transition-colors text-slate-400">Available Grants</a>
-              </li>
-              <li>
-                <a href="#how-to-apply" className="hover:text-brand-green transition-colors text-slate-400">Application Process</a>
-              </li>
-              <li>
-                <a href="#faqs" className="hover:text-brand-green transition-colors text-slate-400">Frequently Asked Questions</a>
-              </li>
-            </ul>
-          </div>
+          {/* Links */}
+          <nav aria-label="Footer" className="grid grid-cols-2 gap-8 lg:col-span-4">
+            <div id="footer-links-quick">
+              <h3 className={heading}>Explore</h3>
+              <ul className="space-y-2.5">
+                {EXPLORE.map(l => <li key={l.href}><a href={l.href} className={linkClass}>{l.label}</a></li>)}
+              </ul>
+            </div>
+            <div id="footer-links-univ">
+              <h3 className={heading}>University</h3>
+              <ul className="space-y-2.5">
+                {UNIVERSITY.map(l => (
+                  <li key={l.href}>
+                    <a href={l.href} target="_blank" rel="noopener noreferrer" className={`${linkClass} group inline-flex items-center gap-1`}>
+                      {l.label}
+                      <ArrowUpRight className="size-3.5 shrink-0 opacity-60 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
+                      <span className="sr-only">(opens in a new tab)</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </nav>
 
-          {/* External Links */}
-          <div id="footer-links-univ">
-            <h3 className="font-display font-semibold text-white mb-4 text-base">University Resources</h3>
-            <ul className="space-y-2 text-sm">
+          {/* Contact the AdSO */}
+          <div className="lg:col-span-4" id="footer-contact">
+            <h3 className={heading}>Admissions and Scholarship Office</h3>
+            <ul className="space-y-3.5">
               <li>
-                <a href="https://www.dlsud.edu.ph" target="_blank" rel="noopener noreferrer" className="hover:text-brand-green transition-colors flex items-center space-x-1 text-slate-400">
-                  <span>Official DLSU-D Website</span>
-                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                <a href={MAP_URL} target="_blank" rel="noopener noreferrer" className={`${linkClass} flex items-start gap-3`}>
+                  <MapPin className="mt-0.5 size-4 shrink-0 text-emerald-300" aria-hidden />
+                  <span>Ayuntamiento de Gonzalez Bldg., De La Salle University–Dasmariñas, Brgy. Fatima 1, Dasmariñas City, Cavite 4115</span>
                 </a>
               </li>
-
-              <li>
-                <a href="https://www.dlsud.edu.ph/aboutSchoolbook.htm" target="_blank" rel="noopener noreferrer" className="hover:text-brand-green transition-colors flex items-center space-x-1 text-slate-400">
-                  <span>Schoolbook</span>
-                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                </a>
+              <li className="flex items-start gap-3">
+                <Phone className="mt-0.5 size-4 shrink-0 text-emerald-300" aria-hidden />
+                <span>
+                  <a href="tel:+63464811900" className={linkClass}>(046) 481 1900</a>
+                  <span className="text-emerald-50/50"> or </span>
+                  <a href="tel:+63287795180,3029" className={linkClass}>(02) 8779 5180</a>
+                  <span className="text-emerald-50/50">, local 3029</span>
+                </span>
               </li>
-              <li>
-                <a href="https://www.dlsud.edu.ph/registrar/" target="_blank" rel="noopener noreferrer" className="hover:text-brand-green transition-colors flex items-center space-x-1 text-slate-400">
-                  <span>Office of the University Registrar</span>
-                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          {/* Contact LSO */}
-          <div id="footer-contact">
-            <h3 className="font-display font-semibold text-white mb-4 text-base">Contact AdSO</h3>
-            <ul className="space-y-3 text-sm text-slate-400">
-              <li className="flex items-start space-x-3">
-                <MapPin className="w-4 h-4 text-brand-green shrink-0 mt-1" />
-                <span>Ayuntamiento de Gonzalez Bldg. <br />De La Salle University-Dasmariñas <br />Brgy. Fatima 1, Dasmariñas City, Cavite 4115</span>
-              </li>
-              <li className="flex items-start space-x-3">
-                <Phone className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />
-                <span>+63 (46) 481.1900 or +63 (2) 8779.5180 local 3029</span>
-              </li>
-              <li className="flex items-start space-x-3">
-                <Mail className="w-4 h-4 text-brand-green shrink-0 mt-0.5" />
-                <span className="break-all">scholarship@dlsud.edu.ph<br />AdSO_admissions@dlsud.edu.ph</span>
+              <li className="flex items-start gap-3">
+                <Mail className="mt-0.5 size-4 shrink-0 text-emerald-300" aria-hidden />
+                <span className="flex min-w-0 flex-col gap-1">
+                  <a href="mailto:scholarship@dlsud.edu.ph" className={`${linkClass} break-all`}>scholarship@dlsud.edu.ph</a>
+                  <a href="mailto:AdSO_admissions@dlsud.edu.ph" className={`${linkClass} break-all`}>AdSO_admissions@dlsud.edu.ph</a>
+                </span>
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="pt-8 border-t border-slate-800 text-center flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-slate-500">
-          <p id="copyright">
-            © {new Date().getFullYear()} De La Salle University–Dasmariñas. All Rights Reserved.
-          </p>
+        {/* Bottom row: kept clear of the round "back to top" button. */}
+        <div className="mt-12 flex flex-col gap-2 border-t border-white/10 pt-6 text-xs text-emerald-50/55 sm:flex-row sm:items-center sm:justify-between sm:pr-20">
+          <p id="copyright">© {new Date().getFullYear()} De La Salle University–Dasmariñas. All rights reserved.</p>
           <p>
             Developed by{' '}
             {DEVELOPERS.map((d, i) => (
@@ -108,7 +122,7 @@ export default function Footer() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`${d.name} on LinkedIn`}
-                  className="font-semibold text-brand-green underline-offset-2 hover:text-emerald-400 hover:underline focus:outline-hidden focus-visible:underline"
+                  className="rounded-sm font-semibold text-emerald-200 underline-offset-2 hover:text-white hover:underline focus:outline-hidden focus-visible:ring-2 focus-visible:ring-emerald-300"
                 >
                   {d.name}
                 </a>

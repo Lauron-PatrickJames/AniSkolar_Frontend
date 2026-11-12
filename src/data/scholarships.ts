@@ -592,6 +592,9 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     name: 'Heraldo Filipino Scholarship',
     category: 'Leadership',
     office: 'HERALDO',
+    // No renewals: kept while on the Editorial Staff (the office marks
+    // them Stopped when they leave, or Graduated).
+    noRenewal: true,
     provider: officeProvider('Heraldo Filipino'),
     targetApplicants: 'Heraldo Filipino Editorial Staff, from Junior Staff to Editor in Chief',
     // From the Heraldo Filipino's scholarship guidelines (Nov 2026).
@@ -601,7 +604,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Evaluation score: 98–100 = 5 pts, 95–97 = 4, 90–94 = 3, 84–89 = 2, 75–83 = 1, 60–74 = 0',
       'Published works: 6 or more = 5 pts, 5 = 4, 4 = 3, 3 = 2, 2 = 1, 0–1 = 0',
       'Office hours rendered: 96–100% = 5 pts, 91–95% = 4, 86–90% = 3, 80–85% = 2, 60–79% = 1, below 60% = 0',
-      'Merit points: 3 = 5 pts, 2 = 4, 1 = 3, 0 = 2; under demerit = 0'
+      'Merit points: 3 = 5 pts, 2 = 4, 1 = 3, 0 = 2; under demerit = 0',
+      'No renewals: you keep it as long as you’re on the Editorial Staff (your discount still follows your points each term)'
     ],
     eligibilityCriteria: { applicantType: 'any' },
     rules: { applicantType: 'any' },

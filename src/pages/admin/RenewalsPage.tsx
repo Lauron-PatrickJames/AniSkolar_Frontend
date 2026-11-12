@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  BadgeCheck, CalendarClock, CheckCircle2, ChevronDown, CircleAlert, CircleDashed, Download, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, X, XCircle
+  BadgeCheck, CalendarClock, CheckCircle2, ChevronDown, CircleAlert, CircleDashed, Download, ExternalLink, FileText, Lock, LockOpen, Mail, Pencil, Plus, RefreshCw, Users, X, XCircle
 } from 'lucide-react';
 import { mockScholarships, acceptsOnlineApplications, applyScholarshipOverrides } from '../../data/scholarships';
 import { retentionMinGpa } from '../../utils/eligibility';
@@ -15,7 +15,7 @@ import { ResultDialog,
   Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, DatePicker, DetailField, DropdownMenu, EmptyState, ErrorState, Field,
   MobileList, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table, TableSkeleton, Tabs, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
-import { TemplatePicker, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
+import { QuickReplies, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
 
 // Renewals: the AdSO opens a renewal period per scholarship and term;
 // scholars holding the scholarship submit their grades (or say they're not
@@ -59,7 +59,7 @@ const ITEM_META: Record<CheckStatus, { icon: React.ElementType; className: strin
 
 function CheckList({ check }: { check: RenewalCheck }) {
   return (
-    <ul className="space-y-1.5">
+    <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
       {check.items.map(item => {
         const { icon: Icon, className } = ITEM_META[item.status];
         return (
@@ -863,19 +863,21 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
       icon={<Avatar name={row.name || row.studentNumber} avatarUrl={row.avatarUrl} />}
       onClose={onClose}
     >
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
         {/* What the decision rests on */}
-        <div className="min-w-0 space-y-6 lg:col-span-3">
+        <div className="min-w-0 space-y-4">
           {!renewal.continuing ? (
             <Alert tone="neutral" title={`Not continuing · ${renewal.notContinuingReason ?? ''}`}>{renewal.notContinuingDetails || 'The scholar told the office they are not continuing.'}</Alert>
           ) : row.check ? (
-            <section className="space-y-3 rounded-card p-4 ring-1 ring-line">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-ink">Renewal check</h3>
+            <ModalSection
+              title="Renewal check"
+              aside={<>
+                <span className="text-xs text-ink-subtle tabular-nums">{row.check.items.filter(i => i.status === 'pass').length} of {row.check.items.length} pass</span>
                 <Badge tone={CHECK_META[row.check.result].tone} dot>{CHECK_META[row.check.result].label}</Badge>
-              </div>
+              </>}
+            >
               <CheckList check={row.check} />
-            </section>
+            </ModalSection>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <GlanceTile
@@ -888,21 +890,23 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
           )}
 
           {renewal.continuing && (
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold text-ink">Documents</h3>
-              <ul className="space-y-1.5">
+            <ModalSection
+              title="Documents"
+              aside={<span className="text-xs text-ink-subtle tabular-nums">{period.requirements.filter(r => renewal.documents.some(d => d.docType === r)).length} of {period.requirements.length} uploaded</span>}
+            >
+              <ul className="divide-y divide-line">
                 {period.requirements.map(requirement => {
                   const doc = renewal.documents.find(d => d.docType === requirement);
                   return (
-                    <li key={requirement} className="flex items-center justify-between gap-3 rounded-control px-3 py-2 ring-1 ring-line">
+                    <li key={requirement} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
                       <span className="flex min-w-0 items-center gap-2 text-sm text-ink">
                         <FileText className="size-4 shrink-0 text-ink-subtle" aria-hidden />
                         <span className="truncate">{requirement}</span>
                       </span>
                       {doc
                         ? (
-                          <Button size="sm" variant="ghost" onClick={() => openDocument(doc.fileId, getToken).catch(err => window.alert(err instanceof Error ? err.message : "Couldn't open the file."))}>
-                            View
+                          <Button size="sm" icon={ExternalLink} onClick={() => openDocument(doc.fileId, getToken).catch(err => window.alert(err instanceof Error ? err.message : "Couldn't open the file."))}>
+                            Open
                           </Button>
                         )
                         : <Badge tone="warning">Missing</Badge>}
@@ -910,17 +914,16 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
                   );
                 })}
               </ul>
-            </section>
+            </ModalSection>
           )}
 
           {renewal.continuing && (period.requiresEvaluation || renewal.evaluation) && (
-            <section className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-ink">Office evaluation</h3>
-                {renewal.evaluation && !editingEvaluation && (
-                  <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setEditingEvaluation(true)}>Edit</Button>
-                )}
-              </div>
+            <ModalSection
+              title="Office evaluation"
+              aside={renewal.evaluation && !editingEvaluation && (
+                <Button size="xs" variant="ghost" icon={Pencil} onClick={() => setEditingEvaluation(true)}>Edit</Button>
+              )}
+            >
               {renewal.evaluation && !editingEvaluation ? (
                 <EvaluationSummary renewal={renewal} />
               ) : editingEvaluation || !renewal.evaluation ? (
@@ -932,7 +935,7 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
                   onSaved={updated => { setEditingEvaluation(false); onUpdated(updated); }}
                 />
               ) : null}
-            </section>
+            </ModalSection>
           )}
 
           {renewal.history.length > 0 && (
@@ -955,18 +958,38 @@ function RenewalModal({ row, period, getToken, onClose, onUpdated }: {
         </div>
 
         {/* The decision, in view while reading */}
-        <div className="min-w-0 space-y-5 lg:col-span-2 lg:sticky lg:top-0 lg:self-start">
+        <div className="min-w-0 space-y-4 lg:sticky lg:top-0 lg:self-start">
           {renewal.continuing
             ? <DecisionPanel renewal={renewal} period={period} studentName={row.name} check={row.check ?? null} getToken={getToken} onUpdated={onUpdated} />
             : <Badge tone={STATE_TONE[renewal.status]} dot>{renewal.status}</Badge>}
-          <dl className="space-y-3 rounded-card bg-surface-muted p-4">
-            <DetailField label="Program" value={row.program} />
-            <DetailField label="Holds it through" value={row.holder?.renewedFrom ? `Renewed ${row.holder.renewedFrom}` : row.holder?.referenceCode ? row.holder.referenceCode : 'No longer counted as a holder'} />
-            <DetailField label="Submitted" value={formatDateTime(renewal.createdAt)} />
+          <dl className="divide-y divide-line rounded-card bg-surface-muted px-4 text-sm">
+            {([
+              ['Program', row.program || '—'],
+              ['Holds it through', row.holder?.renewedFrom ? `Renewed ${row.holder.renewedFrom}` : row.holder?.referenceCode ? row.holder.referenceCode : 'No longer a holder'],
+              ['Submitted', formatDateTime(renewal.createdAt)],
+            ] as [string, string][]).map(([label, value]) => (
+              <div key={label} className="flex items-baseline justify-between gap-3 py-2.5">
+                <dt className="shrink-0 text-ink-subtle">{label}</dt>
+                <dd className="min-w-0 truncate text-right font-medium text-ink" title={value}>{value}</dd>
+              </div>
+            ))}
           </dl>
         </div>
       </div>
     </Modal>
+  );
+}
+
+// A titled card in the renewal dialog; aside sits at the right of the title.
+function ModalSection({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="rounded-card bg-surface p-4 ring-1 ring-line">
+      <div className="mb-3 flex min-h-6 items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
+        {aside && <div className="flex items-center gap-2">{aside}</div>}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -1206,11 +1229,12 @@ function DecisionPanel({ renewal, period, studentName, check, getToken, onUpdate
 
       {(!decided || changing) && (
         <>
-          <div role="radiogroup" aria-label="Decision" className="grid gap-2 sm:grid-cols-3">
+          <div role="radiogroup" aria-label="Decision" className="space-y-2">
             {options.map(option => {
               const c = DECISION_COPY[option];
               const disabled = option === 'Renewed' && evaluationMissing;
               const active = decision === option;
+              const suggested = recommended === option && !disabled;
               return (
                 <button
                   key={option}
@@ -1219,17 +1243,27 @@ function DecisionPanel({ renewal, period, studentName, check, getToken, onUpdate
                   aria-checked={active}
                   disabled={disabled || saving}
                   onClick={() => { setDecision(option); setError(''); }}
-                  className={`flex flex-col items-start gap-1 rounded-control p-3 text-left ring-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                    active ? TONE_RING[c.tone] : 'ring-line hover:bg-surface-muted'
+                  className={`flex w-full items-start gap-3 rounded-control p-3 text-left ring-1 transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    active ? `${TONE_RING[c.tone]} ring-2` : 'ring-line hover:bg-surface-muted'
                   }`}
                 >
-                  <span className="flex w-full items-center gap-2">
-                    <c.icon className={`size-4 ${active ? TONE_TEXT[c.tone] : 'text-ink-subtle'}`} aria-hidden />
-                    <span className={`text-sm font-semibold ${active ? TONE_TEXT[c.tone] : 'text-ink'}`}>{c.title}</span>
-                    {recommended === option && !disabled && <Badge tone={c.tone === 'danger' ? 'danger' : 'success'}>Check says</Badge>}
+                  <span className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${active ? 'bg-surface' : 'bg-surface-muted'}`}>
+                    <c.icon className={`size-4 ${active || suggested ? TONE_TEXT[c.tone] : 'text-ink-subtle'}`} aria-hidden />
                   </span>
-                  <span className="text-xs leading-snug text-ink-muted">
-                    {disabled ? 'Waiting for the office head’s evaluation (enter a paper one above if needed).' : c.hint(term)}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className={`text-sm font-semibold ${active ? TONE_TEXT[c.tone] : 'text-ink'}`}>{c.title}</span>
+                      {suggested && <Badge tone={c.tone === 'danger' ? 'danger' : 'success'}>Suggested</Badge>}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-snug text-ink-muted">
+                      {disabled ? 'Waiting for the office head’s evaluation (enter a paper one on the left if needed).' : c.hint(term)}
+                    </span>
+                  </span>
+                  <span
+                    aria-hidden
+                    className={`mt-1.5 flex size-4 shrink-0 items-center justify-center rounded-full ring-2 ${active ? `${TONE_TEXT[c.tone]} ring-current` : 'ring-line'}`}
+                  >
+                    {active && <span className="size-2 rounded-full bg-current" />}
                   </span>
                 </button>
               );
@@ -1239,19 +1273,17 @@ function DecisionPanel({ renewal, period, studentName, check, getToken, onUpdate
 
           {decision && (
             <>
+              <QuickReplies
+                getToken={getToken}
+                context="renewal"
+                decision={decision}
+                vars={{ firstName: first, scholarship: renewal.scholarshipName, term }}
+                value={note}
+                onInsert={text => { setNote(text); setError(''); }}
+                disabled={saving}
+              />
               <Field
                 label={decision === 'Needs Revision' ? 'What should they fix?' : decision === 'Not Renewed' ? 'Why not?' : 'Message to the scholar'}
-                labelAside={
-                  <TemplatePicker
-                    getToken={getToken}
-                    context="renewal"
-                    decision={decision}
-                    vars={{ firstName: first, scholarship: renewal.scholarshipName, term }}
-                    value={note}
-                    onInsert={setNote}
-                    disabled={saving}
-                  />
-                }
                 optional={!noteRequired}
                 helper="Shown to the scholar."
               >
@@ -1261,18 +1293,25 @@ function DecisionPanel({ renewal, period, studentName, check, getToken, onUpdate
             </>
           )}
           {error && <Alert tone="danger">{error}</Alert>}
-          <div className="flex flex-wrap justify-end gap-2">
-            {changing && <Button onClick={() => { setChanging(false); setDecision(''); setNote(''); setError(''); }} disabled={saving}>Cancel</Button>}
-            <Button
-              variant={decision ? DECISION_COPY[decision].variant : 'primary'}
-              icon={decision ? DECISION_COPY[decision].icon : undefined}
-              onClick={save}
-              loading={saving}
-              disabled={!decision}
-            >
-              {decision ? DECISION_COPY[decision].button(first) : 'Choose a decision'}
-            </Button>
-          </div>
+          {decision ? (
+            <div className="flex gap-2">
+              {changing && <Button onClick={() => { setChanging(false); setDecision(''); setNote(''); setError(''); }} disabled={saving}>Cancel</Button>}
+              <Button
+                variant={DECISION_COPY[decision].variant}
+                icon={DECISION_COPY[decision].icon}
+                onClick={save}
+                loading={saving}
+                className="flex-1 justify-center"
+              >
+                {DECISION_COPY[decision].button(first)}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-ink-subtle">Pick one above to continue.</p>
+              {changing && <Button size="sm" onClick={() => { setChanging(false); setNote(''); setError(''); }}>Cancel</Button>}
+            </div>
+          )}
         </>
       )}
       {result && <ResultDialog message={result} onClose={() => setResult('')} />}

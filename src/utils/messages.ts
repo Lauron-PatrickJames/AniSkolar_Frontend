@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
-// Messages between a student and the AdSO (backend routes/messages.js):
-// one conversation per student. Attachments need the session token, so
+// Messages between students and the scholarship offices (backend
+// routes/messages.js): one conversation per student and office. Attachments need the session token, so
 // they're fetched and shown from a blob: URL (like utils/documents.ts).
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
@@ -17,7 +17,10 @@ export interface MessageAttachment {
 
 export interface ChatMessage {
   _id: string;
+  // 'adso' is any scholarship office's staff (the AdSO, POLCA…).
   from: 'student' | 'adso' | 'office';
+  // The office of a student conversation (code, e.g. 'LSO', 'POLCA').
+  office?: string;
   authorName?: string;
   body: string;
   attachments: MessageAttachment[];
@@ -87,3 +90,12 @@ export async function postMessage(url: string, getToken: GetToken, data: { body:
 }
 
 export { API_BASE_URL as MESSAGES_API_BASE };
+
+// An office a student can write to (GET /api/messages/mine/offices).
+export interface MessageOffice {
+  code: string;
+  name: string;
+  short: string;
+  unread: number;
+  last: ChatMessage | null;
+}

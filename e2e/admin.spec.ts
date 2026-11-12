@@ -57,7 +57,7 @@ test.describe('AdSO', () => {
 
   test('sees every section in the menu', async ({ page }) => {
     await showMenu(page);
-    for (const name of ['Dashboard', 'Scholarships', 'Applications', 'Renewals', 'Scholars', 'Students', 'Duty hours', 'Statistics', 'FSE report', 'Messages', 'Announcements', 'Message templates', 'Automation']) {
+    for (const name of ['Dashboard', 'Scholarships', 'Applications', 'Renewals', 'Scholars', 'Students', 'Duty hours', 'Statistics', 'FSE report', 'Messages', 'Announcements', 'Automation']) {
       await expect(navItem(page, name)).toBeVisible();
     }
   });
@@ -65,7 +65,7 @@ test.describe('AdSO', () => {
   test('every page opens without errors or sideways scrolling', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
-    for (const name of ['Scholarships', 'Applications', 'Renewals', 'Scholars', 'Students', 'Duty hours', 'Statistics', 'FSE report', 'Messages', 'Announcements', 'Message templates', 'Automation', 'Dashboard']) {
+    for (const name of ['Scholarships', 'Applications', 'Renewals', 'Scholars', 'Students', 'Duty hours', 'Statistics', 'FSE report', 'Messages', 'Announcements', 'Automation', 'Dashboard']) {
       await openView(page, name);
       await expectOnPage(page, name);
       await noSidewaysScroll(page);

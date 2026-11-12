@@ -566,6 +566,16 @@ decision are listed first; most-used templates rise to the top.
   everyone in it. Each office gets 13 starter templates the first time;
   "Save this message" turns what you typed into a template, "Manage" edits
   or deletes them. Deleted starters don't come back.
+- Messages (2026-11-12): no Templates dropdown there. The office's
+  "Messages" templates show as **quick reply** chips above the message box
+  (`QuickReplies`), most-used first; a tap writes it in, filled in for that
+  student or office head, and Undo restores what was typed. The bookmark
+  icon saves typed text as a quick reply, the gear edits them. The
+  "Message templates" sidebar page is gone (still reachable as a view).
+  Application and renewal decisions use the same chips (the Templates
+  dropdown, `TemplatePicker`, is removed): a renewal shows the chosen
+  decision's templates first; an application, where the message comes
+  before the decision, marks each chip with its decision's colour dot.
 
 ## Automation (AdSO: Manage → Automation)
 Added 2026-10-19 (backend `utils/automation.js`, `utils/outbox.js`,
@@ -599,6 +609,21 @@ happens.
   on the page with "Try them again".
 
 ## Messages (student ↔ AdSO)
+**Per-office inboxes (2026-11-12).** Every office's admin console (AdSO,
+POLCA, Alumni…) now has Messages, each with its own inbox: one
+conversation per student *and office*. `Message.inbox` is the office code;
+older messages have none and count as the AdSO's (`'LSO'`). Inbox state
+(pin/archive/unread/delete) keys: the AdSO's stay the plain student number,
+other offices' are `"POLCA|<student number>"`, so no index migration was
+needed. Students get an office list on their Messages page (the AdSO, the
+offices of their applications, and any office that wrote to them; GET
+`/api/messages/mine/offices`) and pick one; `?office=` selects it on the
+student routes. Duty-office conversations remain the AdSO's only. A
+student's message to a non-AdSO office emails that office's admin accounts
+(looked up in Clerk). Starting a conversation: GET
+`/api/messages/admin/students?q=` (other offices: their applicants only).
+Tests: `test/messages.test.js`.
+
 - One conversation per student with the AdSO (`models/Message.js`,
   `routes/messages.js`). Students: sidebar → Messages (unread badge).
   AdSO: Communication → Messages (unread badge), plus "Message student"

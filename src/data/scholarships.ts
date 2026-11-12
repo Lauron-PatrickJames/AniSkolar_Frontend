@@ -446,7 +446,7 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Step 3: The SDO Director approves, and the SDO adds you as a scholar. You’ll see it under My Scholarship.'
     ],
     deadline: 'Picked from the varsity tryouts',
-    status: 'Open',
+    status: 'Closed',
     applicationFormType: 'standard'
   },
   {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Holdings, applyBlock, getAvailableScholarships, holdingNotice, needsToChoose, profileGpaWarning } from '../../utils/eligibility';
+import { Holdings, applyBlock, getAvailableScholarships, holdingNotice, isCurrentApplication, needsToChoose, profileGpaWarning } from '../../utils/eligibility';
 import { Scholarship, Application, StudentProfile } from '../../types';
 import ScholarshipCard from '../../components/ScholarshipCard';
 import CompareTable from '../../components/CompareTable';
@@ -46,10 +46,12 @@ export default function ExploreGrants({
   const applicationByScholarship = useMemo(() => {
     const byId = new Map<string, Application>();
     for (const app of applications) {
+      // A one-semester grant's from an earlier semester: apply again.
+      if (!isCurrentApplication(scholarships.find(s => s.id === app.scholarshipId), app)) continue;
       if (!byId.has(app.scholarshipId)) byId.set(app.scholarshipId, app);
     }
     return byId;
-  }, [applications]);
+  }, [applications, scholarships]);
 
   // Scholarships open to this student, plus every one they've applied to —
   // even if it's since closed or no longer matches their year level.

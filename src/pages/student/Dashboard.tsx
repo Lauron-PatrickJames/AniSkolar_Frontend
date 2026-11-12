@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Scholarship, Announcement, Application, ProfileSectionKey, StudentProfile } from '../../types';
 import ProfileCompletionCard from '../../components/ProfileCompletionCard';
-import { Holdings, getAvailableScholarships, isSfagScholar } from '../../utils/eligibility';
+import { Holdings, getAvailableScholarships, isCurrentApplication, isSfagScholar } from '../../utils/eligibility';
 import { DutySummary, formatDutyDate } from '../../utils/dutyHours';
 import { Renewal, RenewalPeriod, deadlineLabel, periodLabel } from '../../utils/renewals';
 import { titleCaseName } from '../../utils/names';
@@ -98,7 +98,7 @@ export default function Dashboard({
   const firstName = titleCaseName(student.firstName || student.name.split(' ')[0] || '');
   const gpa = student.gpa !== undefined && student.gpa !== null && String(student.gpa).trim() !== '' && Number.isFinite(Number(student.gpa)) ? Number(student.gpa).toFixed(2) : null;
   const openToMe = getAvailableScholarships(scholarships, student).filter(s => s.status !== 'Closed');
-  const appliedIds = new Set(applications.map(a => a.scholarshipId));
+  const appliedIds = new Set(applications.filter(a => isCurrentApplication(scholarships.find(s => s.id === a.scholarshipId), a)).map(a => a.scholarshipId));
 
   const latestRenewal = renewals?.renewals?.[0];
   const sfagDetail = holdings?.details?.find(d => d.scholarshipId === 's1');

@@ -489,6 +489,15 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     name: '267th NROTC Scholarship',
     category: 'Leadership',
     office: 'ROTC',
+    // No application: the ROTC Office adds its officers each semester at
+    // their current rank, with the Commandant's or Coordinator's
+    // recommendation (AddScholarDialog). No renewals.
+    applicationMode: 'info',
+    directAward: true,
+    noRenewal: true,
+    oneSemester: true,
+    handledBy: 'ROTC Office (267th NROTCU)',
+    availNote: 'There’s no application. The ROTC Office adds its officers as scholars each semester, at their current rank, when the Commandant or the ROTC Coordinator recommends them. You’ll get an email and see it under My Scholarship.',
     provider: officeProvider('ROTC Office (267th NROTCU)'),
     targetApplicants: 'Officers of the 267th NROTC unit',
     description: 'The 267th NROTC Scholarship gives financial assistance to officers of the university\'s Naval Reserve Officers Training Corps unit (NROTCU), under Student Handbook section 17.1.4, which allows tuition discounts of up to 100% for ROTC officers. Failing to meet the guidelines forfeits the benefits.',
@@ -497,7 +506,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Vice Corps Commander: ₱20,000',
       '2nd and 3rd Class officers: ₱10,000',
       '4th Class officers: ₱5,000',
-      'Amounts are subject to the availability of the ROTC fund.'
+      'Amounts are subject to the availability of the ROTC fund.',
+      'For one semester at a time: the ROTC Office adds you again each semester at your current rank'
     ],
     eligibilityCriteria: { applicantType: 'continuing' },
     gpaRequirement: {
@@ -521,8 +531,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     ],
     process: [
       'Step 1: Earn your rank and stay on active duty in the 267th NROTCU (20 duty hours a week).',
-      'Step 2: Apply here with the recommendation of the Commandant and/or the ROTC Coordinator.',
-      'Step 3: The ROTC Office reviews and approves it.'
+      'Step 2: The Commandant and/or the ROTC Coordinator recommends you to the ROTC Office.',
+      'Step 3: The ROTC Office adds you as a scholar for the semester. You’ll get an email and see it under My Scholarship.'
     ],
     deadline: 'Set by the ROTC Office',
     status: 'Closed',
@@ -536,12 +546,15 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     name: 'USG Student Financial Aid Grant',
     category: 'Financial',
     office: 'USG',
+    noRenewal: true,
+    oneSemester: true,
     provider: officeProvider('University Student Government (USG)'),
     targetApplicants: 'DLSU-D students with at least one semester of residency (first-year students can apply for the 2nd semester)',
     description: 'The University Student Government\'s Student Financial Aid Grant is offered each semester, separate from the SFAG of the Admissions and Scholarship Office. Each scholar gets ₱15,000, credited directly to their student account. For the 2nd semester of AY 2025–2026 (applications April 6–13, 2026), 35 students were chosen as grantees.',
     benefits: [
       '₱15,000 per scholar, credited directly to your student account',
       'No duty hours to render',
+      'For one semester: no renewals, so apply again in the next call',
       '35 grantees in the latest call (2nd semester, AY 2025–2026)'
     ],
     eligibilityCriteria: { applicantType: 'continuing' },
@@ -686,12 +699,15 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     name: 'Padayon Pioneers: CICS Student Financial Aid Grant',
     category: 'Financial',
     office: 'CICSSG',
+    noRenewal: true,
+    oneSemester: true,
     provider: officeProvider('CICS Student Government (CICSSG)'),
     targetApplicants: 'Continuing CICS students with financial constraints',
     description: 'The CICS Student Government’s financial aid grant for students of the College of Information and Computer Studies. Two grantees receive 50% of their overall tuition and other fees, up to ₱50,000.',
     benefits: [
       '50% of overall tuition and other fees, up to ₱50,000',
-      'Two grantees'
+      'Two grantees',
+      'For one semester: no renewals, so apply again in the next call'
     ],
     totalSlots: 2,
     eligibilityCriteria: { applicantType: 'continuing' },
@@ -736,12 +752,15 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     name: 'CEAT Financial Aid Scholarship',
     category: 'Financial',
     office: 'CEATSG',
+    noRenewal: true,
+    oneSemester: true,
     provider: officeProvider('CEAT Student Government (CEATSG)'),
     targetApplicants: 'Bona fide CEAT students',
     description: 'The CEAT Student Government’s financial aid scholarship for bona fide students of the College of Engineering, Architecture, and Technology, offered each semester. Up to ₱200,000 is set aside each semester for the grants of the qualified and selected students.',
     benefits: [
       'Financial aid from the CEATSG scholarship fund, offered every semester',
-      'Up to ₱200,000 in grants each semester, shared among the selected scholars'
+      'Up to ₱200,000 in grants each semester, shared among the selected scholars',
+      'For one semester: no renewals, so apply again in the next call'
     ],
     eligibilityCriteria: { applicantType: 'continuing' },
     rules: { applicantType: 'continuing', programs: CEAT_PROGRAMS },
@@ -777,6 +796,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     name: 'CCJESG Officers’ Financial Grant',
     category: 'Leadership',
     office: 'CCJESG',
+    noRenewal: true,
+    oneSemester: true,
     provider: officeProvider('CCJE Student Government (CCJESG)'),
     targetApplicants: 'Officers of the CCJE Student Government',
     description: 'A performance-based financial grant for the officers of the College of Criminal Justice Education Student Government, from the CCJESG Trust Fund. It is credited to your tuition account at the end of each semester, after you complete your service and pass the evaluation. Up to 11 officers are chosen each semester.',
@@ -785,7 +806,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Chief of Staff (including deputy) and Executive members (including deputies): up to ₱7,000 per semester',
       'Legislative Council members: up to ₱6,000 per semester',
       'Credited to your tuition account at the end of the semester, never in cash',
-      'The actual amount depends on your performance evaluation and the available funds; it may be reduced proportionally if the Trust Fund is short'
+      'The actual amount depends on your performance evaluation and the available funds; it may be reduced proportionally if the Trust Fund is short',
+      'For one semester: no renewals, so apply again in the next semester'
     ],
     totalSlots: 11,
     eligibilityCriteria: { applicantType: 'continuing' },

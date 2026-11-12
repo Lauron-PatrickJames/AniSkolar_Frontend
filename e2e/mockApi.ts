@@ -96,12 +96,14 @@ const json = (route: Route, body: unknown, status = 200) =>
 // scholarships: the offices' saved settings (GET /api/scholarships), e.g.
 // [{ id: 's15', status: 'Open' }] to open one; none = every default.
 // student: changes to the scholar's profile (e.g. another program).
+// applications: the student's applications, in place of the SFAG grant.
 export async function mockApi(page: Page, {
   newStudent = false,
   patches = [] as Record<string, unknown>[],
   notScholar = false,
   scholarships = [] as Record<string, unknown>[],
   student: profile = {} as Record<string, unknown>,
+  applications = undefined as Record<string, unknown>[] | undefined,
 } = {}) {
   let student: Record<string, unknown> | null = newStudent ? null : { ...STUDENT, ...profile, completion: COMPLETION };
   await page.route(`${API}/api/**`, route => {
@@ -123,7 +125,7 @@ export async function mockApi(page: Page, {
         if (notScholar) return json(route, { held: [], exclusive: null, slotsFull: [], details: [] });
         return json(route, { held: [SFAG], exclusive: SFAG, slotsFull: [], details: [{ ...SFAG, grantPercentage: 50, approvedAt: '2026-10-29T02:00:00.000Z', referenceCode: 'SFAG-2026-0001' }] });
       case '/api/office/me': return json(route, { error: 'Not an office head' }, 404);
-      case `/api/applications/student/${STUDENT.studentNumber}`: return json(route, { applications: notScholar ? [] : [APPLICATION] });
+      case `/api/applications/student/${STUDENT.studentNumber}`: return json(route, { applications: applications ?? (notScholar ? [] : [APPLICATION]) });
       case '/api/scholarships': return json(route, { scholarships });
       case '/api/announcements/feed': return json(route, { announcements: ANNOUNCEMENTS });
       case '/api/announcements/feed/duty': return json(route, { announcements: [] });

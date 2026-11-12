@@ -31,6 +31,8 @@ export interface AssessmentField {
   options?: { value: string; label: string }[];
   // Filled from the student's answer when the office hasn't set it.
   fromAnswer?: string;
+  // Or worked out from the answers (e.g. the amount for an ROTC rank).
+  defaultFrom?: (answers: OfficeAnswers) => number | undefined;
 }
 
 export interface AssessmentResult {
@@ -49,6 +51,16 @@ export interface OfficeForm {
   documents?: (answers: OfficeAnswers) => string[];
   // The academic profile doesn't ask for a GPA (e.g. the SDO's).
   noGpa?: boolean;
+  // Scholarships the office adds itself (directAward): the wording of the
+  // Add a scholar dialog. Same as award in the backend's officeForms.js.
+  award?: {
+    who: string;            // 'player', 'officer'
+    detailsTitle: string;   // the step with the questions
+    // 'discount': pick a tuition discount (SDO); 'assessment': the
+    // assessment's number fields, filled from the answers (ROTC).
+    grant: 'discount' | 'assessment';
+    messagePlaceholder: string;
+  };
   // Who decides, shown to students and on the approve button.
   approver: string;
   assessmentTitle: string;
@@ -161,6 +173,7 @@ export const OFFICE_FORMS: Record<string, OfficeForm> = {
     documents: a => a.playerType === 'incoming' ? ['Coach\'s evaluation and recommendation']
       : a.playerType === 'current' ? ['Coach\'s evaluation and endorsement'] : [],
     noGpa: true,
+    award: { who: 'player', detailsTitle: 'Varsity', grant: 'discount', messagePlaceholder: 'e.g. Welcome to the team! Your discount starts this semester.' },
     approver: 'SDO Director',
     assessmentTitle: 'Scholarship grant',
     assessment: [
@@ -204,17 +217,20 @@ export const OFFICE_FORMS: Record<string, OfficeForm> = {
       return { headline: `${vicissitudeDiscount(rating)}% tuition discount`, lines: [`Rating ${rating.toFixed(2)} = ${c.toFixed(2)} × 60% + ${b.toFixed(2)} × 40%`, 'Subject to available funds'], tone: 'success' };
     },
   },
+  // No application: the ROTC Office adds each officer every semester.
   s10: {
     stepLabel: 'NROTC',
-    intro: 'The amount depends on your rank in the 267th NROTCU.',
+    intro: 'The amount depends on the officer’s rank in the 267th NROTCU.',
     questions: [
-      { key: 'rank', label: 'Your rank', type: 'select', options: ROTC_RANKS.map(r => ({ value: r.value, label: r.label })) },
-      { key: 'activeDuty', label: 'I actively perform my assigned duties, including 20 duty hours a week in the 267th NROTCU', type: 'confirm' },
+      { key: 'rank', label: 'Rank', type: 'select', options: ROTC_RANKS.map(r => ({ value: r.value, label: `${r.label} (${peso(r.amount)})` })) },
+      { key: 'activeDuty', label: 'Actively performs their assigned duties, including 20 duty hours a week', type: 'confirm' },
     ],
-    approver: 'Commandant / ROTC Coordinator',
+    documents: a => a.rank ? ['Recommendation from the Commandant and/or the ROTC Coordinator'] : [],
+    award: { who: 'officer', detailsTitle: 'Rank', grant: 'assessment', messagePlaceholder: 'e.g. Congratulations on your rank! Your assistance is for this semester.' },
+    approver: 'Commandant or ROTC Coordinator',
     assessmentTitle: 'Financial assistance',
     assessment: [
-      { key: 'amount', label: 'Amount (₱)', hint: 'Filled from the rank; change it if the ROTC fund can’t cover it', type: 'number', min: 0, max: 100000, step: 1 },
+      { key: 'amount', label: 'Amount (₱)', hint: 'Filled from the rank; change it if the ROTC fund can’t cover it', type: 'number', min: 0, max: 100000, step: 1, defaultFrom: a => ROTC_RANKS.find(r => r.value === a.rank)?.amount },
     ],
     result: (v, a) => {
       const rank = ROTC_RANKS.find(r => r.value === a.rank);

@@ -534,7 +534,7 @@ function ScholarshipEndCard({ app, getToken, onSaved }: {
   return (
     <Card
       title="Scholarship status"
-      description={`Kept until they graduate or stop.${scholarship?.slotsPerCollege ? ` ${scholarship.slotsPerCollege} slots per college.` : scholarship?.totalSlots ? ` ${scholarship.totalSlots} slots in all.` : ''}`}
+      description={`${scholarship?.oneSemester ? 'For one semester; mark them stopped if it’s revoked.' : 'Kept until they graduate or stop.'}${scholarship?.slotsPerCollege ? ` ${scholarship.slotsPerCollege} slots per college.` : scholarship?.totalSlots ? ` ${scholarship.totalSlots} slots in all.` : ''}`}
     >
       <div className="space-y-3">
         {error && <Alert tone="danger">{error}</Alert>}

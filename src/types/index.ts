@@ -44,6 +44,10 @@ export interface Scholarship {
   // No renewals: approved scholars keep it until they graduate or stop
   // (POLCA). Same as noRenewal in the backend's data/scholarships.js.
   noRenewal?: boolean;
+  // A one-semester grant (always with noRenewal), e.g. the USG's SFAG: it
+  // ends with its semester and the student applies again in the next call.
+  // Same as oneSemester in the backend.
+  oneSemester?: boolean;
   // No application: the office adds its scholars itself (the SDO, from
   // its tryouts; AddScholarDialog). Same as directAward in the backend.
   directAward?: boolean;

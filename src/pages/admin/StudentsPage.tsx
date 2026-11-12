@@ -165,7 +165,10 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
                           {onMessageStudent && (
                             <IconButton icon={MessageSquare} label={`Message ${fullName(s)}`} onClick={e => { e.stopPropagation(); onMessageStudent(s.studentNumber); }} />
                           )}
-                          {s.applications > 0 && <ChevronRight className="size-4 text-ink-subtle" aria-hidden />}
+                          {/* The arrow's space is kept on every row (shown only
+                              when there's a record to open), so the message
+                              icons line up in one column. */}
+                          <ChevronRight className={`size-4 text-ink-subtle ${s.applications > 0 ? '' : 'invisible'}`} aria-hidden />
                         </div>
                       </Td>
                     </Tr>

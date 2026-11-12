@@ -1,7 +1,5 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
-import MyScholarship from './pages/student/MyScholarship';
-import MyApplications from './pages/student/MyApplications';
-import { AdminShellSkeleton, AppSkeleton, FormSkeleton, OfficeShellSkeleton, StudentShellSkeleton, forgetShell, rememberShell, rememberedAdminView, rememberedShell } from './components/Skeletons';
+import React, { Suspense, lazy, useMemo, useState, useEffect, useRef } from 'react';
+import { AdminShellSkeleton, AppSkeleton, StudentPageSkeleton, FormSkeleton, OfficeShellSkeleton, StudentShellSkeleton, forgetShell, rememberShell, rememberedAdminView, rememberedShell } from './components/Skeletons';
 import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, ProfileSectionKey, SaveResult } from './types';
 import { acceptsOnlineApplications, applicationWindow, applyScholarshipOverrides, mockScholarships, registerCustomScholarships, setServerApplyBlocks } from './data/scholarships';
@@ -16,26 +14,33 @@ import StudentLayout from './layouts/StudentLayout';
 // Public Pages
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
-import CompleteProfilePage from './pages/CompleteProfilePage';
-import AdminDashboard from './pages/admin/AdminDashboard';
 
 // Student Portal Pages
-import Dashboard from './pages/student/Dashboard';
-import ExploreGrants from './pages/student/ExploreGrants';
-import ScholarshipDetails from './pages/student/ScholarshipDetails';
-import ApplyScholarship from './pages/student/ApplyScholarship';
-import Announcements from './pages/student/Announcements';
-import Profile from './pages/student/Profile';
-import NotificationsPage from './pages/student/Notifications';
-import AccountSecurity from './components/AccountSecurity';
-import GPACalculator from './pages/student/GPACalculator';
-import Renewals from './pages/student/Renewals';
-import DutyHours from './pages/student/DutyHours';
-import Messages from './pages/student/Messages';
-import OfficePortal, { OfficeHeadInfo } from './pages/office/OfficePortal';
+import type { OfficeHeadInfo } from './pages/office/OfficePortal';
 import { setOfficeNumbers } from './data/officeForms';
 import { setPassingAverage } from './utils/renewals';
 import { useRefreshTick } from './utils/useRefreshTick';
+
+// Everything past the landing and sign-in pages loads only when it's
+// opened, so a first visit downloads just what it shows (each portal and
+// page is its own file). The skeletons below fill in while one loads.
+const MyScholarship = lazy(() => import('./pages/student/MyScholarship'));
+const MyApplications = lazy(() => import('./pages/student/MyApplications'));
+const CompleteProfilePage = lazy(() => import('./pages/CompleteProfilePage'));
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const Dashboard = lazy(() => import('./pages/student/Dashboard'));
+const ExploreGrants = lazy(() => import('./pages/student/ExploreGrants'));
+const ScholarshipDetails = lazy(() => import('./pages/student/ScholarshipDetails'));
+const ApplyScholarship = lazy(() => import('./pages/student/ApplyScholarship'));
+const Announcements = lazy(() => import('./pages/student/Announcements'));
+const Profile = lazy(() => import('./pages/student/Profile'));
+const NotificationsPage = lazy(() => import('./pages/student/Notifications'));
+const AccountSecurity = lazy(() => import('./components/AccountSecurity'));
+const GPACalculator = lazy(() => import('./pages/student/GPACalculator'));
+const Renewals = lazy(() => import('./pages/student/Renewals'));
+const DutyHours = lazy(() => import('./pages/student/DutyHours'));
+const Messages = lazy(() => import('./pages/student/Messages'));
+const OfficePortal = lazy(() => import('./pages/office/OfficePortal'));
 
 // --- Persistence helpers -----------------------------------------------
 // Only page/navigation state lives here now — WHO is logged in is entirely
@@ -44,6 +49,9 @@ import { useRefreshTick } from './utils/useRefreshTick';
 const SESSION_STORAGE_KEY = 'aniskolar_session';
 // "Apply" pressed while signed out: the scholarship to open after sign-in.
 const PENDING_APPLY_KEY = 'aniskolar_pending_apply';
+// A page to open after sign-in (e.g. Explore Grants from "View All
+// Scholarships" on the landing page).
+const PENDING_PAGE_KEY = 'aniskolar_pending_page';
 
 // Reads from Vite's env at build time; falls back to localhost for local
 // dev. Set VITE_API_BASE_URL in your .env (or your host's env config) once
@@ -208,6 +216,14 @@ export default function App() {
   const [profileEdit, setProfileEdit] = useState<ProfileSectionKey | null>(null);
   const editProfileSection = (section: ProfileSectionKey) => { handleNavigate('profile'); setProfileEdit(section); };
   const [officeHead, setOfficeHead] = useState<OfficeHeadInfo | null>(null);
+  // Why the sign-in page was opened (shown on it); cleared on leaving it.
+  const [loginNotice, setLoginNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (currentPage === 'login') return;
+    setLoginNotice(null);
+    // Left the sign-in page without signing in: forget "open Explore after".
+    if (!isSignedIn) { try { sessionStorage.removeItem(PENDING_PAGE_KEY); } catch { /* no storage */ } }
+  }, [currentPage, isSignedIn]);
   // Announcements and the scholarships' details (status, dates, slots…)
   // reload when the user comes back to the tab and every few minutes, so
   // changes show without refreshing the page.
@@ -266,6 +282,24 @@ export default function App() {
   const role = (user?.publicMetadata as { role?: string } | undefined)?.role === 'admin'
     ? 'admin'
     : 'student';
+
+  // A signed-in student's other pages load in the background once the
+  // browser is idle, so moving between them doesn't wait.
+  useEffect(() => {
+    if (!isSignedIn || authPhase !== 'ready' || role !== 'student') return;
+    const load = () => {
+      for (const page of [
+        () => import('./pages/student/MyApplications'), () => import('./pages/student/ExploreGrants'),
+        () => import('./pages/student/MyScholarship'), () => import('./pages/student/Messages'),
+        () => import('./pages/student/Announcements'), () => import('./pages/student/ScholarshipDetails'),
+        () => import('./pages/student/Renewals'), () => import('./pages/student/DutyHours'),
+        () => import('./pages/student/Profile'), () => import('./pages/student/ApplyScholarship'),
+      ]) page().catch(() => { /* loads when opened instead */ });
+    };
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    if (w.requestIdleCallback) w.requestIdleCallback(load, { timeout: 4000 });
+    else window.setTimeout(load, 2000);
+  }, [isSignedIn, authPhase, role]);
 
   // Which portal this browser signed in to last, so the loading skeleton
   // on the next visit has its shape (components/Skeletons.tsx).
@@ -517,7 +551,7 @@ export default function App() {
           // Replaces the sign-in page, so Back doesn't return to it.
           replaceNextEntry.current = true;
           // Onboarding comes first; the pending Apply waits for it.
-          if (data.student.completion?.coreComplete === false || !openPendingApply()) setCurrentPage('dashboard');
+          if (data.student.completion?.coreComplete === false || !(openPendingApply() || openPendingPage())) setCurrentPage('dashboard');
         }
       } catch (err) {
         // A failed profile fetch (network error, 5xx, etc) is NOT the same
@@ -629,6 +663,23 @@ export default function App() {
     setCurrentPage('scholarship-details');
   };
 
+  // After sign-in: the page asked for before signing in, if any.
+  function openPendingPage(): boolean {
+    let page: string | null = null;
+    try { page = sessionStorage.getItem(PENDING_PAGE_KEY); sessionStorage.removeItem(PENDING_PAGE_KEY); } catch { /* no storage */ }
+    if (page !== 'explore') return false;
+    setCurrentPage('explore');
+    return true;
+  }
+
+  // Signed out: "View All Scholarships" asks to sign in, then opens Explore.
+  const handleExploreAll = () => {
+    if (isSignedIn) { handleNavigate('explore'); return; }
+    try { sessionStorage.setItem(PENDING_PAGE_KEY, 'explore'); } catch { /* no storage */ }
+    setLoginNotice('Log in with your DLSU-D account to see all the scholarships you can apply for.');
+    setCurrentPage('login');
+  };
+
   // After sign-in: open the scholarship "Apply" was pressed on, if any.
   function openPendingApply(): boolean {
     let id: string | null = null;
@@ -644,6 +695,7 @@ export default function App() {
   const handleApplyScholarship = (id: string) => {
     if (!isSignedIn) {
       try { sessionStorage.setItem(PENDING_APPLY_KEY, id); } catch { /* no storage */ }
+      setLoginNotice('Log in with your DLSU-D account to apply.');
       setCurrentPage('login');
       return;
     }
@@ -849,7 +901,7 @@ export default function App() {
 
   // The head of a duty office.
   if (isSignedIn && authPhase === 'office' && officeHead) {
-    return <OfficePortal head={officeHead} onLogout={handleLogout} />;
+    return <Suspense fallback={<OfficeShellSkeleton />}><OfficePortal head={officeHead} onLogout={handleLogout} /></Suspense>;
   }
 
   // Signed in with Clerk, but no academic profile in MongoDB yet.
@@ -857,6 +909,7 @@ export default function App() {
   // directly in the effect above and never hit the 404 branch.)
   if (isSignedIn && authPhase === 'needs-profile') {
     return (
+      <Suspense fallback={<div className="min-h-dvh bg-slate-50"><FormSkeleton label="Loading" /></div>}>
       <CompleteProfilePage
         existing={student.studentNumber ? student : undefined}
         onComplete={completedStudent => {
@@ -866,6 +919,7 @@ export default function App() {
           if (!openPendingApply()) setCurrentPage('dashboard');
         }}
       />
+      </Suspense>
     );
   }
 
@@ -897,7 +951,7 @@ export default function App() {
     if (!isSignedIn) {
       switch (currentPage) {
         case 'login':
-          return <LoginPage onBackToLanding={() => goBackTo('landing')} />;
+          return <LoginPage onBackToLanding={() => goBackTo('landing')} notice={loginNotice} />;
         case 'scholarship-details':
           return (
             <PublicLayout onLoginClick={() => handleNavigate('login')} onLogoClick={() => handleNavigate('landing')}>
@@ -919,12 +973,7 @@ export default function App() {
               <LandingPage
                 onLoginClick={() => handleNavigate('login')}
                 onApplyClick={handleApplyScholarship}
-                onExploreClick={() => {
-                  const scElem = document.getElementById('scholarships');
-                  if (scElem) {
-                    scElem.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
+                onExploreClick={handleExploreAll}
                 onViewScholarship={handleViewScholarship}
                 scholarships={scholarships}
                 announcements={announcements}
@@ -954,7 +1003,7 @@ export default function App() {
       const title = pageTitleMap[currentPage] || 'Student Portal';
 
       if (role === 'admin') {
-        return <AdminDashboard onLogout={handleLogout} />;
+        return <Suspense fallback={<AdminShellSkeleton view={rememberedAdminView()} />}><AdminDashboard onLogout={handleLogout} /></Suspense>;
       }
 
       return (
@@ -970,6 +1019,7 @@ export default function App() {
           onLogout={handleLogout}
           pageTitle={title}
         >
+          <Suspense fallback={<StudentPageSkeleton page={currentPage} />}>
           {(() => {
             switch (currentPage) {
               case 'explore':
@@ -1088,10 +1138,11 @@ export default function App() {
                 );
             }
           })()}
+          </Suspense>
         </StudentLayout>
       );
     }
   };
 
-  return <div className="antialiased text-slate-800">{renderContent()}</div>;
+  return <div className="antialiased text-slate-800"><Suspense fallback={<AppSkeleton />}>{renderContent()}</Suspense></div>;
 }

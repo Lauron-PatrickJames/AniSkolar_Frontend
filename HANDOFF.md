@@ -623,6 +623,14 @@ student's message to a non-AdSO office emails that office's admin accounts
 (looked up in Clerk). Starting a conversation: GET
 `/api/messages/admin/students?q=` (other offices: their applicants only).
 Tests: `test/messages.test.js`.
+**Office to office (2026-11-12).** Every scholarship office's Messages can
+also hold conversations with the other scholarship offices (AdSO ↔ POLCA ↔
+Alumni…): New message → "A scholarship office". `Message.peer` is both
+codes sorted ("LSO|POLCA") and `fromOffice` who wrote it; routes
+`/api/messages/admin/peers[/:code]` (+ read, state, delete). Each office
+sees its own messages as "mine" (the API maps the other office's to
+`from: 'office'`). Inbox state: MessageThread kind 'peer', key
+"<this office>><other>". The other office's admins (Clerk) are emailed.
 
 - One conversation per student with the AdSO (`models/Message.js`,
   `routes/messages.js`). Students: sidebar → Messages (unread badge).

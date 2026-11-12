@@ -5,7 +5,7 @@ import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
 import { collegeName } from '../../data/programs';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
-import { ResultDialog, Alert, Avatar, Button, Card, ConfirmDialog, DropdownMenu, DropdownMenuItem, EmptyState, Menu, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, Skeleton, TableSkeleton, TextInput, Toast } from './AdminUI';
+import { ResultDialog, Alert, Avatar, Badge, Button, Card, ConfirmDialog, DropdownMenu, DropdownMenuItem, EmptyState, Menu, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, Skeleton, TableSkeleton, TextInput, Toast } from './AdminUI';
 import { QuickReplies, UnfilledHint, firstNameOf } from './ReplyTemplates';
 
 // An office's conversations with students (backend routes/messages.js),
@@ -20,10 +20,13 @@ import { QuickReplies, UnfilledHint, firstNameOf } from './ReplyTemplates';
 // office portal). The open one is selected by key: a student number, or
 // "office:" + the office name.
 const OFFICE_PREFIX = 'office:';
+// Another scholarship office's conversation (POLCA, the AdSO…): "peer:" + its code.
+const PEER_PREFIX = 'peer:';
 interface Thread {
-  kind: 'student' | 'office';
+  kind: 'student' | 'office' | 'peer';
   studentNumber?: string;
   office?: string;
+  peerOffice?: string;
   headName?: string;
   name: string;
   email: string;
@@ -41,8 +44,10 @@ interface Thread {
 }
 
 type InboxView = 'Inbox' | 'Unread' | 'Archived';
-const keyOf = (t: Thread) => (t.kind === 'office' ? `${OFFICE_PREFIX}${t.office}` : t.studentNumber!);
-const pathOf = (t: Thread) => (t.kind === 'office' ? `/api/messages/admin/offices/${encodeURIComponent(t.office!)}` : `/api/messages/admin/threads/${t.studentNumber}`);
+const keyOf = (t: Thread) => (t.kind === 'office' ? `${OFFICE_PREFIX}${t.office}` : t.kind === 'peer' ? `${PEER_PREFIX}${t.peerOffice}` : t.studentNumber!);
+const pathOf = (t: Thread) => (t.kind === 'office' ? `/api/messages/admin/offices/${encodeURIComponent(t.office!)}`
+  : t.kind === 'peer' ? `/api/messages/admin/peers/${encodeURIComponent(t.peerOffice!)}` : `/api/messages/admin/threads/${t.studentNumber}`);
+const titleOf = (t: Thread) => (t.kind === 'office' ? t.office! : t.kind === 'peer' ? t.name : t.name ? titleCaseName(t.name) : t.studentNumber!);
 const isUnread = (t: Thread) => t.unread > 0 || t.markedUnread;
 
 interface ThreadDetail {
@@ -197,24 +202,24 @@ export default function MessagesPage({ getToken, isAdso = true, selectedStudent,
                   onClick={() => onSelectStudent(key)}
                   className={`flex w-full items-start gap-3 py-3 pl-3 pr-10 text-left hover:bg-surface-muted ${active ? 'bg-accent-subtle' : ''}`}
                 >
-                  {t.kind === 'office'
+                  {t.kind !== 'student'
                     ? <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-accent"><Building2 className="size-4" aria-hidden /></span>
                     : <Avatar name={t.name || t.studentNumber || ''} avatarUrl={t.avatarUrl} size="sm" />}
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className={`truncate text-sm ${unread ? 'font-semibold text-ink' : 'font-medium text-ink'}`}>{t.kind === 'office' ? t.office : t.name ? titleCaseName(t.name) : t.studentNumber}</span>
+                      <span className={`truncate text-sm ${unread ? 'font-semibold text-ink' : 'font-medium text-ink'}`}>{titleOf(t)}</span>
                       {t.pinned && <Pin className="size-3.5 shrink-0 text-ink-subtle" aria-label="Pinned" />}
                       {t.unread > 0
                         ? <span className="ml-auto shrink-0 rounded-full bg-accent px-1.5 text-xs font-semibold text-white tabular-nums" aria-label={`${t.unread} unread`}>{t.unread}</span>
                         : t.markedUnread && <span className="ml-auto size-2.5 shrink-0 rounded-full bg-accent" aria-label="Marked as unread" />}
                     </span>
-                    <span className="block truncate text-xs text-ink-subtle">{t.kind === 'office' ? ['Office', t.headName].filter(Boolean).join(' · ') : [t.studentNumber, t.college].filter(Boolean).join(' · ')}</span>
+                    <span className="block truncate text-xs text-ink-subtle">{t.kind === 'office' ? ['Duty office', t.headName].filter(Boolean).join(' · ') : t.kind === 'peer' ? 'Scholarship office' : [t.studentNumber, t.college].filter(Boolean).join(' · ')}</span>
                     <span className={`block truncate text-xs ${unread ? 'text-ink' : 'text-ink-muted'}`}>{t.last.from === 'adso' ? 'You: ' : ''}{preview}</span>
                     <span className="block text-xs text-ink-subtle tabular-nums">{formatDateTime(t.last.createdAt)}</span>
                   </span>
                 </button>
                 <div className="absolute right-1.5 top-2.5 opacity-100 lg:opacity-0 lg:focus-within:opacity-100 lg:group-hover:opacity-100">
-                  <DropdownMenu label={`Actions for ${t.kind === 'office' ? t.office : t.name || t.studentNumber}`} items={menuFor(t)} />
+                  <DropdownMenu label={`Actions for ${titleOf(t)}`} items={menuFor(t)} />
                 </div>
               </li>
             );
@@ -232,7 +237,16 @@ export default function MessagesPage({ getToken, isAdso = true, selectedStudent,
       />
       <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
         {list}
-        {selectedStudent?.startsWith(OFFICE_PREFIX) ? (
+        {selectedStudent?.startsWith(PEER_PREFIX) ? (
+          <PeerThreadView
+            key={selectedStudent}
+            code={selectedStudent.slice(PEER_PREFIX.length)}
+            getToken={getToken}
+            onBack={() => onSelectStudent(null)}
+            onChanged={loadThreads}
+            menu={headerMenu}
+          />
+        ) : selectedStudent?.startsWith(OFFICE_PREFIX) ? (
           <OfficeThreadView
             key={selectedStudent}
             office={selectedStudent.slice(OFFICE_PREFIX.length)}
@@ -258,12 +272,12 @@ export default function MessagesPage({ getToken, isAdso = true, selectedStudent,
           </Card>
         )}
       </div>
-      {newOpen && <NewMessageDialog getToken={getToken} isAdso={isAdso} onClose={() => setNewOpen(false)} onOpen={key => { setNewOpen(false); onSelectStudent(key); }} />}
+      {newOpen && <NewMessageDialog getToken={getToken} isAdso={isAdso} existing={new Set((threads ?? []).map(keyOf))} onClose={() => setNewOpen(false)} onOpen={key => { setNewOpen(false); onSelectStudent(key); }} />}
       {deleting && (
         <ConfirmDialog
           tone="danger"
           title="Delete this conversation?"
-          description={`Removed from your inbox only. ${deleting.kind === 'office' ? 'The office' : 'The student'} keeps their copy.`}
+          description={`Removed from your inbox only. ${deleting.kind === 'student' ? 'The student' : 'The office'} keeps their copy.`}
           confirmLabel="Delete"
           confirmIcon={Trash2}
           busy={deleteBusy}
@@ -481,8 +495,50 @@ function StudentProfileDialog({ studentNumber, getToken, onClose, onOpenRecord }
 
 // New message: pick who from a live search (students by name or student
 // number) or the list of duty offices with a head; picking opens the chat.
-function NewMessageDialog({ getToken, isAdso, onClose, onOpen }: { getToken: () => Promise<string | null>; isAdso: boolean; onClose: () => void; onOpen: (key: string) => void }) {
-  const [to, setTo] = useState<'Student' | 'Office'>('Student');
+// One person or office to pick: a badge, the name, a detail line, and
+// "Open" when there's already a conversation (else "Write" on hover).
+function PickRow({ badge, title, detail, existing, onClick }: { badge: React.ReactNode; title: string; detail?: string; existing?: boolean; onClick: () => void }) {
+  return (
+    <li>
+      <button type="button" onClick={onClick} className="group flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left hover:bg-surface-muted focus:outline-hidden focus-visible:bg-surface-muted">
+        {badge}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-ink">{title}</span>
+          {detail && <span className="block truncate text-xs text-ink-muted">{detail}</span>}
+        </span>
+        {existing
+          ? <Badge tone="neutral">Open chat</Badge>
+          : <span className="text-xs font-semibold text-accent opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">Write →</span>}
+      </button>
+    </li>
+  );
+}
+// Two letters for an office: "POLCA" → "PO", "Alumni Office" → "AO".
+const officeInitials = (name: string) => {
+  const words = name.replace(/\(.*?\)/g, '').split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[1][0] : name.slice(0, 2)).toUpperCase();
+};
+const OfficeBadge = ({ name }: { name: string }) => (
+  <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-[11px] font-semibold tracking-tight text-accent">{officeInitials(name)}</span>
+);
+const GroupLabel = ({ children }: { children: React.ReactNode }) => (
+  <li className="sticky top-0 z-10 bg-surface px-3 pb-1 pt-3 text-xs font-medium text-ink-subtle first:pt-0">{children}</li>
+);
+
+function NewMessageDialog({ getToken, isAdso, existing, onClose, onOpen }: { getToken: () => Promise<string | null>; isAdso: boolean; existing: Set<string>; onClose: () => void; onOpen: (key: string) => void }) {
+  const [to, setTo] = useState<'Student' | 'Peer' | 'Office'>('Student');
+  // The other scholarship offices (POLCA, the AdSO…).
+  const [peers, setPeers] = useState<{ code: string; name: string; short: string }[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/messages/admin/peers`, { headers: await authHeaders(getToken) });
+        if (res.ok) setPeers((await res.json()).offices ?? []);
+      } catch {
+        // no offices to pick
+      }
+    })();
+  }, [getToken]);
   const [query, setQuery] = useState('');
   const [found, setFound] = useState<{ studentNumber: string; name: string; programCode?: string; college?: string; yearLevel?: string }[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -520,26 +576,44 @@ function NewMessageDialog({ getToken, isAdso, onClose, onOpen }: { getToken: () 
 
   const q = query.trim().toLowerCase();
   const officeList = offices.filter(o => !q || o.office.toLowerCase().includes(q) || (o.headName ?? '').toLowerCase().includes(q));
+  const peerList = peers.filter(o => !q || o.name.toLowerCase().includes(q) || o.short.toLowerCase().includes(q));
+  // Offices you already write to first, then scholarship offices, then the student governments.
+  const isGov = (o: { name: string }) => /student government/i.test(o.name);
+  const peerGroups = [
+    { label: 'Recent', items: peerList.filter(o => existing.has(`${PEER_PREFIX}${o.code}`)) },
+    { label: 'Scholarship offices', items: peerList.filter(o => !existing.has(`${PEER_PREFIX}${o.code}`) && !isGov(o)) },
+    { label: 'Student governments', items: peerList.filter(o => !existing.has(`${PEER_PREFIX}${o.code}`) && isGov(o)) },
+  ].filter(g => g.items.length);
+  const HINT = {
+    Student: isAdso ? 'Search any student by name or student number.' : 'Students who applied to your office’s scholarships.',
+    Peer: 'Other offices in AniSkolar. Their admins reply from their admin console.',
+    Office: 'Duty offices. Their heads reply from the office portal.',
+  };
   const typedNumber = /^\d{9}$/.test(query.trim()) ? query.trim() : null;
   const row = 'flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left hover:bg-surface-muted focus:outline-hidden focus-visible:bg-surface-muted';
 
   return (
     <Modal size="md" title="New message" onClose={onClose} footer={<Button onClick={onClose}>Cancel</Button>}>
       <div className="space-y-4">
-        <SegmentedControl<'Student' | 'Office'>
+        <SegmentedControl<'Student' | 'Peer' | 'Office'>
           label="Write to"
-          options={offices.length ? ['Student', 'Office'] : ['Student']}
+          options={[
+            'Student',
+            ...(peers.length ? ['Peer' as const] : []),
+            ...(offices.length ? ['Office' as const] : []),
+          ]}
           value={to}
           onChange={v => { if (v) { setTo(v); setQuery(''); } }}
-          renderLabel={o => (o === 'Student' ? 'A student' : 'A duty office')}
+          renderLabel={o => (o === 'Student' ? 'Student' : o === 'Peer' ? 'Office' : 'Duty office')}
         />
+        <p className="-mt-1 text-xs text-ink-subtle">{HINT[to]}</p>
         <SearchInput
           value={query}
           onChange={setQuery}
           label={to === 'Student' ? 'Search students' : 'Search offices'}
-          placeholder={to === 'Student' ? 'Name or student number…' : 'Office or head’s name…'}
+          placeholder={to === 'Student' ? 'Name or student number…' : to === 'Peer' ? 'Search offices, e.g. POLCA…' : 'Office or head’s name…'}
         />
-        <div className="max-h-80 min-h-40 overflow-y-auto">
+        <div className="-mx-2 max-h-[22rem] min-h-48 overflow-y-auto px-2">
           {to === 'Student' ? (
             query.trim().length < 2 ? (
               <p className="py-10 text-center text-sm text-ink-subtle">Type a name or student number.</p>
@@ -548,16 +622,14 @@ function NewMessageDialog({ getToken, isAdso, onClose, onOpen }: { getToken: () 
             ) : (
               <ul className="space-y-0.5">
                 {(found ?? []).map(st => (
-                  <li key={st.studentNumber}>
-                    <button type="button" onClick={() => onOpen(st.studentNumber)} className={row}>
-                      <Avatar name={titleCaseName(st.name)} size="sm" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-ink">{titleCaseName(st.name)}</span>
-                        <span className="block truncate text-xs text-ink-muted">{[st.studentNumber, st.programCode, st.yearLevel].filter(Boolean).join(' · ')}</span>
-                      </span>
-                      <MessageSquare className="size-4 text-ink-subtle" aria-hidden />
-                    </button>
-                  </li>
+                  <PickRow
+                    key={st.studentNumber}
+                    badge={<Avatar name={titleCaseName(st.name)} size="sm" />}
+                    title={titleCaseName(st.name)}
+                    detail={[st.studentNumber, st.programCode, st.yearLevel].filter(Boolean).join(' · ')}
+                    existing={existing.has(st.studentNumber)}
+                    onClick={() => onOpen(st.studentNumber)}
+                  />
                 ))}
                 {found && found.length === 0 && (
                   typedNumber && isAdso
@@ -566,19 +638,36 @@ function NewMessageDialog({ getToken, isAdso, onClose, onOpen }: { getToken: () 
                 )}
               </ul>
             )
+          ) : to === 'Peer' ? (
+            <ul className="space-y-0.5">
+              {peerGroups.map(g => (
+                <React.Fragment key={g.label}>
+                  <GroupLabel>{g.label}</GroupLabel>
+                  {g.items.map(o => (
+                    <PickRow
+                      key={o.code}
+                      badge={<OfficeBadge name={o.short} />}
+                      title={o.short}
+                      detail={o.name !== o.short ? o.name : undefined}
+                      existing={existing.has(`${PEER_PREFIX}${o.code}`)}
+                      onClick={() => onOpen(`${PEER_PREFIX}${o.code}`)}
+                    />
+                  ))}
+                </React.Fragment>
+              ))}
+              {peerList.length === 0 && <li className="py-10 text-center text-sm text-ink-subtle">{q ? `No office matches “${query.trim()}”.` : 'No other office has an admin account yet.'}</li>}
+            </ul>
           ) : (
             <ul className="space-y-0.5">
               {officeList.map(o => (
-                <li key={o.office}>
-                  <button type="button" onClick={() => onOpen(`${OFFICE_PREFIX}${o.office}`)} className={row}>
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-muted text-ink-muted"><Building2 className="size-4" aria-hidden /></span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-ink">{o.office}</span>
-                      {o.headName && <span className="block truncate text-xs text-ink-muted">{o.headName}</span>}
-                    </span>
-                    <MessageSquare className="size-4 text-ink-subtle" aria-hidden />
-                  </button>
-                </li>
+                <PickRow
+                  key={o.office}
+                  badge={<OfficeBadge name={o.office} />}
+                  title={o.office}
+                  detail={o.headName ? `Head: ${o.headName}` : undefined}
+                  existing={existing.has(`${OFFICE_PREFIX}${o.office}`)}
+                  onClick={() => onOpen(`${OFFICE_PREFIX}${o.office}`)}
+                />
               ))}
               {officeList.length === 0 && <li className="py-10 text-center text-sm text-ink-subtle">No office found.</li>}
             </ul>
@@ -647,6 +736,72 @@ function OfficeThreadView({ office, getToken, onBack, onChanged, menu }: {
         placeholder="Write to the office…"
         composerTop={(body, setBody) => (
           <QuickReplies getToken={getToken} vars={{ firstName: firstNameOf(data.office.headName) }} value={body} onInsert={setBody} />
+        )}
+        composerTools={body => <UnfilledHint text={body} />}
+      />
+    </Card>
+  );
+}
+
+// A conversation with another scholarship office (POLCA, the AdSO…): their
+// admins write from their own admin console.
+function PeerThreadView({ code, getToken, onBack, onChanged, menu }: {
+  code: string;
+  getToken: () => Promise<string | null>;
+  onBack: () => void;
+  onChanged: () => void;
+  menu?: React.ReactNode;
+}) {
+  const [data, setData] = useState<{ office: { code: string; name: string; short: string }; messages: ChatMessage[]; state?: { markedUnread: boolean } } | null>(null);
+  const [error, setError] = useState('');
+  const path = `/api/messages/admin/peers/${encodeURIComponent(code)}`;
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: await authHeaders(getToken) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Failed to load the conversation.');
+      setData(body);
+      setError('');
+      if (body.state?.markedUnread || (body.messages as ChatMessage[]).some(m => m.from === 'office' && !m.readAt)) {
+        await fetch(`${API_BASE_URL}${path}/read`, { method: 'POST', headers: await authHeaders(getToken) });
+        window.dispatchEvent(new Event(MESSAGES_READ_EVENT));
+        onChanged();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load the conversation.');
+    }
+  }, [path, getToken, onChanged]);
+
+  useEffect(() => {
+    load();
+    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') load(); }, 20_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  if (error && !data) return <Card><ErrorState title="Couldn't load the conversation" message={error} onRetry={load} /></Card>;
+  if (!data) return <Card><TableSkeleton rows={4} label="Loading conversation" /></Card>;
+  return (
+    <Card flush>
+      <div className="flex flex-wrap items-center gap-3 border-b border-line p-3">
+        <Button size="sm" variant="ghost" icon={ArrowLeft} onClick={onBack} className="lg:hidden">All</Button>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-accent"><Building2 className="size-4" aria-hidden /></span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-ink">{data.office.name}</p>
+          <p className="truncate text-xs text-ink-subtle">Scholarship office · their admins reply from their admin console</p>
+        </div>
+        {menu}
+      </div>
+      <Conversation
+        className="h-[min(62vh,600px)]"
+        messages={data.messages}
+        viewer="adso"
+        getToken={getToken}
+        onSend={async msg => { const m = await postMessage(path, getToken, msg); setData(d => (d ? { ...d, messages: [...d.messages, m] } : d)); onChanged(); }}
+        emptyText={`No messages yet. Write the first one below — the ${data.office.short} admins are also emailed.`}
+        placeholder={`Write to ${data.office.short}…`}
+        composerTop={(body, setBody) => (
+          <QuickReplies getToken={getToken} vars={{}} value={body} onInsert={setBody} />
         )}
         composerTools={body => <UnfilledHint text={body} />}
       />

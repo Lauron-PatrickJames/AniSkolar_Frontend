@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { OFFICE_LABELS } from '../../data/scholarships';
 import { useAuth } from '@clerk/react';
-import { AlertCircle, Award, CalendarCheck, CheckCircle2, ChevronRight, Clock, FileText, Hash, Hourglass, RefreshCw, Search, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, Award, Check, CheckCircle2, Info, Search } from 'lucide-react';
 import { Application, Scholarship } from '../../types';
 import { Holdings, SFAG_ID } from '../../utils/eligibility';
 
@@ -40,10 +40,6 @@ export default function MyScholarship({ holdings, scholarships, applications, on
 }) {
   const held = holdings?.held ?? [];
   const mustChoose = held.length > 1;
-  // Scholarships an office added the student to weren't submitted by them.
-  const submitted = applications.filter(a => !a.awardedDirectly).length;
-  const added = applications.length - submitted;
-  const applicationsHint = [submitted ? `${submitted} submitted` : '', added ? `${added} added by an office` : ''].filter(Boolean).join(' · ') || 'None yet';
 
   if (!holdings) {
     return (
@@ -71,107 +67,92 @@ export default function MyScholarship({ holdings, scholarships, applications, on
         const s = scholarships.find(x => x.id === h.scholarshipId);
         const d = holdings.details?.find(x => x.scholarshipId === h.scholarshipId);
         const isSfag = h.scholarshipId === SFAG_ID;
-        const keep = s?.retentionConditions ?? [];
+        const keep = [...(s?.retentionConditions ?? []), ...(isSfag ? ['Complete your duty hours'] : [])];
+        const grant = d?.grantPercentage != null ? `${d.grantPercentage}%` : null;
         return (
-          <section key={h.scholarshipId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-            {/* Hero: name and office on the left, the grant as a big number on
-                the right, with a faint award mark behind. */}
-            <div className="relative overflow-hidden bg-linear-to-br from-brand-green via-emerald-700 to-emerald-800 px-5 py-5 text-white sm:px-8">
-              <Award className="pointer-events-none absolute -right-6 -bottom-10 h-56 w-56 text-white/[0.07]" aria-hidden />
-              <div className="pointer-events-none absolute -top-16 -left-10 h-48 w-48 rounded-full bg-white/5" aria-hidden />
-              <div className="relative flex flex-wrap items-end justify-between gap-4 sm:gap-6">
-                <div className="min-w-0">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold ring-1 ring-white/25">
-                    <ShieldCheck className="h-3.5 w-3.5" /> Active scholar
-                  </span>
-                  <h2 className="mt-2.5 font-display text-xl font-bold leading-tight sm:text-3xl">{h.scholarshipName}</h2>
-                  <p className="mt-1 text-sm text-emerald-50">{OFFICE_NAMES[s?.office ?? 'LSO'] ?? s?.provider?.office ?? ''}</p>
-                </div>
-                {/* Phones: one slim pill. Wider: a block on the right. */}
-                <div className="flex items-baseline gap-2 rounded-xl bg-white/10 px-4 py-2 ring-1 ring-white/20 backdrop-blur-sm sm:block sm:rounded-2xl sm:px-5 sm:py-3 sm:text-right">
-                  <p className="font-display text-2xl font-bold leading-none sm:text-4xl">{d?.grantPercentage != null ? `${d.grantPercentage}%` : '—'}</p>
-                  <p className="text-xs font-medium text-emerald-50 sm:mt-1">{d?.grantPercentage != null ? 'tuition discount' : isSfag ? 'grant set by the office' : 'grant'}</p>
-                </div>
+          <section key={h.scholarshipId} className="rounded-2xl border border-slate-200 bg-white">
+            {/* Name, office and the grant */}
+            <div className="flex flex-wrap items-start justify-between gap-6 px-5 pt-6 pb-5 sm:px-8 sm:pt-8">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-xs font-medium text-slate-500">
+                  <span className="h-1.5 w-1.5 rounded-full bg-brand-green" aria-hidden /> Active scholar
+                </p>
+                <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-slate-900 sm:text-[1.75rem]">{h.scholarshipName}</h2>
+                <p className="mt-1 text-sm text-slate-500">{OFFICE_NAMES[s?.office ?? 'LSO'] ?? s?.provider?.office ?? ''}</p>
+              </div>
+              <div className="sm:text-right">
+                <p className="font-display text-3xl font-bold leading-none tabular-nums text-slate-900 sm:text-4xl">{grant ?? '—'}</p>
+                <p className="mt-1.5 text-xs text-slate-500">{grant ? 'tuition discount' : isSfag ? 'grant set by the office' : 'grant'}</p>
               </div>
             </div>
 
-            <dl className="grid grid-cols-2 border-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-slate-100 [&>*:nth-child(3)]:col-span-2 [&>*:nth-child(3)]:border-t [&>*:nth-child(3)]:border-slate-100 sm:[&>*:nth-child(3)]:col-span-1 sm:[&>*:nth-child(3)]:border-t-0">
-              <Stat icon={CalendarCheck} label="Approved on" value={formatDate(d?.approvedAt)} />
-              <Stat icon={Hourglass} label="Scholar for" value={scholarFor(d?.approvedAt)} />
-              <Stat icon={Hash} label="Reference" value={d?.referenceCode ?? '—'} mono />
+            <dl className="mx-5 grid grid-cols-2 gap-y-4 border-y border-slate-100 py-4 sm:mx-8 sm:grid-cols-3">
+              <Fact label="Approved" value={formatDate(d?.approvedAt)} />
+              <Fact label="Scholar for" value={scholarFor(d?.approvedAt)} />
+              <Fact label="Reference" value={d?.referenceCode ?? '—'} mono />
             </dl>
 
-            <div className="space-y-5 border-t border-slate-100 px-4 py-5 sm:px-6">
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-slate-900">To keep your scholarship</h3>
+            <div className="px-5 py-6 sm:px-8">
+              {/* What it takes to keep it */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">To keep your scholarship</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Checked each semester when you renew.</p>
                 {keep.length ? (
-                  <ul className="grid gap-3 sm:grid-cols-2">
+                  <ul className="mt-4 space-y-2.5">
                     {keep.map(k => (
-                      <li key={k} className="flex items-center gap-3 rounded-xl bg-emerald-50/60 px-4 py-2.5 text-sm font-medium text-slate-700 ring-1 ring-emerald-100">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-brand-green shadow-xs"><CheckCircle2 className="h-4 w-4" /></span>
+                      <li key={k} className="flex items-start gap-2.5 text-sm text-slate-700">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden />
                         {k}
                       </li>
                     ))}
                   </ul>
-                ) : <p className="text-sm text-slate-500">Follow the office’s announcements for what’s needed each semester.</p>}
+                ) : <p className="mt-4 text-sm text-slate-500">Follow the office’s announcements for what’s needed each semester.</p>}
+                {!s?.noRenewal && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('renewals')}
+                    className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-brand-green px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-green-dark focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
+                  >
+                    Go to renewal <ArrowRight className="h-4 w-4" aria-hidden />
+                  </button>
+                )}
               </div>
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-slate-900">Shortcuts</h3>
-                <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
-                  {!s?.noRenewal && <Shortcut icon={RefreshCw} color="emerald" label="Renew for next semester" hint="Submit your grades each semester" onClick={() => onNavigate('renewals')} />}
-                  {isSfag && <Shortcut icon={Clock} color="amber" label="Duty hours" hint="Log your duties and see your progress" onClick={() => onNavigate('duty-hours')} />}
-                  <Shortcut icon={FileText} color="sky" label="My applications" hint={applicationsHint} onClick={() => onNavigate('applications')} />
-                  <Shortcut icon={Award} color="violet" label="Scholarship details" hint="Benefits, requirements and contacts" onClick={() => onViewScholarship(h.scholarshipId)} />
-                </div>
-              </div>
+
             </div>
           </section>
         );
       })}
 
+      {/* The one-scholarship rule, where it can't be missed. */}
       {!mustChoose && (
-        <p className="text-center text-xs text-slate-500">
-          Only one internally funded scholarship can be credited at a time. To look at other scholarships, use{' '}
-          <button type="button" onClick={() => onNavigate('explore')} className="font-semibold text-brand-green underline hover:text-brand-green-dark">Explore scholarships</button>.
-        </p>
+        <aside className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:px-8" aria-label="Good to know">
+          <Info className="hidden h-5 w-5 shrink-0 text-slate-400 sm:block" aria-hidden />
+          <p className="min-w-0 flex-1 text-sm leading-relaxed text-slate-600">
+            <span className="font-semibold text-slate-900">One scholarship at a time.</span>{' '}
+            Only one internally funded scholarship can be credited at a time. You can still browse the others.
+          </p>
+          <button
+            type="button"
+            onClick={() => onNavigate('explore')}
+            className="inline-flex shrink-0 items-center gap-1 self-start text-sm font-semibold text-brand-green hover:text-brand-green-dark hover:underline focus:outline-hidden focus-visible:underline sm:self-auto"
+          >
+            Explore scholarships <ArrowRight className="h-4 w-4" aria-hidden />
+          </button>
+        </aside>
       )}
     </div>
   );
 }
 
-function Stat({ icon: Icon, label, value, mono }: { icon: React.ElementType; label: string; value: string; mono?: boolean }) {
+function Fact({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 sm:px-5 sm:py-3.5">
-      <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-brand-green sm:flex"><Icon className="h-5 w-5" /></span>
-      <div className="min-w-0">
-        <dt className="text-xs font-medium text-slate-500">{label}</dt>
-        <dd className={`truncate text-sm font-bold text-slate-900 ${mono ? 'font-mono' : ''}`}>{value}</dd>
-      </div>
+    <div className="min-w-0 pr-4">
+      <dt className="text-xs text-slate-500">{label}</dt>
+      <dd className={`mt-0.5 truncate text-sm font-semibold text-slate-900 ${mono ? 'font-mono text-[13px]' : ''}`}>{value}</dd>
     </div>
   );
 }
 
-const SHORTCUT_COLORS = {
-  emerald: 'bg-emerald-50 text-emerald-700 group-hover:bg-emerald-100',
-  amber: 'bg-amber-50 text-amber-700 group-hover:bg-amber-100',
-  sky: 'bg-sky-50 text-sky-700 group-hover:bg-sky-100',
-  violet: 'bg-violet-50 text-violet-700 group-hover:bg-violet-100',
-};
-
-function Shortcut({ icon: Icon, color, label, hint, onClick }: { icon: React.ElementType; color: keyof typeof SHORTCUT_COLORS; label: string; hint: string; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="group flex items-center gap-3 rounded-xl border border-slate-200 px-3.5 py-3 text-left transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green">
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${SHORTCUT_COLORS[color]}`}><Icon className="h-5 w-5" /></span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-slate-800">{label}</span>
-        <span className="block truncate text-xs text-slate-500">{hint}</span>
-      </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-500" />
-    </button>
-  );
-}
-
-// Two (or more) approved at once: pick the one to keep.
 function ChoosePanel({ holdings, scholarships, onChosen }: { holdings: Holdings; scholarships: Scholarship[]; onChosen: () => void }) {
   const { getToken } = useAuth();
   const [picked, setPicked] = useState<string | null>(null);

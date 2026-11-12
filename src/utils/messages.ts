@@ -96,6 +96,8 @@ export interface MessageOffice {
   code: string;
   name: string;
   short: string;
+  // Has a conversation, or one of the student's applications is theirs.
+  started: boolean;
   unread: number;
   last: ChatMessage | null;
 }

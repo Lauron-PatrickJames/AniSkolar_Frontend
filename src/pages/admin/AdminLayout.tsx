@@ -32,14 +32,26 @@ const SECTIONS: { title: string; items: { id: MainView; icon: React.ElementType 
   { title: 'Manage', items: [{ id: 'automation', icon: Zap }] }
 ];
 
+// Another console's own menu (the office portal reuses this shell). Each
+// item: its id, label, icon and an optional count badge.
+export interface NavItem { id: string; label: string; icon: React.ElementType; count?: number; countLabel?: string }
+export interface NavSection { title: string; items: NavItem[] }
+
 export interface Crumb {
   label: string;
   onClick?: () => void;
 }
 
 interface AdminLayoutProps {
-  currentView: MainView;
+  currentView: MainView | string;
   onNavigate: (view: MainView) => void;
+  // Another console's menu, name ("Office portal") and home page, instead
+  // of the admin console's.
+  nav?: NavSection[];
+  consoleName?: string;
+  homeView?: string;
+  // Account menu → Account security (default: the 'security' view).
+  onSecurity?: () => void;
   onLogout: () => void;
   adminEmail?: string;
   // The account's name and photo in Clerk, when set.
@@ -65,8 +77,21 @@ interface AdminLayoutProps {
 // and table headers (sticky top-topbar) stay pinned while pages scroll.
 // Sidebar: full width from lg, an icon rail from md to lg, a drawer below md.
 export default function AdminLayout({
-  currentView, onNavigate, onLogout, adminEmail, adminName, adminAvatarUrl, officeLabel, officeShort, pendingCount, messageCount, announcementCount, hiddenViews = [], breadcrumbs, pageKey, children
+  currentView, onNavigate, nav, consoleName = 'Admin console', homeView = 'home', onSecurity, onLogout, adminEmail, adminName, adminAvatarUrl, officeLabel, officeShort, pendingCount, messageCount, announcementCount, hiddenViews = [], breadcrumbs, pageKey, children
 }: AdminLayoutProps) {
+  // The menu: the given one, or the admin console's (minus hidden views).
+  const sections: NavSection[] = nav ?? SECTIONS
+    .map(section => ({
+      title: section.title,
+      items: section.items.filter(item => !hiddenViews.includes(item.id)).map(item => ({
+        id: item.id,
+        label: VIEW_TITLES[item.id],
+        icon: item.icon,
+        count: item.id === 'applications' ? pendingCount : item.id === 'messages' ? messageCount : item.id === 'announcements' ? announcementCount : undefined,
+        countLabel: item.id === 'messages' ? 'unread' : item.id === 'announcements' ? 'waiting for your approval' : 'awaiting review',
+      })),
+    }))
+    .filter(section => section.items.length > 0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -87,16 +112,12 @@ export default function AdminLayout({
 
         <Sidebar
           currentView={currentView}
-          onNavigate={view => { onNavigate(view); closeDrawer(); }}
+          onNavigate={view => { onNavigate(view as MainView); closeDrawer(); }}
           open={drawerOpen}
           onClose={closeDrawer}
-          onLogout={onLogout}
-          adminEmail={adminEmail}
-          officeLabel={officeLabel}
-          pendingCount={pendingCount}
-          messageCount={messageCount}
-          announcementCount={announcementCount}
-          hiddenViews={hiddenViews}
+          sections={sections}
+          consoleName={consoleName}
+          homeView={homeView}
         />
 
         <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
@@ -113,7 +134,7 @@ export default function AdminLayout({
               />
               {breadcrumbs.length > 0 && <Breadcrumbs items={breadcrumbs} />}
             </div>
-            <AccountMenu adminEmail={adminEmail} adminName={adminName} avatarUrl={adminAvatarUrl} officeLabel={officeLabel} officeShort={officeShort ?? officeLabel} onSecurity={() => onNavigate('security')} onLogout={onLogout} />
+            <AccountMenu adminEmail={adminEmail} adminName={adminName} avatarUrl={adminAvatarUrl} officeLabel={officeLabel} officeShort={officeShort ?? officeLabel} onSecurity={onSecurity ?? (() => onNavigate('security'))} onLogout={onLogout} />
           </header>
 
           <main id="admin-main" tabIndex={-1} className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8">
@@ -220,22 +241,15 @@ function Breadcrumbs({ items }: { items: Crumb[] }) {
   );
 }
 
-function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail, officeLabel, pendingCount, messageCount, announcementCount, hiddenViews }: {
-  currentView: MainView;
-  onNavigate: (view: MainView) => void;
+function Sidebar({ currentView, onNavigate, open, onClose, sections, consoleName, homeView }: {
+  currentView: string;
+  onNavigate: (view: string) => void;
   open: boolean;
   onClose: () => void;
-  onLogout: () => void;
-  adminEmail?: string;
-  officeLabel: string;
-  pendingCount?: number;
-  messageCount?: number;
-  announcementCount?: number;
-  hiddenViews: MainView[];
+  sections: NavSection[];
+  consoleName: string;
+  homeView: string;
 }) {
-  const sections = SECTIONS
-    .map(section => ({ ...section, items: section.items.filter(item => !hiddenViews.includes(item.id)) }))
-    .filter(section => section.items.length > 0);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   // Drawer (below md): move focus in on open, close on Escape, and hand
@@ -266,7 +280,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
           {/* The logo goes home. */}
           <button
             type="button"
-            onClick={() => onNavigate('home')}
+            onClick={() => onNavigate(homeView)}
             aria-label="AniSkolar, go to Home"
             className="-m-1 flex min-w-0 items-center gap-2.5 rounded-lg p-1 text-left focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
           >
@@ -275,7 +289,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
             </span>
             <span className="min-w-0 md:max-lg:sr-only">
               <span className="block truncate text-sm font-semibold leading-tight text-accent">AniSkolar</span>
-              <span className="block truncate text-xs leading-tight text-ink-subtle">Admin console</span>
+              <span className="block truncate text-xs leading-tight text-ink-subtle">{consoleName}</span>
             </span>
           </button>
           <IconButton ref={closeRef} icon={X} label="Close navigation" onClick={onClose} className="md:hidden" />
@@ -289,8 +303,8 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
                 {section.items.map(item => {
                   const Icon = item.icon;
                   const active = currentView === item.id;
-                  const name = VIEW_TITLES[item.id];
-                  const count = item.id === 'applications' ? pendingCount ?? 0 : item.id === 'messages' ? messageCount ?? 0 : item.id === 'announcements' ? announcementCount ?? 0 : 0;
+                  const name = item.label;
+                  const count = item.count ?? 0;
                   return (
                     <li key={item.id}>
                       <button
@@ -304,7 +318,7 @@ function Sidebar({ currentView, onNavigate, open, onClose, onLogout, adminEmail,
                         <Icon className={`size-4.5 shrink-0 ${active ? 'text-accent' : 'text-ink-subtle group-hover:text-ink-muted'}`} aria-hidden />
                         <span className="flex-1 truncate text-left md:max-lg:sr-only">
                           {name}
-                          {count > 0 && <span className="sr-only">, {count} {item.id === 'messages' ? 'unread' : item.id === 'announcements' ? 'waiting for your approval' : 'awaiting review'}</span>}
+                          {count > 0 && <span className="sr-only">, {count} {item.countLabel ?? 'to do'}</span>}
                         </span>
                         {count > 0 && (
                           <>

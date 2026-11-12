@@ -15,6 +15,7 @@ import {
 import HistoryList from './HistoryList';
 import { collegeName, findProgram } from '../../data/programs';
 import { buildApplicationHistory, buildCombinedHistory } from './history';
+import { ExcelColumn, ExcelValue, downloadExcel, excelDate, parseCsv } from '../../utils/excelExport';
 
 interface AdminScholarsProps {
   applications: AdminApplication[];
@@ -146,21 +147,10 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 // Server-backed CSV export (GET /api/applications/export/scholars) with the
 // current search/renewal/sort state and the chosen columns. Downloaded via
 // Blob because the endpoint needs a Bearer token.
-async function exportScholarsToCSV(params: {
+async function exportScholarsToExcel(params: {
   getToken: () => Promise<string | null>;
   apiBaseUrl: string;
   search: string;
@@ -185,35 +175,45 @@ async function exportScholarsToCSV(params: {
       const body = await response.json().catch(() => ({}));
       return { error: body.error || 'Failed to export scholars.' };
     }
-    const blob = await response.blob();
-    const match = (response.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/);
-    downloadBlob(blob, match ? match[1] : `scholars-export-${new Date().toISOString().slice(0, 10)}.csv`);
+    // The server's CSV (with its filters and columns) as a formatted sheet.
+    const [header = [], ...lines] = parseCsv(await response.text()).filter(r => r.some(c => c.trim()));
+    const NUMBERS = new Set(['Total Applications', 'Approved', 'Rejected']);
+    const columns: ExcelColumn[] = header.map(h => (
+      NUMBERS.has(h) ? { header: h, format: 'integer' } : h === 'Approval Rate' ? { header: h, format: 'percent' } : { header: h }
+    ));
+    const rows = lines.map(line => header.map((h, i): ExcelValue => {
+      const v = (line[i] ?? '').trim();
+      if (!v || v === '—') return null;
+      if (NUMBERS.has(h) && /^\d+$/.test(v)) return Number(v);
+      if (h === 'Approval Rate' && /^\d+%$/.test(v)) return Number(v.slice(0, -1)) / 100;
+      return v;
+    }));
+    const filters = [params.search && `Search: “${params.search}”`, params.renewalFilter !== 'all' && (params.renewalFilter === 'renewing' ? 'Returning only' : 'First-time only'), params.approvedFilter !== 'any' && (params.approvedFilter === 'yes' ? 'With an approval' : 'Without an approval')].filter(Boolean).join('  ·  ');
+    await downloadExcel(`scholars-export-${new Date().toISOString().slice(0, 10)}`, [{
+      name: 'Scholars', title: 'Scholars', subtitle: `${rows.length} scholar${rows.length === 1 ? '' : 's'}${filters ? `  ·  ${filters}` : ''}`, columns, rows,
+    }]);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to export scholars.' };
   }
 }
 
-function csvField(value: string | number): string {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`;
-}
-
 // Client-side CSV of one scholar's own applications (detail view); the data
 // is already loaded, and it always exports the full breakdown.
 function exportScholarApplicationsToCSV(scholar: ScholarSummary) {
-  const headers = ['Scholarship', 'Cycle', 'Type', 'Submitted', 'Status', 'Review Note'];
-  const rows = scholar.applications.map(app => [
-    csvField(app.scholarshipName),
-    csvField(academicYearOf(app.createdAt)),
-    csvField(app.applicationFormType),
-    csvField(formatDate(app.createdAt)),
-    csvField(app.status),
-    csvField(app.reviewNote ?? '')
-  ].join(','));
-  const csv = '﻿' + [headers.map(csvField).join(','), ...rows].join('\r\n');
-  const stamp = new Date().toISOString().slice(0, 10);
   const safeName = scholar.studentNumber.replace(/[^a-z0-9-]/gi, '');
-  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `scholar-${safeName}-applications-${stamp}.csv`);
+  downloadExcel(`scholar-${safeName}-applications-${new Date().toISOString().slice(0, 10)}`, [{
+    name: 'Applications',
+    title: `${scholar.rawName} (${scholar.studentNumber})`,
+    subtitle: 'Applications',
+    columns: [
+      { header: 'Scholarship' }, { header: 'Cycle' }, { header: 'Type' }, { header: 'Submitted', format: 'date' },
+      { header: 'Status' }, { header: 'Review note', wrap: true },
+    ],
+    rows: scholar.applications.map(app => [
+      app.scholarshipName, academicYearOf(app.createdAt), app.applicationFormType, excelDate(app.createdAt), app.status, app.reviewNote ?? null,
+    ]),
+  }]);
 }
 
 // Opens a print-ready window built from the chosen columns; the browser's
@@ -284,7 +284,7 @@ function ColumnPickerModal({ kind, selected, rows, onChange, onConfirm, onCancel
   onCancel: () => void;
 }) {
   const columns = EXPORT_COLUMNS.filter(c => selected.has(c.key));
-  const action = kind === 'print' ? 'Print' : 'Export CSV';
+  const action = kind === 'print' ? 'Print' : 'Export to Excel';
   const toggle = (key: string, on: boolean) => {
     const next = new Set(selected);
     if (on) next.add(key); else next.delete(key);
@@ -440,7 +440,7 @@ export default function AdminScholars({
       return;
     }
     setIsExporting(true);
-    const { error: err } = await exportScholarsToCSV({ getToken, apiBaseUrl, search, renewalFilter, approvedFilter, sort, columns });
+    const { error: err } = await exportScholarsToExcel({ getToken, apiBaseUrl, search, renewalFilter, approvedFilter, sort, columns });
     if (err) setExportError(err);
     setIsExporting(false);
   };
@@ -479,7 +479,7 @@ export default function AdminScholars({
             loading={isExporting}
             disabled={!hasData}
             items={[
-              { key: 'csv', label: 'Export as CSV (Excel)', icon: FileText, onSelect: () => setPickerFor('csv') },
+              { key: 'csv', label: 'Export to Excel', icon: FileText, onSelect: () => setPickerFor('csv') },
               { key: 'print', label: 'Print / save as PDF', icon: Printer, onSelect: () => setPickerFor('print') }
             ]}
           />
@@ -732,7 +732,7 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
                   key: 'files', label: 'Download all files (.zip)', icon: Download,
                   onSelect: () => { onExportError(''); downloadZip(`student/${encodeURIComponent(scholar.studentNumber)}`, getToken).catch(err => onExportError(err instanceof Error ? err.message : "Couldn't prepare the download.")); },
                 },
-                { key: 'csv', label: 'Export CSV', icon: FileText, onSelect: () => exportScholarApplicationsToCSV(scholar) },
+                { key: 'csv', label: 'Export to Excel', icon: FileText, onSelect: () => exportScholarApplicationsToCSV(scholar) },
                 { key: 'print', label: 'Print', icon: Printer, onSelect: print }
               ]}
             />

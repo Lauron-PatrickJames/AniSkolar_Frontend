@@ -454,6 +454,10 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     name: 'Vicissitude Scholarship Program',
     category: 'Leadership',
     office: 'VICISSITUDE',
+    // One semester at a time: members apply each term with that term's
+    // evaluation and duty hours record.
+    noRenewal: true,
+    oneSemester: true,
     provider: officeProvider('Vicissitude'),
     targetApplicants: 'Vicissitude Editorial Board and Staff',
     description: 'The Vicissitude Scholarship Program supports the students who produce the university yearbook: members of the Vicissitude Editorial Board (EB) and Editorial Staff (ES). Discounts cover tuition only and depend on available funds.',
@@ -463,7 +467,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Editorial Board, rating 4.25–4.49: 50% tuition discount',
       'Editorial Board, rating 4.24 and below: 25% tuition discount (EB members are guaranteed at least 25%)',
       'Editorial Staff: one 25% scholarship reserved for each department',
-      'Free skills training (writing, editing, photography, graphics, layout), a free pictorial, and for graduating members a free graduation picture and yearbook copy'
+      'Free skills training (writing, editing, photography, graphics, layout), a free pictorial, and for graduating members a free graduation picture and yearbook copy',
+      'For one semester: no renewals, so apply again each term with that term’s evaluation and duty hours'
     ],
     eligibilityCriteria: { applicantType: 'any' },
     rules: { applicantType: 'any', minGpa: 1.5, noFailingGrade: true },
@@ -478,7 +483,8 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     process: [
       'Step 1: Join the Vicissitude Editorial Board or Staff and complete your duty hours (200 for the Editorial Board, 125 for the Editorial Staff).',
       'Step 2: Apply here with your performance evaluation and duty hours record.',
-      'Step 3: Vicissitude rates your performance and sets your discount.'
+      'Step 3: Vicissitude rates your performance and sets your discount for the term.',
+      'Step 4: Apply again next term with that term’s evaluation and duty hours record.'
     ],
     deadline: 'Set by Vicissitude',
     status: 'Closed',

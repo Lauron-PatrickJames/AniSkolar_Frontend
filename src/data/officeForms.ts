@@ -56,6 +56,46 @@ export interface OfficeForm {
   result: (values: OfficeAnswers, answers: OfficeAnswers) => AssessmentResult | null;
 }
 
+// CBAASG (Ordinance No. 01, s. 2021–2022): the same documents and
+// interviews for both of its scholarships. The tax exemption certificate
+// is optional, so it's asked for only when the student has one.
+const CBAA_DEPARTMENTS = ['ABD', 'ACD', 'BMD', 'MKD'].map(d => ({ value: d, label: d }));
+const TAX_EXEMPTION: OfficeQuestion = {
+  key: 'taxExemption', label: 'Do you have a Certificate of Tax Exemption?', hint: 'Optional: upload it if you have one.', type: 'choice', options: [
+    { value: 'yes', label: 'Yes, I’ll upload it' },
+    { value: 'no', label: 'No' },
+  ],
+};
+const CBAASG_DOCUMENTS = [
+  'Recommendation letter from your Department Chair',
+  'Grades from the previous academic year',
+  'Certificate of Registration (COR) for the current semester',
+  'Certificate of Indigency or proof of inability to pay the tuition fee',
+  'Payslip or ITR supporting your parents’ or guardian’s annual gross income',
+];
+const cbaasgDocuments = (a: OfficeAnswers) => a.taxExemption === 'yes' ? [...CBAASG_DOCUMENTS, 'Certificate of Tax Exemption'] : CBAASG_DOCUMENTS;
+const CBAASG_INTERVIEWS: AssessmentField[] = [
+  { key: 'initialInterview', label: 'Initial interview (Executive Board)', type: 'date' },
+  { key: 'finalInterview', label: 'Final interview (Dean and Associate Dean)', type: 'date' },
+];
+function cbaasgInterviews(v: OfficeAnswers): AssessmentResult {
+  const day = (k: string) => (v[k] ? formatDay(String(v[k])) : 'not scheduled yet');
+  return {
+    headline: v.finalInterview ? 'Final interview scheduled' : v.initialInterview ? 'Initial interview scheduled' : 'Screening',
+    lines: [`Initial interview: ${day('initialInterview')}`, `Final interview: ${day('finalInterview')}`, 'Send each schedule to the student’s DLSU-D email. Passers sign the contract within 7 days.'],
+    tone: v.finalInterview ? 'success' : 'neutral',
+  };
+}
+
+// CCJESG (Ordinance No. 251125): the most each position can get a semester.
+const CCJESG_POSITIONS = [
+  { value: 'governor', label: 'Governor', cap: 10000 },
+  { value: 'viceGovernor', label: 'Vice Governor', cap: 10000 },
+  { value: 'chiefOfStaff', label: 'Chief of Staff (or deputy)', cap: 7000 },
+  { value: 'executive', label: 'Executive member (or deputy)', cap: 7000 },
+  { value: 'legislative', label: 'Legislative Council member', cap: 6000 },
+];
+
 const num = (v: unknown) => (v === undefined || v === null || v === '' ? null : Number(v));
 const peso = (n: number) => `₱${n.toLocaleString('en-PH')}`;
 
@@ -233,6 +273,104 @@ export const OFFICE_FORMS: Record<string, OfficeForm> = {
         lines: [done.map(([label, x]) => `${label} ${x}`).join(' · '), 'The discount is computed from the points by the Managing Director.'],
         tone: done.length < 4 ? 'neutral' : 'success',
       };
+    },
+  },
+  s13: {
+    stepLabel: 'CBAASG',
+    intro: 'One scholar is chosen from each CBAA department. The CBAASG screens the applications, then interviews the shortlisted students.',
+    questions: [
+      { key: 'department', label: 'Your department', type: 'select', options: CBAA_DEPARTMENTS },
+      { key: 'noOtherScholarship', label: 'I have no existing scholarship in the university', type: 'confirm' },
+      { key: 'noMajorOffense', label: 'I have not committed any major offense', type: 'confirm' },
+      TAX_EXEMPTION,
+    ],
+    documents: cbaasgDocuments,
+    approver: 'Dean and Associate Dean of the CBAA',
+    assessmentTitle: 'Interviews',
+    assessment: CBAASG_INTERVIEWS,
+    result: cbaasgInterviews,
+  },
+  s14: {
+    stepLabel: 'CBAASG',
+    intro: 'For members of the CBAASG Executive Board and Legislative Council. The CBAASG screens the applications, then interviews the shortlisted officers.',
+    questions: [
+      {
+        key: 'branch', label: 'Your position is in the', type: 'choice', options: [
+          { value: 'executive', label: 'Executive Board' },
+          { value: 'legislative', label: 'Legislative Council' },
+        ],
+      },
+      { key: 'position', label: 'Your position', type: 'text', max: 100, placeholder: 'e.g. Vice President for Finance' },
+      { key: 'activeInvolvement', label: 'I am actively involved in the CBAASG', type: 'confirm' },
+      { key: 'noMajorOffense', label: 'I have not committed any major offense', type: 'confirm' },
+      TAX_EXEMPTION,
+    ],
+    documents: cbaasgDocuments,
+    approver: 'Dean and Associate Dean of the CBAA',
+    assessmentTitle: 'Interviews',
+    assessment: CBAASG_INTERVIEWS,
+    result: cbaasgInterviews,
+  },
+  s15: {
+    stepLabel: 'Declarations',
+    intro: 'The CICSSG confirms your application by email and books your interview.',
+    questions: [
+      { key: 'noMajorOffense', label: 'I have not been found guilty of any major offense in the Student Handbook, nor sanctioned with suspension', type: 'confirm' },
+      { key: 'noAllowanceScholarship', label: 'I am not a recipient of a scholarship with allowances from any DLSU-D sector this academic year', type: 'confirm' },
+    ],
+    approver: 'CICS Student Government',
+    assessmentTitle: 'Interview',
+    assessment: [
+      { key: 'interviewDate', label: 'Interview date', type: 'date' },
+      { key: 'interviewTime', label: 'Time', type: 'time' },
+    ],
+    result: v => v.interviewDate
+      ? { headline: 'Interview booked', lines: [`${formatDay(String(v.interviewDate))}${v.interviewTime ? `, ${formatTime(String(v.interviewTime))}` : ''}`, 'Email the booking to the student. They can reschedule up to one day before.'], tone: 'success' }
+      : { headline: 'Not booked yet', lines: ['Confirm the application and book the interview, then email the student.'], tone: 'neutral' },
+  },
+  s16: {
+    stepLabel: 'Declarations',
+    intro: 'The CEATSG’s Director of Academics reviews your application; qualified applicants are invited to an interview by email.',
+    questions: [
+      { key: 'noConcurrentScholarship', label: 'I am not a recipient of any other internally funded scholarship this semester', type: 'confirm' },
+    ],
+    approver: 'CEATSG Director of Academics',
+    assessmentTitle: 'Interview and grant',
+    assessment: [
+      { key: 'interviewDate', label: 'Interview date', type: 'date' },
+      { key: 'interviewTime', label: 'Time', type: 'time' },
+      { key: 'grant', label: 'Grant (₱)', hint: 'Up to ₱200,000 is set aside each semester for all the grants', type: 'number', min: 0, max: 200000, step: 1 },
+    ],
+    result: v => {
+      const grant = num(v.grant);
+      const interview = v.interviewDate ? `Interview: ${formatDay(String(v.interviewDate))}${v.interviewTime ? `, ${formatTime(String(v.interviewTime))}` : ''}` : 'Interview not scheduled yet';
+      if (grant === null) return { headline: v.interviewDate ? 'Interview scheduled' : 'Under review', lines: [interview], tone: 'neutral' };
+      return { headline: peso(grant), lines: [interview, 'From the semester’s ₱200,000 scholarship fund; unused funds don’t carry over.'], tone: 'success' };
+    },
+  },
+  s17: {
+    stepLabel: 'CCJESG',
+    intro: 'Up to 11 officers are chosen each semester. The grant depends on your position and your performance evaluation.',
+    questions: [
+      { key: 'position', label: 'Your position', type: 'select', options: CCJESG_POSITIONS.map(p => ({ value: p.value, label: p.label })) },
+      { key: 'noViolation', label: 'I have no pending or confirmed violation at the college or university level', type: 'confirm' },
+      { key: 'activeOfficer', label: 'I attend CCJESG events and meetings and comply with the CCJESG Office Logbook', type: 'confirm' },
+    ],
+    approver: 'CCJESG Adviser and the CCJE Dean',
+    assessmentTitle: 'Interview and evaluation',
+    assessment: [
+      { key: 'interviewDate', label: 'Interview date', type: 'date' },
+      { key: 'evaluationPassed', label: 'Passed the performance evaluation', type: 'bool' },
+      { key: 'grant', label: 'Grant (₱)', hint: 'Up to the position’s cap, by performance and available funds', type: 'number', min: 0, max: 10000, step: 1 },
+    ],
+    result: (v, a) => {
+      const position = CCJESG_POSITIONS.find(p => p.value === a.position);
+      const cap = position ? `${position.label}: up to ${peso(position.cap)} a semester` : '';
+      const grant = num(v.grant);
+      if (v.evaluationPassed === false) return { headline: 'Didn’t pass the evaluation', lines: [cap].filter(Boolean), tone: 'danger' };
+      if (grant === null) return { headline: v.interviewDate ? `Interview: ${formatDay(String(v.interviewDate))}` : 'Under review', lines: [cap, 'Credited at the end of the semester, after service and evaluation.'].filter(Boolean), tone: 'neutral' };
+      const over = position && grant > position.cap;
+      return { headline: peso(grant), lines: [cap, over ? 'This is more than the position’s cap.' : 'Credited to the tuition account at the end of the semester.'].filter(Boolean), tone: over ? 'warning' : 'success' };
     },
   },
 };

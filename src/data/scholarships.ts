@@ -1,6 +1,16 @@
 import { DocumentSlot, GpaRequirement, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../types';
 import { EligibilityRules, documentTexts, ruleLines } from './requirementCatalog';
 import { isSfagOpenAllYear } from '../utils/eligibility';
+import { PROGRAMS } from './programs';
+
+// Every CBAA program: the CBAASG scholarships are for CBAA students only.
+const CBAA_PROGRAMS = PROGRAMS.filter(p => p.college === 'CBAA').map(p => p.code);
+// Every CICS program: Padayon Pioneers is for CICS students only.
+const CICS_PROGRAMS = PROGRAMS.filter(p => p.college === 'CICS').map(p => p.code);
+// Every CEAT program: the CEAT Financial Aid Scholarship is for CEAT students only.
+const CEAT_PROGRAMS = PROGRAMS.filter(p => p.college === 'CEAT').map(p => p.code);
+// Every CCJE program: the CCJESG officers' grant is for CCJE students only.
+const CCJE_PROGRAMS = PROGRAMS.filter(p => p.college === 'CCJE').map(p => p.code);
 
 // The offices that run scholarships (mirrors the backend's data/offices.js).
 // Each has its own admin accounts and handles its scholarships entirely;
@@ -520,29 +530,31 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
   },
   {
     // Offered by the University Student Government, separate from the
-    // AdSO's SFAG. Applied for through the USG's own online form, so it's
-    // listed for information (AdSO list, Oct 2026).
+    // AdSO's SFAG. From the USG's call and FAQs for the 2nd semester of
+    // AY 2025–2026.
     id: 's11',
     name: 'USG Student Financial Aid Grant',
     category: 'Financial',
     office: 'USG',
     provider: officeProvider('University Student Government (USG)'),
-    targetApplicants: 'Continuing DLSU-D students',
-    description: 'The University Student Government\'s Student Financial Aid Grant is offered each semester, separate from the SFAG of the Admissions and Scholarship Office. The latest call was for the 2nd semester of AY 2025–2026 (applications April 6–13, 2026). Applications are now through AniSkolar.',
+    targetApplicants: 'DLSU-D students with at least one semester of residency (first-year students can apply for the 2nd semester)',
+    description: 'The University Student Government\'s Student Financial Aid Grant is offered each semester, separate from the SFAG of the Admissions and Scholarship Office. Each scholar gets ₱15,000, credited directly to their student account. For the 2nd semester of AY 2025–2026 (applications April 6–13, 2026), 35 students were chosen as grantees.',
     benefits: [
-      'Financial aid from the University Student Government'
+      '₱15,000 per scholar, credited directly to your student account',
+      'No duty hours to render',
+      '35 grantees in the latest call (2nd semester, AY 2025–2026)'
     ],
     eligibilityCriteria: { applicantType: 'continuing' },
     rules: { applicantType: 'continuing', minGpa: 2, noFailingGrade: true },
     customEligibility: [
-      'Bona fide DLSU-D student with at least one semester of residency',
+      'Bona fide DLSU-D student with at least one semester of residency (first-year students can apply for the 2nd semester)',
       'The GPA and no-failing-grades rules apply to the previous semester',
-      'No other existing internal scholarship grant from DLSU-D or its benefactors',
+      'No other existing internal scholarship grant from DLSU-D or its benefactors in the same semester. A partial (percentage) internal scholarship still counts; one that was valid only for the previous semester doesn\'t',
       'Not found guilty of any major offense'
     ],
     customDocuments: [
-      'Application letter addressed to the University Student Government',
-      'Financial Aid Grant Application Form',
+      'Application letter addressed to the University Student Government (template from the USG)',
+      'Financial Aid Grant Application Form (template from the USG)',
       'Certificate of Registration (COR) for the current semester',
       'Copy of grades from the previous semester',
       'Parents\' Income Tax Return (ITR) or Certificate of Non-Filing of ITR, and/or Certificate of Indigency',
@@ -553,10 +565,10 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'SWAFO clearance certifying no major offense (may follow if the request for clearance is attached and dated within the application period)'
     ],
     process: [
-      'Step 1: Apply here during the USG\'s application period, with all the documents.',
+      'Step 1: Apply here during the USG\'s application period, with all the documents. Applications must start online: on-site submission comes only after verification.',
       'Step 2: The USG verifies your documents within 72 hours. If one is inaccurate, you have two days from notification to resubmit.',
-      'Step 3: Verified applicants are told their on-site submission schedule, where the slot is confirmed.',
-      'Step 4: Wait for the final list of shortlisted applicants.'
+      'Step 3: Verified applicants get an application number and their on-site submission schedule; the slot is confirmed on-site.',
+      'Step 4: Wait for the final list of shortlisted applicants. Grants aren\'t first-come, first-served: every applicant is screened against the criteria.'
     ],
     deadline: 'Each semester (latest: April 6–13, 2026)',
     status: 'Closed',
@@ -592,6 +604,215 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Step 4: The Managing Director releases the list of qualified scholars and each one\'s discount.'
     ],
     deadline: 'To be announced by the Heraldo Filipino',
+    status: 'Closed',
+    applicationFormType: 'standard'
+  },
+  // From CBAASG Ordinance No. 01, s. 2021–2022, funded each semester by
+  // the CBAASC Trust Fund. Both are for CBAA students only.
+  {
+    id: 's13',
+    name: 'CBAASG Achie Scholarship',
+    category: 'Financial',
+    office: 'CBAASG',
+    provider: officeProvider('CBAA Student Government (CBAASG)'),
+    targetApplicants: 'Continuing CBAA students in need of financial assistance',
+    description: 'A full scholarship from the CBAA Student Government for deserving CBAA students who need financial assistance. One student from each CBAA department (ABD, ACD, BMD and MKD) is chosen, and the scholarship continues every semester for as long as the scholar keeps the qualifications.',
+    benefits: [
+      'Full scholarship: tuition, miscellaneous and other fees, every semester',
+      'One scholar from each CBAA department: ABD, ACD, BMD and MKD',
+      'Continues for as long as you keep the qualifications',
+      'Funded each semester by the CBAASC Trust Fund'
+    ],
+    eligibilityCriteria: { applicantType: 'continuing' },
+    gpaRequirement: { stage: 'apply', minGpa: 3.25, minGrade: 2.75, continuingOnly: true, keepToo: true },
+    rules: { applicantType: 'continuing', minGpa: 3.25, programs: CBAA_PROGRAMS },
+    customEligibility: [
+      'No grade lower than 2.75 (83%–85%)',
+      'At least one year of residency in any CBAA program',
+      'No existing scholarship in the university',
+      'No major offense',
+      'The scholarship is forfeited for a grade below the requirement, a failing grade, any offense in the Student Handbook, parents’ or guardian’s gross income above ₱300,000 a year, or shifting to another college'
+    ],
+    customDocuments: [],
+    process: [
+      'Step 1: Apply here with the documents, including a recommendation letter from your Department Chair.',
+      'Step 2: The CBAASG screens the applications against its criteria and sends your interview schedule to your DLSU-D email.',
+      'Step 3: Initial interview with the CBAASG Executive Board (academic credentials, affiliations, interests and leadership).',
+      'Step 4: Final interview with the Dean and Associate Dean of the CBAA.',
+      'Step 5: Passers are notified by DLSU-D email and must acknowledge and sign the scholarship contract within 7 days.'
+    ],
+    deadline: 'To be announced by the CBAASG',
+    status: 'Closed',
+    applicationFormType: 'standard'
+  },
+  {
+    id: 's14',
+    name: 'CBAASG Officers’ Partial Scholarship',
+    category: 'Leadership',
+    office: 'CBAASG',
+    provider: officeProvider('CBAA Student Government (CBAASG)'),
+    targetApplicants: 'Members of the CBAASG Executive Board and Legislative Council',
+    description: 'A partial scholarship from the CBAA Student Government for its officers: members of the Executive Board and the Legislative Council who are actively involved in the CBAASG. It continues every semester for as long as the officer keeps the qualifications.',
+    benefits: [
+      '25% of tuition, miscellaneous and other fees, every semester',
+      'Continues for as long as you keep the qualifications',
+      'Funded each semester by the CBAASC Trust Fund'
+    ],
+    eligibilityCriteria: { applicantType: 'continuing' },
+    gpaRequirement: { stage: 'apply', minGpa: 3.0, minGrade: 2.5, continuingOnly: true, keepToo: true, audience: 'CBAASG officers' },
+    rules: { applicantType: 'continuing', minGpa: 3.0, programs: CBAA_PROGRAMS },
+    customEligibility: [
+      'No grade lower than 2.50',
+      'Holds an Executive or Legislative position and is actively involved in the CBAASG',
+      'No major offense',
+      'The scholarship is forfeited for a grade below the requirement, a failing grade, any offense, or resigning as a CBAASG officer'
+    ],
+    customDocuments: [],
+    process: [
+      'Step 1: Apply here with the documents, including a recommendation letter from your Department Chair.',
+      'Step 2: The CBAASG screens the applications against its criteria and sends your interview schedule to your DLSU-D email.',
+      'Step 3: Initial interview with the CBAASG Executive Board.',
+      'Step 4: Final interview with the Dean and Associate Dean of the CBAA.',
+      'Step 5: Passers are notified by DLSU-D email and must acknowledge and sign the scholarship contract within 7 days.'
+    ],
+    deadline: 'To be announced by the CBAASG',
+    status: 'Closed',
+    applicationFormType: 'standard'
+  },
+  {
+    // From the CICS Student Government's call for applications (last call
+    // ran until December 31, 2024).
+    id: 's15',
+    name: 'Padayon Pioneers: CICS Student Financial Aid Grant',
+    category: 'Financial',
+    office: 'CICSSG',
+    provider: officeProvider('CICS Student Government (CICSSG)'),
+    targetApplicants: 'Continuing CICS students with financial constraints',
+    description: 'The CICS Student Government’s financial aid grant for students of the College of Information and Computer Studies. Two grantees receive 50% of their overall tuition and other fees, up to ₱50,000.',
+    benefits: [
+      '50% of overall tuition and other fees, up to ₱50,000',
+      'Two grantees'
+    ],
+    totalSlots: 2,
+    eligibilityCriteria: { applicantType: 'continuing' },
+    rules: { applicantType: 'continuing', minGpa: 3.0, noFailingGrade: true, programs: CICS_PROGRAMS },
+    customEligibility: [
+      'Bona fide CICS student enrolled in the current academic year, with at least one semester completed in college',
+      'Academic load of at least 75% of the units prescribed in the curriculum for the semester',
+      'The GPA (3.00, 86%) and no-failing-grades rules apply to the previous semester. Applicants with in-progress grades may be considered with a recommendation letter from their adviser or professor',
+      'Not found guilty of any major offense in the DLSU-D Student Handbook, and never sanctioned with suspension',
+      'Not a recipient of a scholarship with allowances from any DLSU-D sector in the same academic year',
+      'Proof of financial incapacity or constraints (ITR, proof of billing)'
+    ],
+    customDocuments: [
+      'Completed application form provided by the CICS Student Government',
+      'Letter of intent signed by you and your parent or guardian, addressed to the CICS Dean through the CICS Associate Dean',
+      'Certificate of Registration (COR) for the current semester and academic year',
+      'Copy of grades from the previous semester',
+      'Letter of recommendation signed by the guidance counselor, your class adviser, or a professor of your choice',
+      'Income Tax Return (ITR), Certificate of Employment, Affidavit of Non-Filing of ITR, or Employment Contract (for children of OFWs)',
+      'Proof of billing: water and electricity bills for the last two months',
+      'One inside and one outside photo of your house'
+    ],
+    process: [
+      'Step 1: Apply here with all the documents (or submit them on-site at PCH102, Monday to Friday, 8:00 AM–5:00 PM, in a long brown envelope).',
+      'Step 2: Wait for the CICSSG’s confirmation email and interview booking.',
+      'Step 3: Attend your interview. To reschedule, tell the CICSSG at least one day before.',
+      'Step 4: Wait for the result of your application.'
+    ],
+    deadline: 'To be announced by the CICSSG (last call: until December 31, 2024)',
+    status: 'Closed',
+    applicationFormType: 'standard'
+  },
+  {
+    // CEATSG Ordinance No. 02, s. 2025–2026 (the CEAT Scholarship
+    // Continuation Amendment Ordinance). The numbers (minimum GPA, maximum
+    // failing units, minimum load, residency) are set each semester by a
+    // Scholarship Criteria Resolution: the office sets them here when it
+    // opens the scholarship.
+    id: 's16',
+    name: 'CEAT Financial Aid Scholarship',
+    category: 'Financial',
+    office: 'CEATSG',
+    provider: officeProvider('CEAT Student Government (CEATSG)'),
+    targetApplicants: 'Bona fide CEAT students',
+    description: 'The CEAT Student Government’s financial aid scholarship for bona fide students of the College of Engineering, Architecture, and Technology, offered each semester. Up to ₱200,000 is set aside each semester for the grants of the qualified and selected students.',
+    benefits: [
+      'Financial aid from the CEATSG scholarship fund, offered every semester',
+      'Up to ₱200,000 in grants each semester, shared among the selected scholars'
+    ],
+    eligibilityCriteria: { applicantType: 'continuing' },
+    rules: { applicantType: 'continuing', programs: CEAT_PROGRAMS },
+    customEligibility: [
+      'Bona fide CEAT student',
+      'Meets the minimum residency, minimum GPA, maximum failing units and minimum unit load for the semester, as set by the CEATSG’s Scholarship Criteria Resolution (published with each call for applications)',
+      'Not a recipient of any concurrent internally funded scholarship',
+      'Not meeting the required GPA or the maximum failing units sends your application to reconsideration'
+    ],
+    customDocuments: [
+      'Certificate of Registration (COR) or any proof of registration for the current semester',
+      'Soft copy of your grades from the previous semester',
+      'Parents’ latest Income Tax Return (ITR) or affidavit of non-filing of ITR',
+      'Written application from you and your parent or guardian, addressed to the Governor of the CEATSG',
+      'Latest electricity and water billing statements',
+      'Sketch or Google Map of your residence (vicinity map)',
+      'Photos of your household (interior and exterior)'
+    ],
+    process: [
+      'Step 1: Apply here with all the documents, including your written application to the Governor of the CEATSG.',
+      'Step 2: The CEATSG’s Director of Academics reviews the applications against the semester’s criteria.',
+      'Step 3: Qualified applicants get a confirmation email and an invitation to the interview.',
+      'Step 4: The final list of scholarship grantees is emailed to all applicants.'
+    ],
+    deadline: 'Each semester, announced by the CEATSG',
+    status: 'Closed',
+    applicationFormType: 'standard'
+  },
+  {
+    // CCJESG Ordinance No. 251125: a performance-based grant for its
+    // officers, from the CCJESG Trust Fund, each semester.
+    id: 's17',
+    name: 'CCJESG Officers’ Financial Grant',
+    category: 'Leadership',
+    office: 'CCJESG',
+    provider: officeProvider('CCJE Student Government (CCJESG)'),
+    targetApplicants: 'Officers of the CCJE Student Government',
+    description: 'A performance-based financial grant for the officers of the College of Criminal Justice Education Student Government, from the CCJESG Trust Fund. It is credited to your tuition account at the end of each semester, after you complete your service and pass the evaluation. Up to 11 officers are chosen each semester.',
+    benefits: [
+      'Governor and Vice Governor: up to ₱10,000 each per semester',
+      'Chief of Staff (including deputy) and Executive members (including deputies): up to ₱7,000 per semester',
+      'Legislative Council members: up to ₱6,000 per semester',
+      'Credited to your tuition account at the end of the semester, never in cash',
+      'The actual amount depends on your performance evaluation and the available funds; it may be reduced proportionally if the Trust Fund is short'
+    ],
+    totalSlots: 11,
+    eligibilityCriteria: { applicantType: 'continuing' },
+    gpaRequirement: { stage: 'apply', minGpa: 3.0, noFailingGrade: true, continuingOnly: true, audience: 'CCJESG officers' },
+    rules: { applicantType: 'continuing', minGpa: 3.0, noFailingGrade: true, programs: CCJE_PROGRAMS },
+    customEligibility: [
+      'Officer of the CCJESG and a bona fide student enrolled in a CCJE program',
+      'No failing grade in any subject during the previous academic year',
+      'At least the minimum units required for your year level',
+      'Not found guilty of any major offense against the faculty, professors or the college student government, and no pending or confirmed violation at the college or university level',
+      'Meets the qualifications for your position and the CCJESG ordinances and executive orders',
+      'Present at CCJESG events, complying with the CCJESG Office Logbook (Ordinance No. 240007), and attending meetings called by the Governor, Vice Governor or Adviser',
+      'Passes the interview and evaluation by the Implementing Officers (recorded for transparency) and the CCJE community’s organizational performance evaluation',
+      'May be received with other scholarships, subject to the university’s policy on scholarship stacking and financial aid limits',
+      'The grant is revoked (and, if already credited, may have to be refunded) for false information, failing your duties or the qualifications, resigning or not completing your term without valid reason, or misconduct. If you resign mid-semester, the grant is prorated or revoked'
+    ],
+    customDocuments: [
+      'Recommendation letter from your Department Chair, or an application letter addressed to the Dean and routed through the CCJESG Governor',
+      'Copy of your grades',
+      'Certificate of Registration (COR)',
+      'Certificate of Indigency'
+    ],
+    process: [
+      'Step 1: Apply here with the documents.',
+      'Step 2: Approved applicants are notified by Outlook email of an interview with the CCJESG Adviser and the Implementing Officers (the Governor and Vice Governor, with the Chief of Staff).',
+      'Step 3: The oversight committee (the CCJESG Adviser and the Dean) reviews the applications within 5 to 7 operating days.',
+      'Step 4: Results are sent to your student Outlook email. The grant is credited at the end of the semester, after your service and evaluation.'
+    ],
+    deadline: 'Each semester, announced by the CCJESG',
     status: 'Closed',
     applicationFormType: 'standard'
   }

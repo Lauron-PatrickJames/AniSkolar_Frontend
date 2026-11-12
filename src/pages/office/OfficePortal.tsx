@@ -12,6 +12,7 @@ import { ResultDialog,
   Alert, Avatar, Badge, Button, Card, EmptyState, MobileList, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table,
   TableSkeleton, Td, TextInput, Textarea, Th, Tr
 } from '../admin/AdminUI';
+import { useRefreshTick } from '../../utils/useRefreshTick';
 
 // The office portal: for the head of a duty office (listed by the AdSO in
 // Duty hours → Offices), signed in with that school email. They confirm
@@ -225,6 +226,9 @@ function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head:
     }
   }, [getToken]);
   useEffect(() => { load(); }, [load]);
+  // Kept current without a page refresh (back on the tab, and every minute).
+  const refreshTick = useRefreshTick(60_000);
+  useEffect(() => { if (refreshTick) load(); }, [refreshTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Semesters that have scholars, newest first (the current one always listed).
   const groups = useMemo(() => {

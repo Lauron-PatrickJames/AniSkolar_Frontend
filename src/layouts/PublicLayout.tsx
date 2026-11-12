@@ -90,7 +90,7 @@ export default function PublicLayout({ children, onLoginClick, onLogoClick, id }
         aria-label="Back to top"
         tabIndex={scrolled ? 0 : -1}
         aria-hidden={!scrolled}
-        className={`fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand-green text-white shadow-lg ring-1 ring-white/20 transition-all duration-200 hover:bg-brand-green-dark focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2 motion-reduce:transition-none sm:right-8 ${scrolled ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'}`}
+        className={`fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand-green text-white shadow-lg ring-2 ring-white/40 transition-all duration-200 hover:bg-brand-green-dark focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2 motion-reduce:transition-none sm:right-8 ${scrolled ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-3 opacity-0'}`}
       >
         <ArrowUp className="h-5 w-5" aria-hidden />
       </button>

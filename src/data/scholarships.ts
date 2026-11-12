@@ -705,14 +705,16 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Proof of financial incapacity or constraints (ITR, proof of billing)'
     ],
     customDocuments: [
-      'Completed application form provided by the CICS Student Government',
+      // The "Completed Online Application Form" is this application itself.
       'Letter of intent signed by you and your parent or guardian, addressed to the CICS Dean through the CICS Associate Dean',
       'Certificate of Registration (COR) for the current semester and academic year',
       'Copy of grades from the previous semester',
       'Letter of recommendation signed by the guidance counselor, your class adviser, or a professor of your choice',
       'Income Tax Return (ITR), Certificate of Employment, Affidavit of Non-Filing of ITR, or Employment Contract (for children of OFWs)',
-      'Proof of billing: water and electricity bills for the last two months',
-      'One inside and one outside photo of your house'
+      'Official water bills for the last 2 months (photocopy, screenshot or digital copy)',
+      'Official electricity bills for the last 2 months (photocopy, screenshot or digital copy)',
+      'Photo of the inside of your house',
+      'Photo of the outside of your house'
     ],
     process: [
       'Step 1: Apply here with all the documents (or submit them on-site at PCH102, Monday to Friday, 8:00 AM–5:00 PM, in a long brown envelope).',

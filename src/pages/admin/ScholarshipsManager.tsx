@@ -3,7 +3,7 @@ import { useAuth } from '@clerk/react';
 import { CircleCheck, CircleOff, Clock, Info, LayoutList, ListChecks, Pencil, Plus, Save, Table2, Trash2 } from 'lucide-react';
 import { ApplicationFormType, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../../types';
 import {
-  OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, formatPeriod, officeOf, registerCustomScholarships, scholarshipDefaults, handlingOffice } from '../../data/scholarships';
+  OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, formatPeriod, officeOf, registerCustomScholarships, scholarshipDefaults, handlingOffice, OFFICE_SHORT_LABELS } from '../../data/scholarships';
 import { EligibilityRules, lockedRules, ruleLines } from '../../data/requirementCatalog';
 import { DocumentsEditor, ListEditor, OpenToEditor, RulesEditor } from './RequirementEditors';
 import ScholarshipMatrix, { MatrixPatch } from './ScholarshipMatrix';
@@ -687,7 +687,11 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
 // the tooltip and on the detail view.
 function ApplicationsCell({ row }: { row: Row }) {
   if (!acceptsOnlineApplications(row.scholarship)) {
-    return <span className="text-ink-subtle">Through the {handlingOffice(row.scholarship)}</span>;
+    // The short name keeps the column to one line; the full name is on hover.
+    const s = row.scholarship;
+    const full = handlingOffice(s);
+    const short = full.match(/\(([^)]+)\)$/)?.[1] ?? (s.handledBy?.trim() ? full : OFFICE_SHORT_LABELS[officeOf(s)]);
+    return <span className="text-ink-subtle" title={`Through the ${full}`}>Through the {short}</span>;
   }
   const { total, byStatus } = row.applications;
   if (total === 0) {

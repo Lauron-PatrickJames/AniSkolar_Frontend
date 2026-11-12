@@ -302,7 +302,14 @@ export function AdminShellSkeleton({ view }: { view?: string | null }) {
 }
 
 // The student portal: sidebar, top bar, and the open page's shape.
-export function StudentShellSkeleton({ page }: { page?: string | null }) {
+// Just the page area of a student page (inside the portal, while that
+// page's code loads).
+export function StudentPageSkeleton({ page }: { page?: string | null }) {
+  const isDashboard = !page || page === 'dashboard';
+  return <Status label="Loading" className="space-y-6">{isDashboard ? null : <HeadingBones />}{studentContent(page)}</Status>;
+}
+
+function studentContent(page?: string | null): React.ReactNode {
   let content: React.ReactNode;
   if (page === 'messages') content = <ChatBones />;
   else if (page === 'duty-hours') content = <><KpiBones /><TableBones rows={5} /></>;
@@ -311,6 +318,11 @@ export function StudentShellSkeleton({ page }: { page?: string | null }) {
   else if (page === 'profile' || page === 'apply-scholarship' || page === 'gpa-calculator' || page === 'account-security') content = <FormBones />;
   else if (page === 'renewals' || page === 'scholarship-details' || page === 'my-scholarship') content = <StackBones />;
   else content = <><div className="h-40 rounded-2xl border border-slate-200 bg-white p-6"><Bone className="h-6 w-56" /><Bone className="mt-3 h-4 w-80 max-w-full" /></div><CardGridBones /></>;
+  return content;
+}
+
+export function StudentShellSkeleton({ page }: { page?: string | null }) {
+  const content = studentContent(page);
   const isDashboard = !page || page === 'dashboard';
   return (
     <Status label="Loading AniSkolar" className="flex min-h-dvh bg-slate-50">

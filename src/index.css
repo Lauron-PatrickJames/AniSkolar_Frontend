@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+/* Fonts (Inter, Space Grotesk) load from index.html, not here, so they
+   start downloading with the page instead of after this file. */
 @import "tailwindcss";
 
 @theme {

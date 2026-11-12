@@ -6,8 +6,8 @@ import { Bone } from '../components/Skeletons';
 import { ArrowRight, BookOpen, ShieldCheck, ChevronDown, Star, Users, DollarSign, Calendar, AlertCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-// Use the DLSUD background image for the hero section
-import heroImage from '../assets/sample hero 1.jpg';
+// The campus photo behind the hero (sized for the screen, see the component).
+import CampusBackdrop from '../components/CampusBackdrop';
 
 interface LandingPageProps {
   onLoginClick: () => void;
@@ -104,9 +104,9 @@ export default function LandingPage({ onLoginClick, onApplyClick, onExploreClick
       {/* 1. Hero Section */}
       <section
         id="hero"
-        className="relative min-h-[95vh] flex items-center justify-center bg-cover bg-center text-white"
-      style={{ backgroundImage: `linear-gradient(135deg, rgba(0, 60, 32, 0.55), rgba(0, 80, 42, 0.85)), url(${heroImage})` }}
+        className="relative min-h-[95vh] flex items-center justify-center overflow-hidden bg-[#0b4a2b] text-white"
       >
+        <CampusBackdrop tint="linear-gradient(135deg, rgba(0, 60, 32, 0.55), rgba(0, 80, 42, 0.85))" />
         {/* Decorative Grid Accent */}
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 py-24 text-center">
           <div className="space-y-6">

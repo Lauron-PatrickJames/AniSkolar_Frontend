@@ -20,3 +20,10 @@ test('landing page has no sideways scrolling', async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });
+
+test('View All Scholarships asks to log in first', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'View All Scholarships' }).click();
+  await expect(page.getByRole('button', { name: /sign in with microsoft/i })).toBeVisible();
+  await expect(page.getByText('Log in with your DLSU-D account to see all the scholarships you can apply for.')).toBeVisible();
+});

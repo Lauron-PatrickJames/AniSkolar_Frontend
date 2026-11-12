@@ -3,11 +3,13 @@ import { ShieldCheck, Mail, Lock, ArrowLeft, Eye, EyeOff, KeyRound, AlertCircle,
 import { motion, AnimatePresence } from 'motion/react';
 import { useSignIn } from '@clerk/react';
 import logo from '../assets/logo.png';
-import campusImage from '../assets/sample hero 1.jpg';
+import CampusBackdrop from '../components/CampusBackdrop';
 
 interface LoginPageProps {
   onBackToLanding: () => void;
   id?: string;
+  // Why sign-in was asked for, e.g. "View All Scholarships" on the landing page.
+  notice?: string | null;
 }
 
 type LoginMode = 'student' | 'admin';
@@ -55,7 +57,7 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   invalid_domain: 'Please sign in with your official DLSU-D email address (@dlsud.edu.ph). Other email accounts are not allowed.',
 };
 
-export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
+export default function LoginPage({ onBackToLanding, id, notice }: LoginPageProps) {
   const { signIn, errors, fetchStatus } = useSignIn();
 
   const [loginMode, setLoginMode] = useState<LoginMode>(
@@ -337,11 +339,11 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
   return (
     <div
       id={id}
-      className="min-h-dvh bg-slate-900 bg-cover bg-center flex items-center justify-center p-4 sm:p-6 md:p-10 lg:p-12"
-      // The campus photo from the landing page hero, tinted dark green so the card stands out.
-      style={{ backgroundImage: `linear-gradient(135deg, rgba(0, 40, 22, 0.82), rgba(0, 60, 32, 0.9)), url(${campusImage})` }}
+      className="relative min-h-dvh overflow-hidden bg-[#06301b] flex items-center justify-center p-4 sm:p-6 md:p-10 lg:p-12"
     >
-      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl shadow-black/40 overflow-hidden flex flex-col lg:flex-row min-h-160">
+      {/* The campus photo from the landing page hero, tinted dark green so the card stands out. */}
+      <CampusBackdrop tint="linear-gradient(135deg, rgba(0, 40, 22, 0.82), rgba(0, 60, 32, 0.9))" />
+      <div className="relative z-10 w-full max-w-5xl bg-white rounded-3xl shadow-2xl shadow-black/40 overflow-hidden flex flex-col lg:flex-row min-h-160">
 
         {/* Left Side: Solid DLSU Green Branding Sidebar */}
         <div className="lg:w-[45%] bg-brand-green text-white p-8 sm:p-12 flex flex-col justify-between">
@@ -396,6 +398,11 @@ export default function LoginPage({ onBackToLanding, id }: LoginPageProps) {
                     {loginMode === 'admin' && (
                       <p className="text-slate-600 text-base mt-2 leading-relaxed text-pretty">
                         Restricted access for scholarship office staff.
+                      </p>
+                    )}
+                    {loginMode === 'student' && notice && (
+                      <p role="status" className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-brand-green ring-1 ring-emerald-100 text-pretty">
+                        {notice}
                       </p>
                     )}
                   </div>

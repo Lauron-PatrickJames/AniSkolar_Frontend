@@ -14,6 +14,12 @@
     <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Fonts: connect early and load with the page (not from the CSS) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" />
+    <!-- The campus photo (landing hero, sign-in): fetched at once, sized for the screen -->
+    <link rel="preload" as="image" type="image/webp" fetchpriority="high" href="/images/hero-1280.webp" imagesrcset="/images/hero-640.webp 640w, /images/hero-1280.webp 1280w, /images/hero-1920.webp 1920w" imagesizes="100vw" />
 
     <!-- Link previews (Facebook, Messenger, Teams, X) -->
     <meta property="og:type" content="website" />

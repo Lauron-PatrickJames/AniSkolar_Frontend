@@ -74,10 +74,7 @@ export default function MyScholarship({ holdings, scholarships, applications, on
             {/* Name, office and the grant */}
             <div className="flex flex-wrap items-start justify-between gap-6 px-5 pt-6 pb-5 sm:px-8 sm:pt-8">
               <div className="min-w-0">
-                <p className="flex items-center gap-2 text-xs font-medium text-slate-500">
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand-green" aria-hidden /> Active scholar
-                </p>
-                <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-slate-900 sm:text-[1.75rem]">{h.scholarshipName}</h2>
+                <h2 className="font-display text-2xl font-bold leading-tight text-slate-900 sm:text-[1.75rem]">{h.scholarshipName}</h2>
                 <p className="mt-1 text-sm text-slate-500">{OFFICE_NAMES[s?.office ?? 'LSO'] ?? s?.provider?.office ?? ''}</p>
               </div>
               <div className="sm:text-right">

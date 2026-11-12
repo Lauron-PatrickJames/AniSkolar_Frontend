@@ -11,6 +11,7 @@ import {
   Alert, Button, Card, EmptyState, ErrorState, KpiCard, KpiGrid, PageHeader, STATUS_META, SegmentedControl, Select, Skeleton,
   Table, Td, TextInput, Th, Tooltip, Tr, RowLink, tokenColor
 } from './AdminUI';
+import { downloadExcel } from '../../utils/excelExport';
 
 interface AdminAnalyticsProps {
   applications: AdminApplication[];
@@ -322,33 +323,27 @@ function sortRows(rows: ScholarshipRow[], key: SortKey, dir: 'asc' | 'desc'): Sc
   });
 }
 
-function toCsv(rows: ScholarshipRow[], includeOffice: boolean): string {
-  const header = ['Scholarship', ...(includeOffice ? ['Office'] : []), 'Submissions', 'Approved', 'Rejected', 'Pending', 'Avg. decision time (days)', 'Avg. revision cycles', 'Avg. applicant GPA'];
-  const cell = (v: string | number | null) => {
-    const text = v === null ? '' : String(v);
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+// The table as an Excel sheet (same columns as on the page).
+function statisticsSheet(rows: ScholarshipRow[], includeOffice: boolean, subtitle: string) {
+  return {
+    name: 'Statistics',
+    title: 'Scholarship statistics',
+    subtitle,
+    columns: [
+      { header: 'Scholarship' },
+      ...(includeOffice ? [{ header: 'Office' }] : []),
+      { header: 'Submissions', format: 'integer' as const }, { header: 'Approved', format: 'integer' as const },
+      { header: 'Rejected', format: 'integer' as const }, { header: 'Pending', format: 'integer' as const },
+      { header: 'Avg. decision time (days)', format: 'decimal1' as const }, { header: 'Avg. revision cycles', format: 'decimal1' as const },
+      { header: 'Avg. applicant GPA', format: 'decimal' as const },
+    ],
+    rows: rows.map(r => [
+      r.name,
+      ...(includeOffice ? [OFFICE_LABELS[r.office]] : []),
+      r.submissions, r.approved, r.rejected, r.pending,
+      r.avgDecisionDays, r.avgRevisionCycles, r.avgGpa,
+    ]),
   };
-  const lines = rows.map(r => [
-    r.name,
-    ...(includeOffice ? [OFFICE_LABELS[r.office]] : []),
-    r.submissions, r.approved, r.rejected, r.pending,
-    r.avgDecisionDays === null ? null : r.avgDecisionDays.toFixed(1),
-    r.avgRevisionCycles === null ? null : r.avgRevisionCycles.toFixed(1),
-    r.avgGpa === null ? null : r.avgGpa.toFixed(2)
-  ].map(cell).join(','));
-  return [header.map(cell).join(','), ...lines].join('\r\n');
-}
-
-function downloadCsv(filename: string, csv: string) {
-  // BOM so Excel opens UTF-8 (ñ, en dashes) correctly.
-  const url = URL.createObjectURL(new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 // --- Breakdown ----------------------------------------------------------------------
@@ -548,7 +543,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
 
   const exportCsv = () => {
     const last = addDays(range.endExclusive, -1);
-    downloadCsv(`scholarship-statistics_${dayKey(range.start)}_to_${dayKey(last)}.csv`, toCsv(sortedRows, showOffice));
+    downloadExcel(`scholarship-statistics_${dayKey(range.start)}_to_${dayKey(last)}`, [statisticsSheet(sortedRows, showOffice, rangeText)]);
   };
 
   const toggleSort = (key: SortKey) => {
@@ -830,7 +825,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
         <Card
           flush
           title="By scholarship"
-          actions={<Button size="sm" icon={Download} onClick={exportCsv}>Export CSV</Button>}
+          actions={<Button size="sm" icon={Download} onClick={exportCsv}>Export to Excel</Button>}
         >
           <Table label="Applications by scholarship" minWidth={showOffice ? '62rem' : '54rem'}>
             <thead>

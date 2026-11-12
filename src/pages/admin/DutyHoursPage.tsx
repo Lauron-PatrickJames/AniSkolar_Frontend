@@ -10,6 +10,7 @@ import { ResultDialog,
   Alert, Avatar, Badge, Button, Card, ConfirmDialog, DatePicker, DropdownMenu, Menu, DetailField, EmptyState, ErrorState, Field, MobileList, Modal, PageHeader,
   SearchInput, SegmentedControl, Select, Table, TableSkeleton, Tabs, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
+import { downloadExcel, excelDate } from '../../utils/excelExport';
 
 // AdSO: duty hours of every SFAG holder for a term (plus any other SFAG
 // scholar who logged hours), from the logs scholars keep on their Duty
@@ -160,19 +161,25 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
 
   const exportCsv = () => {
     if (!term) return;
-    const header = ['Student number', 'Name', 'Email', 'Program', 'SFAG holder this term', 'Grant %', 'Office assigned', 'Deadline', 'Required hours', 'Hours completed', 'Hours remaining', 'Weekly hours needed', 'Duties logged', 'Last duty', 'Status'];
-    const lines = rows.map(r => [
-      r.studentNumber, titleCaseName(r.name), r.email, r.program, r.sfaHolder ? 'Yes' : 'No', r.grantPercentage ?? '', r.officeAssigned, r.deadline ?? '',
-      r.summary?.required ?? '', r.summary ? formatHours(r.summary.completed) : '0.00', r.summary?.remaining ?? '', r.summary?.weeklyNeeded ?? '',
-      r.entryCount, r.summary?.lastDutyDate ?? '', rowState(r, today),
-    ]);
-    const csv = [header, ...lines].map(cells => cells.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-    const url = URL.createObjectURL(new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `duty-hours-${term.academicYear}-${term.term.replace(/\s+/g, '-').toLowerCase()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const num = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    downloadExcel(`duty-hours-${term.academicYear}-${term.term.replace(/\s+/g, '-').toLowerCase()}`, [{
+      name: 'Duty hours',
+      title: 'SFAG duty hours',
+      subtitle: `${term.term}, A.Y. ${term.academicYear}–${term.academicYear + 1}`,
+      columns: [
+        { header: 'Student number' }, { header: 'Name' }, { header: 'Email' }, { header: 'Program' },
+        { header: 'SFAG holder this term', align: 'center' }, { header: 'Grant', format: 'percent' }, { header: 'Office assigned' },
+        { header: 'Deadline', format: 'date' }, { header: 'Required hours', format: 'decimal1' }, { header: 'Hours completed', format: 'decimal' },
+        { header: 'Hours remaining', format: 'decimal' }, { header: 'Weekly hours needed', format: 'decimal' }, { header: 'Duties logged', format: 'integer' },
+        { header: 'Last duty', format: 'date' }, { header: 'Status' },
+      ],
+      rows: rows.map(r => [
+        r.studentNumber, titleCaseName(r.name), r.email, r.program, r.sfaHolder ? 'Yes' : 'No',
+        r.grantPercentage === null || r.grantPercentage === undefined ? null : r.grantPercentage / 100, r.officeAssigned || null, excelDate(r.deadline),
+        num(r.summary?.required), r.summary ? r.summary.completed : 0, num(r.summary?.remaining), num(r.summary?.weeklyNeeded),
+        r.entryCount, excelDate(r.summary?.lastDutyDate), rowState(r, today),
+      ]),
+    }]);
   };
 
   // What's left to set up this term (shown until done).
@@ -200,7 +207,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
               items={[
                 { key: 'hours', label: 'Hours per grant', icon: Clock, onSelect: () => setHoursOpen(true) },
                 { key: 'deadline', label: deadline ? 'Change deadline' : 'Set deadline', icon: CalendarClock, onSelect: () => setDeadlineOpen(true) },
-                ...(rows.length ? [{ key: 'export', label: 'Export CSV', icon: Download, onSelect: exportCsv }] : []),
+                ...(rows.length ? [{ key: 'export', label: 'Export to Excel', icon: Download, onSelect: exportCsv }] : []),
               ]}
             />
           </>

@@ -16,6 +16,7 @@ import { ResultDialog,
   MobileList, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table, TableSkeleton, Tabs, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
 import { QuickReplies, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
+import { downloadExcel, excelDate } from '../../utils/excelExport';
 
 // Renewals: the AdSO opens a renewal period per scholarship and term;
 // scholars holding the scholarship submit their grades (or say they're not
@@ -239,28 +240,31 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
 
   const exportCsv = () => {
     if (!period) return;
-    const header = ['Student number', 'Name', 'Email', 'Program', 'Year level', 'Status', 'Continuing', 'Reason not continuing', 'GPA', 'Meets GPA', 'Failing grade', 'Evaluation average', 'Documents', 'Submitted', 'Decided', 'Message to scholar'];
-    const lines = rows.map(r => {
-      const x = r.renewal;
-      const meets = meetsGpa(x?.gpa, period.minGpa);
-      return [
-        r.studentNumber, titleCaseName(r.name), r.email, r.program, r.yearLevel, rowState(r),
-        x ? (x.continuing ? 'Yes' : 'No') : '', x?.notContinuingReason ?? '',
-        x?.gpa !== undefined ? formatGpa(x.gpa) : '', meets === null ? '' : meets ? 'Yes' : 'No',
-        x?.continuing ? (x.hasFailingGrade ? 'Yes' : 'No') : '',
-        x?.evaluation?.average !== undefined ? x.evaluation.average.toFixed(2) : '',
-        x ? `${x.documents.length}/${period.requirements.length}` : '',
-        x ? formatDate(x.createdAt) : '', x?.reviewedAt ? formatDate(x.reviewedAt) : '', x?.reviewNote ?? '',
-      ];
-    });
-    const csv = [header, ...lines].map(cells => cells.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-    const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `renewals-${period.scholarshipId}-${period.academicYear}-${period.term.replace(/\s+/g, '-').toLowerCase()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadExcel(`renewals-${period.scholarshipId}-${period.academicYear}-${period.term.replace(/\s+/g, '-').toLowerCase()}`, [{
+      name: 'Renewals',
+      title: `Renewals: ${period.scholarshipName}`,
+      subtitle: `${period.term}, A.Y. ${period.academicYear}–${period.academicYear + 1}${period.minGpa !== undefined ? `  ·  Min. GPA ${formatGpa(period.minGpa)}` : ''}`,
+      columns: [
+        { header: 'Student number' }, { header: 'Name' }, { header: 'Email' }, { header: 'Program' }, { header: 'Year level' },
+        { header: 'Status' }, { header: 'Continuing', align: 'center' }, { header: 'Reason not continuing', wrap: true },
+        { header: 'GPA', format: 'decimal' }, { header: 'Meets GPA', align: 'center' }, { header: 'Failing grade', align: 'center' },
+        { header: 'Evaluation average', format: 'decimal' }, { header: 'Documents', align: 'center' },
+        { header: 'Submitted', format: 'date' }, { header: 'Decided', format: 'date' }, { header: 'Message to scholar', wrap: true },
+      ],
+      rows: rows.map(r => {
+        const x = r.renewal;
+        const meets = meetsGpa(x?.gpa, period.minGpa);
+        return [
+          r.studentNumber, titleCaseName(r.name), r.email, r.program, r.yearLevel, rowState(r),
+          x ? (x.continuing ? 'Yes' : 'No') : null, x?.notContinuingReason ?? null,
+          typeof x?.gpa === 'number' ? x.gpa : null, meets === null ? null : meets ? 'Yes' : 'No',
+          x?.continuing ? (x.hasFailingGrade ? 'Yes' : 'No') : null,
+          typeof x?.evaluation?.average === 'number' ? x.evaluation.average : null,
+          x ? `${x.documents.length}/${period.requirements.length}` : null,
+          excelDate(x?.createdAt), excelDate(x?.reviewedAt), x?.reviewNote ?? null,
+        ];
+      }),
+    }]);
   };
 
   const selectedRow = openRow ? rows.find(r => r.studentNumber === openRow) ?? null : null;
@@ -276,7 +280,7 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
               <DropdownMenu
                 label="More actions"
                 items={[
-                  { key: 'export', label: 'Export to CSV', icon: Download, onSelect: exportCsv },
+                  { key: 'export', label: 'Export to Excel', icon: Download, onSelect: exportCsv },
                   {
                     key: 'files', label: 'Download all documents (.zip)', icon: FileText,
                     onSelect: () => {
@@ -378,13 +382,13 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
                     <thead>
                       <tr>
                         <Th sticky={false}>Scholar</Th>
-                        <Th sticky={false} className="w-36">Program</Th>
-                        {showDutyOffice && <Th sticky={false} className="w-44">Duty office{dutyTerm ? ` (${dutyTerm.term.replace(' Semester', ' sem')})` : ''}</Th>}
+                        <Th sticky={false} className="w-24">Program</Th>
+                        {showDutyOffice && <Th sticky={false} className="w-52">Duty office{dutyTerm ? ` (${dutyTerm.term.replace(' Semester', ' sem')})` : ''}</Th>}
                         <Th sticky={false} numeric className="w-24">GPA</Th>
-                        {period.requiresEvaluation && <Th sticky={false} numeric className="w-32">Evaluation</Th>}
+                        {period.requiresEvaluation && <Th sticky={false} numeric className="w-28">Evaluation</Th>}
                         <Th sticky={false} numeric className="w-24">Documents</Th>
-                        <Th sticky={false} className="w-32">Check</Th>
-                        <Th sticky={false} className="w-40">Status</Th>
+                        <Th sticky={false} className="w-28">Check</Th>
+                        <Th sticky={false} className="w-36">Status</Th>
                       </tr>
                     </thead>
                     <tbody>
@@ -400,7 +404,9 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
                             </div>
                           </Td>
                           <Td><span className="block truncate" title={row.program}>{row.program || '—'}</span></Td>
-                          {showDutyOffice && <Td><span className="block truncate" title={row.dutyOffice ?? ''}>{row.dutyOffice || '—'}</span></Td>}
+                          {/* Office names are long ("Office of the University Registrar"):
+                              they wrap to two lines instead of being cut. */}
+                          {showDutyOffice && <Td><span className="line-clamp-2 whitespace-normal leading-snug" title={row.dutyOffice ?? ''}>{row.dutyOffice || '—'}</span></Td>}
                           <Td numeric><GpaCell renewal={row.renewal} minGpa={period.minGpa} /></Td>
                           {period.requiresEvaluation && <Td numeric><EvaluationCell renewal={row.renewal} /></Td>}
                           <Td numeric>{row.renewal?.continuing ? `${row.renewal.documents.length}/${period.requirements.length}` : '—'}</Td>

@@ -7,6 +7,7 @@ import {
   lockedRules, ruleCell
 } from '../../data/requirementCatalog';
 import { Button, Tooltip } from './AdminUI';
+import { downloadExcel } from '../../utils/excelExport';
 
 // Every scholarship's eligibility rules and documents side by side, from
 // the shared catalog. Each cell edits that scholarship directly: tick a
@@ -103,19 +104,20 @@ export default function ScholarshipMatrix({ scholarships, onPatch, onOpen, readO
   };
 
   const exportCsv = () => {
-    const header = ['Requirement', ...scholarships.map(s => s.name)];
-    const lines: string[][] = [
-      ...RULES.map(def => [def.label, ...scholarships.map(s => ruleCell(def.key, s.rules ?? {}) || '')]),
-      ['Other conditions', ...scholarships.map(s => (s.customEligibility ?? []).join('; '))],
-      ...docRows.map(row => [row.label, ...scholarships.map(s => (hasDocument(s, row.key) ? '✓' : ''))]),
-    ];
-    const csv = [header, ...lines].map(cells => cells.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-    const url = URL.createObjectURL(new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'scholarship-requirements-matrix.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadExcel('scholarship-requirements-matrix', [{
+      name: 'Requirements',
+      title: 'Scholarship requirements',
+      subtitle: `${scholarships.length} scholarship${scholarships.length === 1 ? '' : 's'}`,
+      columns: [
+        { header: 'Requirement', width: 34, wrap: true },
+        ...scholarships.map(s => ({ header: s.name, width: 22, wrap: true, align: 'center' as const })),
+      ],
+      rows: [
+        ...RULES.map(def => [def.label, ...scholarships.map(s => ruleCell(def.key, s.rules ?? {}) || null)]),
+        ['Other conditions', ...scholarships.map(s => (s.customEligibility ?? []).join('; ') || null)],
+        ...docRows.map(row => [row.label, ...scholarships.map(s => (hasDocument(s, row.key) ? '✓' : null))]),
+      ],
+    }]);
   };
 
   // The title sits in the pinned first column so it stays put when the
@@ -134,7 +136,7 @@ export default function ScholarshipMatrix({ scholarships, onPatch, onOpen, readO
           {readOnly ? 'Each scholarship\'s eligibility and documents.' : 'Click a cell to change it; it saves right away.'}
           <span className="ml-2 inline-flex items-center gap-1 text-xs text-ink-subtle"><Lock className="size-3" aria-hidden /> set by the scholarship's own form</span>
         </p>
-        <Button size="sm" icon={Download} onClick={exportCsv}>Export CSV</Button>
+        <Button size="sm" icon={Download} onClick={exportCsv}>Export to Excel</Button>
       </div>
       <div className="relative overflow-x-auto overscroll-x-contain">
         <table className="border-separate border-spacing-0 text-sm" aria-label="Scholarship requirements matrix">

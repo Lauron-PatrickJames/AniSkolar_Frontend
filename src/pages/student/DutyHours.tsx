@@ -8,6 +8,7 @@ import {
   REVIEW_WINDOW_HOURS, hoursUntilRemoved, isTimeRange, sortEntries, summarize, termLabel, todayInManila, weekday, weeklyTotals
 } from '../../utils/dutyHours';
 import { StatsTableSkeleton } from '../../components/Skeletons';
+import { useRefreshTick } from '../../utils/useRefreshTick';
 
 // "55" rather than "55.00"; half hours keep their decimal ("55.5").
 const wholeHours = (n: number | null | undefined) => (n === null || n === undefined ? '—' : String(Math.round(n * 100) / 100));
@@ -83,6 +84,9 @@ export default function DutyHours({ student, canLog = true }: { student: Student
   }, [getToken]);
 
   useEffect(() => { load(null); }, [load]);
+  // Kept current without a page refresh (back on the tab, and every minute).
+  const refreshTick = useRefreshTick(60_000);
+  useEffect(() => { if (refreshTick) load(term); }, [refreshTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Saves the whole log; on failure the screen goes back to what's saved.
   const save = async (next: DutyLog) => {

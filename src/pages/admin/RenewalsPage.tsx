@@ -17,6 +17,7 @@ import { ResultDialog,
 } from './AdminUI';
 import { QuickReplies, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
 import { downloadExcel, excelDate } from '../../utils/excelExport';
+import { useRefreshTick } from '../../utils/useRefreshTick';
 
 // Renewals: the AdSO opens a renewal period per scholarship and term;
 // scholars holding the scholarship submit their grades (or say they're not
@@ -184,6 +185,9 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
   }, [selectedId, getToken]);
 
   useEffect(() => { setFilter('All'); setSearch(''); loadRows(); }, [loadRows]);
+  // Kept current without a page refresh (back on the tab, and every minute).
+  const refreshTick = useRefreshTick(60_000);
+  useEffect(() => { if (refreshTick) { loadPeriods(); loadRows(); }; }, [refreshTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const period = periods.find(p => p._id === selectedId) ?? null;
 

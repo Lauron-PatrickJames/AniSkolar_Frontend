@@ -11,6 +11,7 @@ import AutomationPage from './AutomationPage';
 import TrashPage from './TrashPage';
 import ScholarshipsManager from './ScholarshipsManager';
 import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
+import { rememberAdminView, rememberedAdminView } from '../../components/Skeletons';
 import AdminScholars from './AdminScholars';
 import StudentsPage from './StudentsPage';
 import MessagesPage from './MessagesPage';
@@ -81,7 +82,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [addedNotice, setAddedNotice] = useState('');
   // Every office starts on its dashboard.
   const homeView: MainView = 'home';
-  const [mainView, setMainView] = useState<MainView>(homeView);
+  // The page open in this tab comes back after a refresh (not the Dashboard).
+  const [mainView, setMainView] = useState<MainView>(() => {
+    const saved = rememberedAdminView();
+    return saved && saved in VIEW_TITLES ? saved as MainView : homeView;
+  });
+  useEffect(() => { rememberAdminView(mainView); }, [mainView]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // A page this office doesn't have (an old link or history entry), or the
   // empty application list of an office without applications: go home.

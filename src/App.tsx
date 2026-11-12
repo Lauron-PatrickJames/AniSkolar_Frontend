@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import MyScholarship from './pages/student/MyScholarship';
 import MyApplications from './pages/student/MyApplications';
-import { AppSkeleton, FormSkeleton } from './components/Skeletons';
+import { AdminShellSkeleton, AppSkeleton, FormSkeleton, OfficeShellSkeleton, StudentShellSkeleton, forgetShell, rememberShell, rememberedAdminView, rememberedShell } from './components/Skeletons';
 import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, ProfileSectionKey, SaveResult } from './types';
 import { acceptsOnlineApplications, applicationWindow, applyScholarshipOverrides, mockScholarships, registerCustomScholarships, setServerApplyBlocks } from './data/scholarships';
@@ -35,6 +35,7 @@ import Messages from './pages/student/Messages';
 import OfficePortal, { OfficeHeadInfo } from './pages/office/OfficePortal';
 import { setOfficeNumbers } from './data/officeForms';
 import { setPassingAverage } from './utils/renewals';
+import { useRefreshTick } from './utils/useRefreshTick';
 
 // --- Persistence helpers -----------------------------------------------
 // Only page/navigation state lives here now — WHO is logged in is entirely
@@ -207,6 +208,10 @@ export default function App() {
   const [profileEdit, setProfileEdit] = useState<ProfileSectionKey | null>(null);
   const editProfileSection = (section: ProfileSectionKey) => { handleNavigate('profile'); setProfileEdit(section); };
   const [officeHead, setOfficeHead] = useState<OfficeHeadInfo | null>(null);
+  // Announcements and the scholarships' details (status, dates, slots…)
+  // reload when the user comes back to the tab and every few minutes, so
+  // changes show without refreshing the page.
+  const liveTick = useRefreshTick();
 
   useEffect(() => {
     let cancelled = false;
@@ -228,7 +233,7 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [liveTick]);
 
   useEffect(() => {
     let cancelled = false;
@@ -255,12 +260,20 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [liveTick]);
 
 
   const role = (user?.publicMetadata as { role?: string } | undefined)?.role === 'admin'
     ? 'admin'
     : 'student';
+
+  // Which portal this browser signed in to last, so the loading skeleton
+  // on the next visit has its shape (components/Skeletons.tsx).
+  useEffect(() => {
+    if (!isSignedIn) return;
+    if (authPhase === 'office') rememberShell('office');
+    else if (authPhase === 'ready') rememberShell(role === 'admin' ? 'admin' : 'student');
+  }, [isSignedIn, authPhase, role]);
 
   useEffect(() => {
     try {
@@ -564,6 +577,7 @@ export default function App() {
   // Logout handler — Clerk tears down its own session; we just reset the
   // app-specific state that was derived from it.
   const handleLogout = async () => {
+    forgetShell();
     await signOut();
     setCurrentPage('landing');
     setSelectedScholarshipId(null);
@@ -779,7 +793,7 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, [isSignedIn, role, isSfag, getToken]);
+  }, [isSignedIn, role, isSfag, getToken, liveTick]);
   const studentAnnouncements = useMemo(() => [...dutyAnnouncements, ...announcements], [dutyAnnouncements, announcements]);
 
   // SFAG scholars: this semester's duty hours, for the bell's "hours
@@ -823,10 +837,14 @@ export default function App() {
 
   // Clerk is still figuring out whether there's an existing session —
   // avoid flashing the landing page or dashboard before that's known.
+  // Shaped like the portal and page being opened (the one this browser
+  // used last); the generic one for a first visit or the landing page.
   if (!userLoaded || authPhase === 'loading') {
-    return (
-      <AppSkeleton />
-    );
+    const shell = rememberedShell();
+    if (shell === 'admin') return <AdminShellSkeleton view={rememberedAdminView()} />;
+    if (shell === 'office') return <OfficeShellSkeleton />;
+    if (shell === 'student' && currentPage !== 'landing') return <StudentShellSkeleton page={currentPage} />;
+    return <AppSkeleton />;
   }
 
   // The head of a duty office.

@@ -12,6 +12,7 @@ import { ResultDialog,
 } from './AdminUI';
 import { downloadExcel, excelDate } from '../../utils/excelExport';
 import { setPassingAverage } from '../../utils/renewals';
+import { useRefreshTick } from '../../utils/useRefreshTick';
 
 // AdSO: duty hours of every SFAG holder for a term (plus any other SFAG
 // scholar who logged hours), from the logs scholars keep on their Duty
@@ -98,6 +99,9 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
   }, [getToken]);
 
   useEffect(() => { load(null); }, [load]);
+  // Kept current without a page refresh (back on the tab, and every minute).
+  const refreshTick = useRefreshTick(60_000);
+  useEffect(() => { if (refreshTick) load(term); }, [refreshTick]); // eslint-disable-line react-hooks/exhaustive-deps
   // A selection belongs to one term's list.
   useEffect(() => { setSelected(new Set()); }, [term?.academicYear, term?.term]);
 
@@ -242,7 +246,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
       )}
 
       {/* What's left to set up */}
-      {term && !loading && setup.length > 0 && (
+      {term && !(loading && rows.length === 0) && setup.length > 0 && (
         <section aria-label="To set up this term" className="rounded-card bg-warning-bg/40 ring-1 ring-warning-fg/20">
           <p className="flex items-center gap-2 border-b border-warning-fg/15 px-4 py-2.5 text-sm font-semibold text-ink">
             <AlertTriangle className="size-4 text-warning-fg" aria-hidden /> To finish setting up this term

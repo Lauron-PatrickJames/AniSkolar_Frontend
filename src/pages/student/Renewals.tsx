@@ -9,6 +9,7 @@ import {
   NOT_CONTINUING_REASONS, NotContinuingReason, Renewal, RenewalPeriod, RenewalStatus, deadlineLabel, formatGpa, isIsoDate, meetsGpa, periodLabel
 } from '../../utils/renewals';
 import { CardsSkeleton } from '../../components/Skeletons';
+import { useRefreshTick } from '../../utils/useRefreshTick';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -62,6 +63,9 @@ export default function Renewals() {
   }, [getToken]);
 
   useEffect(() => { load(); }, [load]);
+  // Kept current without a page refresh (back on the tab, and every minute).
+  const refreshTick = useRefreshTick(60_000);
+  useEffect(() => { if (refreshTick) load(); }, [refreshTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The form is its own history entry, so the browser's Back closes it
   // instead of leaving the page.

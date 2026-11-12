@@ -41,6 +41,19 @@ export interface AssessmentResult {
   tone: 'success' | 'warning' | 'danger' | 'neutral';
 }
 
+// A number the office can change on the scholarship's page (an amount or
+// a level), e.g. the ROTC amount for each rank. Same keys and ranges as
+// numbers in the backend's data/officeForms.js.
+export interface OfficeNumber {
+  key: string;
+  label: string;
+  default: number;
+  min: number;
+  max: number;
+  step: number;
+  kind: 'peso' | 'rating';
+}
+
 export interface OfficeForm {
   // The form step's name and what it's for.
   stepLabel: string;
@@ -66,6 +79,24 @@ export interface OfficeForm {
   assessmentTitle: string;
   assessment: AssessmentField[];
   result: (values: OfficeAnswers, answers: OfficeAnswers) => AssessmentResult | null;
+  // Amounts or levels the office can change (Scholarships → the scholarship).
+  numbersTitle?: string;
+  numbersHint?: string;
+  numbers?: OfficeNumber[];
+}
+
+// The offices' saved numbers by scholarship (App.tsx and the Scholarships
+// page set them from the scholarships' settings).
+let savedNumbers: Record<string, Record<string, number>> = {};
+export function setOfficeNumbers(overrides: { id: string; officeNumbers?: Record<string, number> }[], replace = true): void {
+  const next = Object.fromEntries(overrides.filter(o => o.officeNumbers).map(o => [o.id, o.officeNumbers!]));
+  savedNumbers = replace ? next : { ...savedNumbers, ...next };
+}
+// A scholarship's number: the office's, or the default.
+export function officeNumber(scholarshipId: string, key: string): number {
+  const saved = savedNumbers[scholarshipId]?.[key];
+  if (typeof saved === 'number') return saved;
+  return OFFICE_FORMS[scholarshipId]?.numbers?.find(n => n.key === key)?.default ?? 0;
 }
 
 // CBAASG (Ordinance No. 01, s. 2021–2022): the same documents and
@@ -113,6 +144,8 @@ const peso = (n: number) => `₱${n.toLocaleString('en-PH')}`;
 
 const SPORTS = ['Basketball', 'Volleyball', 'Athletics (track and field)', 'Badminton', 'Table tennis', 'Swimming', 'Chess'];
 
+const rankAmount = (rank: string) => officeNumber('s10', rank);
+
 const ROTC_RANKS = [
   { value: 'corps', label: 'Corps Commander', amount: 30000 },
   { value: 'vice', label: 'Vice Corps Commander', amount: 20000 },
@@ -148,9 +181,9 @@ function heraldoPoints(v: OfficeAnswers) {
 
 // Vicissitude's Editorial Board discounts by performance rating.
 function vicissitudeDiscount(rating: number): number {
-  if (rating >= 4.75) return 100;
-  if (rating >= 4.5) return 75;
-  if (rating >= 4.25) return 50;
+  if (rating >= officeNumber('s8', 'rating100')) return 100;
+  if (rating >= officeNumber('s8', 'rating75')) return 75;
+  if (rating >= officeNumber('s8', 'rating50')) return 50;
   return 25;
 }
 
@@ -222,21 +255,24 @@ export const OFFICE_FORMS: Record<string, OfficeForm> = {
     stepLabel: 'NROTC',
     intro: 'The amount depends on the officer’s rank in the 267th NROTCU.',
     questions: [
-      { key: 'rank', label: 'Rank', type: 'select', options: ROTC_RANKS.map(r => ({ value: r.value, label: `${r.label} (${peso(r.amount)})` })) },
+      { key: 'rank', label: 'Rank', type: 'select', options: ROTC_RANKS.map(r => ({ value: r.value, label: r.label })) },
       { key: 'activeDuty', label: 'Actively performs their assigned duties, including 20 duty hours a week', type: 'confirm' },
     ],
     documents: a => a.rank ? ['Recommendation from the Commandant and/or the ROTC Coordinator'] : [],
     award: { who: 'officer', detailsTitle: 'Rank', grant: 'assessment', messagePlaceholder: 'e.g. Congratulations on your rank! Your assistance is for this semester.' },
+    numbersTitle: 'Amount for each rank',
+    numbersHint: 'Used when adding an officer. Update the benefits above too so students see the same amounts.',
+    numbers: ROTC_RANKS.map(r => ({ key: r.value, label: r.label, default: r.amount, min: 0, max: 500000, step: 1, kind: 'peso' as const })),
     approver: 'Commandant or ROTC Coordinator',
     assessmentTitle: 'Financial assistance',
     assessment: [
-      { key: 'amount', label: 'Amount (₱)', hint: 'Filled from the rank; change it if the ROTC fund can’t cover it', type: 'number', min: 0, max: 100000, step: 1, defaultFrom: a => ROTC_RANKS.find(r => r.value === a.rank)?.amount },
+      { key: 'amount', label: 'Amount (₱)', hint: 'Filled from the rank; change it if the ROTC fund can’t cover it', type: 'number', min: 0, max: 100000, step: 1, defaultFrom: a => (a.rank ? rankAmount(String(a.rank)) : undefined) },
     ],
     result: (v, a) => {
       const rank = ROTC_RANKS.find(r => r.value === a.rank);
-      const amount = num(v.amount) ?? rank?.amount ?? null;
+      const amount = num(v.amount) ?? (rank ? rankAmount(rank.value) : null);
       if (amount === null) return null;
-      return { headline: peso(amount), lines: [rank ? `${rank.label}: ${peso(rank.amount)} by the guidelines` : '', 'Subject to the availability of the ROTC fund'].filter(Boolean), tone: 'success' };
+      return { headline: peso(amount), lines: [rank ? `${rank.label}: ${peso(rankAmount(rank.value))} by the guidelines` : '', 'Subject to the availability of the ROTC fund'].filter(Boolean), tone: 'success' };
     },
   },
   s11: {
@@ -252,6 +288,13 @@ export const OFFICE_FORMS: Record<string, OfficeForm> = {
       { key: 'verified', label: 'Documents verified', type: 'bool' },
       { key: 'onsiteDate', label: 'On-site submission date', type: 'date' },
       { key: 'onsiteTime', label: 'Time', type: 'time' },
+    ],
+    numbersTitle: 'Rating for each discount',
+    numbersHint: 'The lowest rating for each discount; below them, 25%. Update the benefits above too.',
+    numbers: [
+      { key: 'rating100', label: '100% discount from', default: 4.75, min: 1, max: 5, step: 0.01, kind: 'rating' },
+      { key: 'rating75', label: '75% discount from', default: 4.5, min: 1, max: 5, step: 0.01, kind: 'rating' },
+      { key: 'rating50', label: '50% discount from', default: 4.25, min: 1, max: 5, step: 0.01, kind: 'rating' },
     ],
     result: v => {
       if (!v.verified) return { headline: 'Not verified yet', lines: ['Verify within 72 hours. If a document is wrong, ask for it with “Needs revision”: the student has 2 days to resubmit.'], tone: 'warning' };
@@ -355,14 +398,19 @@ export const OFFICE_FORMS: Record<string, OfficeForm> = {
     assessment: [
       { key: 'interviewDate', label: 'Interview date', type: 'date' },
       { key: 'interviewTime', label: 'Time', type: 'time' },
-      { key: 'grant', label: 'Grant (₱)', hint: 'Up to ₱200,000 is set aside each semester for all the grants', type: 'number', min: 0, max: 200000, step: 1 },
+      { key: 'grant', label: 'Grant (₱)', hint: 'From the semester’s scholarship fund (set on the scholarship’s page)', type: 'number', min: 0, max: 5000000, step: 1 },
     ],
     result: v => {
       const grant = num(v.grant);
       const interview = v.interviewDate ? `Interview: ${formatDay(String(v.interviewDate))}${v.interviewTime ? `, ${formatTime(String(v.interviewTime))}` : ''}` : 'Interview not scheduled yet';
       if (grant === null) return { headline: v.interviewDate ? 'Interview scheduled' : 'Under review', lines: [interview], tone: 'neutral' };
-      return { headline: peso(grant), lines: [interview, 'From the semester’s ₱200,000 scholarship fund; unused funds don’t carry over.'], tone: 'success' };
+      const fund = officeNumber('s16', 'fund');
+      if (grant > fund) return { headline: peso(grant), lines: [interview, `More than the semester’s ${peso(fund)} fund.`], tone: 'warning' };
+      return { headline: peso(grant), lines: [interview, `From the semester’s ${peso(fund)} scholarship fund; unused funds don’t carry over.`], tone: 'success' };
     },
+    numbersTitle: 'Scholarship fund',
+    numbersHint: 'Set aside each semester for all the grants. Update the benefits above too.',
+    numbers: [{ key: 'fund', label: 'Fund each semester', default: 200000, min: 0, max: 5000000, step: 1, kind: 'peso' }],
   },
   s17: {
     stepLabel: 'CCJESG',
@@ -377,15 +425,19 @@ export const OFFICE_FORMS: Record<string, OfficeForm> = {
     assessment: [
       { key: 'interviewDate', label: 'Interview date', type: 'date' },
       { key: 'evaluationPassed', label: 'Passed the performance evaluation', type: 'bool' },
-      { key: 'grant', label: 'Grant (₱)', hint: 'Up to the position’s cap, by performance and available funds', type: 'number', min: 0, max: 10000, step: 1 },
+      { key: 'grant', label: 'Grant (₱)', hint: 'Up to the position’s cap, by performance and available funds', type: 'number', min: 0, max: 500000, step: 1 },
     ],
+    numbersTitle: 'Most each position gets a semester',
+    numbersHint: 'Used to check the grants. Update the benefits above too.',
+    numbers: CCJESG_POSITIONS.map(p => ({ key: p.value, label: p.label, default: p.cap, min: 0, max: 500000, step: 1, kind: 'peso' as const })),
     result: (v, a) => {
       const position = CCJESG_POSITIONS.find(p => p.value === a.position);
-      const cap = position ? `${position.label}: up to ${peso(position.cap)} a semester` : '';
+      const capOf = (p: typeof position) => (p ? officeNumber('s17', p.value) : 0);
+      const cap = position ? `${position.label}: up to ${peso(capOf(position))} a semester` : '';
       const grant = num(v.grant);
       if (v.evaluationPassed === false) return { headline: 'Didn’t pass the evaluation', lines: [cap].filter(Boolean), tone: 'danger' };
       if (grant === null) return { headline: v.interviewDate ? `Interview: ${formatDay(String(v.interviewDate))}` : 'Under review', lines: [cap, 'Credited at the end of the semester, after service and evaluation.'].filter(Boolean), tone: 'neutral' };
-      const over = position && grant > position.cap;
+      const over = position && grant > capOf(position);
       return { headline: peso(grant), lines: [cap, over ? 'This is more than the position’s cap.' : 'Credited to the tuition account at the end of the semester.'].filter(Boolean), tone: over ? 'warning' : 'success' };
     },
   },

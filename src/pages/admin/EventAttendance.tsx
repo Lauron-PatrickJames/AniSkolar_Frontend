@@ -162,7 +162,7 @@ export default function AttendanceDialog({ event: initialEvent, term, getToken, 
   };
 
   const removeSheet = async (sheet: EventSheet) => {
-    if (!window.confirm(`Remove "${sheet.filename}"? Who's ticked as attended stays as it is.`)) return;
+    if (!window.confirm(`Remove "${sheet.filename}"? It moves to the Trash, where it can be restored for 30 days. Who's ticked as attended stays as it is.`)) return;
     setBusy(`del-${sheet.fileId}`);
     setError('');
     try {

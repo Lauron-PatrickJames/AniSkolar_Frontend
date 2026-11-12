@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, ClipboardCheck } from 'lucide-react';
-import { EVALUATION_ITEMS, PASSING_AVERAGE, RATING_LABELS, ratingLabel } from '../utils/renewals';
+import { EVALUATION_ITEMS, passingAverage, RATING_LABELS, ratingLabel } from '../utils/renewals';
 
 // The office head's 1–5 evaluation of a scholar's duty, as the scholar
 // sees it: the average and what it means, each item, and the remarks.
@@ -26,7 +26,7 @@ export default function EvaluationSummary({ evaluation, title = 'Your office’s
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const passed = evaluation.average >= PASSING_AVERAGE;
+  const passed = evaluation.average >= passingAverage();
   const who = [evaluation.evaluatorName, evaluation.assignedOffice].filter(Boolean).join(', ');
   const items = EVALUATION_ITEMS.filter(i => evaluation.scores?.[i.key]);
   return (
@@ -48,7 +48,7 @@ export default function EvaluationSummary({ evaluation, title = 'Your office’s
 
       {!passed && (
         <p className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-xs text-amber-900 leading-relaxed">
-          An average below {PASSING_AVERAGE.toFixed(2)} ({RATING_LABELS[PASSING_AVERAGE]}) means the scholarship office will talk with you before deciding your renewal.
+          An average below {passingAverage().toFixed(2)} ({RATING_LABELS[Math.floor(passingAverage())]}) means the scholarship office will talk with you before deciding your renewal.
         </p>
       )}
 
@@ -80,7 +80,7 @@ export default function EvaluationSummary({ evaluation, title = 'Your office’s
                     <span className="min-w-0 basis-full text-sm text-slate-700 sm:flex-1 sm:basis-0">{i.label}</span>
                     <span className="flex gap-1" aria-hidden>
                       {[1, 2, 3, 4, 5].map(n => (
-                        <span key={n} className={`h-1.5 w-4 rounded-full ${n <= score ? (score >= PASSING_AVERAGE ? 'bg-brand-green' : 'bg-amber-500') : 'bg-slate-200'}`} />
+                        <span key={n} className={`h-1.5 w-4 rounded-full ${n <= score ? (score >= passingAverage() ? 'bg-brand-green' : 'bg-amber-500') : 'bg-slate-200'}`} />
                       ))}
                     </span>
                     <span className="ml-auto text-right text-xs text-slate-500 sm:ml-0 sm:w-36">

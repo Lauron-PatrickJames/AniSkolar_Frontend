@@ -999,6 +999,11 @@ function mergeOverride(source: ScholarshipSource, o: ScholarshipOverride | undef
   if (o.schedule && source.scheduleLabel) merged.schedule = o.schedule;
   if (o.scheduleOn && source.scheduleLabel) Object.assign(merged, { scheduleOn: o.scheduleOn, scheduleTime: o.scheduleTime, scheduleVenue: o.scheduleVenue });
   if (o.rules) merged.rules = o.rules;
+  // Saved slot limits replace the code's (0 = no limit).
+  if (o.totalSlots !== undefined || o.slotsPerCollege !== undefined) {
+    merged.totalSlots = o.totalSlots || undefined;
+    merged.slotsPerCollege = o.slotsPerCollege || undefined;
+  }
   if (o.customEligibility) merged.customEligibility = o.customEligibility;
   if (!source.documentSlots?.length) {
     if (o.documentKeys) merged.documentKeys = o.documentKeys;

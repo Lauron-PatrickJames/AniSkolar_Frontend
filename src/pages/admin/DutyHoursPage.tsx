@@ -11,6 +11,7 @@ import { ResultDialog,
   SearchInput, SegmentedControl, Select, Table, TableSkeleton, Tabs, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
 import { downloadExcel, excelDate } from '../../utils/excelExport';
+import { setPassingAverage } from '../../utils/renewals';
 
 // AdSO: duty hours of every SFAG holder for a term (plus any other SFAG
 // scholar who logged hours), from the logs scholars keep on their Duty
@@ -205,7 +206,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
               label="More"
               icon={SlidersHorizontal}
               items={[
-                { key: 'hours', label: 'Hours per grant', icon: Clock, onSelect: () => setHoursOpen(true) },
+                { key: 'hours', label: 'Hours and evaluation', icon: Clock, onSelect: () => setHoursOpen(true) },
                 { key: 'deadline', label: deadline ? 'Change deadline' : 'Set deadline', icon: CalendarClock, onSelect: () => setDeadlineOpen(true) },
                 ...(rows.length ? [{ key: 'export', label: 'Export to Excel', icon: Download, onSelect: exportCsv }] : []),
               ]}
@@ -461,6 +462,8 @@ function HoursSettingsDialog({ getToken, onClose, onSaved }: {
 }) {
   // values[group][percentage] = the input's text
   const [values, setValues] = useState<Record<YearGroup, Record<number, string>> | null>(null);
+  // The evaluation average a renewal needs (1–5).
+  const [passing, setPassing] = useState('4');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -472,6 +475,7 @@ function HoursSettingsDialog({ getToken, onClose, onSaved }: {
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body.error || 'Failed to load the settings.');
         if (!cancelled) {
+          if (typeof body.passingAverage === 'number') setPassing(String(body.passingAverage));
           setValues(Object.fromEntries(YEAR_GROUPS.map(({ key: g }) => [
             g,
             Object.fromEntries(GRANT_PERCENTAGES.map(p => [p, body.hoursByGroup?.[g]?.[p] != null ? String(body.hoursByGroup[g][p]) : ''])),
@@ -484,8 +488,10 @@ function HoursSettingsDialog({ getToken, onClose, onSaved }: {
     return () => { cancelled = true; };
   }, [getToken]);
 
+  const passingValue = Number(passing);
+  const passingError = !(passing.trim() && passingValue >= 1 && passingValue <= 5) ? 'Enter an average from 1.00 to 5.00.' : '';
   const save = async () => {
-    if (!values || busy) return;
+    if (!values || busy || passingError) return;
     setBusy(true);
     setError('');
     try {
@@ -497,10 +503,12 @@ function HoursSettingsDialog({ getToken, onClose, onSaved }: {
             g,
             Object.fromEntries(GRANT_PERCENTAGES.map(p => [p, values[g][p].trim() === '' ? null : Number(values[g][p])])),
           ])),
+          passingAverage: passingValue,
         }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Failed to save the settings.');
+      setPassingAverage(body.passingAverage);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save the settings.');
@@ -510,7 +518,7 @@ function HoursSettingsDialog({ getToken, onClose, onSaved }: {
 
   return (
     <Modal
-      title="Hours per grant"
+      title="Hours and evaluation"
       onClose={onClose}
       dismissible={!busy}
       footer={
@@ -548,6 +556,11 @@ function HoursSettingsDialog({ getToken, onClose, onSaved }: {
             </React.Fragment>
           ))}
           <p className="col-span-3 text-xs text-ink-subtle">Hours are per term. Set each grantee's percentage on their approved SFAG application; their year level comes from their profile (5th year counts with 3rd year and up).</p>
+          <div className="col-span-3 border-t border-line pt-4">
+            <Field label="Evaluation average needed to renew" helper="Out of 5. Scholars below it are interviewed before their renewal is decided. Default: 4.00 (Very satisfactory)." error={passingError || undefined}>
+              <TextInput type="number" inputMode="decimal" min={1} max={5} step="0.01" className="w-28" value={passing} onChange={e => setPassing(e.target.value)} disabled={busy} />
+            </Field>
+          </div>
         </form>
       )}
     </Modal>
@@ -980,8 +993,8 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
         <ConfirmDialog
           tone="danger"
           title={`Delete “${deleting.name}”?`}
-          description={deleting.sheets.length ? 'Its uploaded attendance sheets are deleted too. This can’t be undone.' : 'This can’t be undone.'}
-          confirmLabel="Delete event"
+          description={deleting.sheets.length ? 'It moves to the Trash with its uploaded attendance sheets, where it can be restored for 30 days.' : 'It moves to the Trash, where it can be restored for 30 days.'}
+          confirmLabel="Move to Trash"
           busy={busy === `del-${deleting._id}`}
           onConfirm={remove}
           onCancel={() => setDeleting(null)}

@@ -160,6 +160,11 @@ export interface ScholarshipOverride {
   customEligibility?: string[];
   documentKeys?: string[];
   customDocuments?: string[];
+  // Slot limits replacing the code's (0 = no limit).
+  totalSlots?: number;
+  slotsPerCollege?: number;
+  // The office's amounts and levels (data/officeForms.ts → numbers).
+  officeNumbers?: Record<string, number>;
   // Scholarships the AdSO created: their fixed details.
   custom?: boolean;
   name?: string;

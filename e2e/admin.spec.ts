@@ -147,7 +147,9 @@ test.describe('Partner office', () => {
     await showMenu(page);
     await expect(navItem(page, 'Applications')).toBeVisible();
     await expect(navItem(page, 'Scholarships')).toBeVisible();
-    for (const hidden of ['Statistics', 'FSE report', 'Duty hours', 'Students', 'Messages', 'Automation']) {
+    // Every office has its own inbox with its students.
+    await expect(navItem(page, 'Messages')).toBeVisible();
+    for (const hidden of ['Statistics', 'FSE report', 'Duty hours', 'Students', 'Automation']) {
       await expect(navItem(page, hidden)).toHaveCount(0);
     }
   });

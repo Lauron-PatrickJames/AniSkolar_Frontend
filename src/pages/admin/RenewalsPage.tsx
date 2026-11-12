@@ -5,7 +5,7 @@ import {
 import { mockScholarships, acceptsOnlineApplications, applyScholarshipOverrides } from '../../data/scholarships';
 import { retentionMinGpa } from '../../utils/eligibility';
 import {
-  DEFAULT_RENEWAL_REQUIREMENTS, EVALUATION_ITEMS, PASSING_AVERAGE, RATING_LABELS, RENEWAL_DECISIONS, RENEWAL_TERMS, Renewal,
+  DEFAULT_RENEWAL_REQUIREMENTS, EVALUATION_ITEMS, passingAverage, RATING_LABELS, RENEWAL_DECISIONS, RENEWAL_TERMS, Renewal,
   RenewalDecision, RenewalPeriod, RenewalStatus, RenewalTerm, academicYearLabel, currentAcademicYear, formatGpa, meetsGpa,
   deadlineLabel, isIsoDate, periodLabel, ratingLabel
 } from '../../utils/renewals';
@@ -531,7 +531,7 @@ function EvaluationCell({ renewal }: { renewal: Renewal | null }) {
   if (!renewal?.continuing) return <span className="text-ink-subtle">—</span>;
   const avg = renewal.evaluation?.average;
   if (avg === undefined) return <span className="text-ink-subtle">Not entered</span>;
-  return <Badge tone={avg >= PASSING_AVERAGE ? 'success' : 'warning'}>{avg.toFixed(2)}{avg < PASSING_AVERAGE ? ' · interview' : ''}</Badge>;
+  return <Badge tone={avg >= passingAverage() ? 'success' : 'warning'}>{avg.toFixed(2)}{avg < passingAverage() ? ' · interview' : ''}</Badge>;
 }
 
 // --- Period ------------------------------------------------------------------------
@@ -777,7 +777,7 @@ function PeriodModal({ getToken, period, existing = [], onEditExisting, onClose,
             onChange={setRequiresEvaluation}
             disabled={saving}
             title="Department head’s evaluation"
-            description={`Below a ${PASSING_AVERAGE} average means an interview.`}
+            description={`Below a ${passingAverage()} average means an interview.`}
           />
 
           <Field label="Note to scholars" optional>
@@ -1001,12 +1001,12 @@ function ModalSection({ title, aside, children }: { title: string; aside?: React
 
 function EvaluationSummary({ renewal }: { renewal: Renewal }) {
   const ev = renewal.evaluation!;
-  const passing = ev.average >= PASSING_AVERAGE;
+  const passing = ev.average >= passingAverage();
   const [open, setOpen] = useState(false);
   return (
     <div className="space-y-3">
       <Alert tone={passing ? 'success' : 'warning'} title={`Average ${ev.average.toFixed(2)} · ${ratingLabel(ev.average)}`}>
-        {passing ? 'Meets the Very satisfactory average needed to renew.' : `Below ${PASSING_AVERAGE} (Very satisfactory): interview the scholar before deciding.`}
+        {passing ? `Meets the ${passingAverage().toFixed(2)} average needed to renew.` : `Below ${passingAverage().toFixed(2)}: interview the scholar before deciding.`}
       </Alert>
       <p className="text-sm text-ink-muted">
         By <span className="font-medium text-ink">{ev.evaluatorName || 'the office head'}</span>{ev.assignedOffice ? `, ${ev.assignedOffice}` : ''}
@@ -1123,7 +1123,7 @@ function EvaluationForm({ renewal, dutyOffice, getToken, onCancel, onSaved }: {
         <span className="text-sm text-ink-muted">
           {average === null
             ? `${rated} of ${EVALUATION_ITEMS.length} rated`
-            : <>Average <span className={`font-medium ${average >= PASSING_AVERAGE ? 'text-success-fg' : 'text-warning-fg'}`}>{average.toFixed(2)}</span> · {ratingLabel(average)}</>}
+            : <>Average <span className={`font-medium ${average >= passingAverage() ? 'text-success-fg' : 'text-warning-fg'}`}>{average.toFixed(2)}</span> · {ratingLabel(average)}</>}
         </span>
         <div className="flex gap-2">
           {onCancel && <Button onClick={onCancel} disabled={saving}>Cancel</Button>}

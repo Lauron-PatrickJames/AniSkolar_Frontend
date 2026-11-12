@@ -8,6 +8,7 @@ import FseReportPage from './FseReportPage';
 import RenewalsPage from './RenewalsPage';
 import DutyHoursPage from './DutyHoursPage';
 import AutomationPage from './AutomationPage';
+import TrashPage from './TrashPage';
 import ScholarshipsManager from './ScholarshipsManager';
 import AdminLayout, { Crumb, MainView, VIEW_TITLES } from './AdminLayout';
 import AdminScholars from './AdminScholars';
@@ -308,6 +309,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     page = <DutyHoursPage getToken={getToken} />;
   } else if (mainView === 'automation' && isAdso) {
     page = <AutomationPage getToken={getToken} />;
+  } else if (mainView === 'trash') {
+    page = <TrashPage getToken={getToken} isAdso={isAdso} />;
   } else if (mainView === 'renewals' && !hiddenViews.includes('renewals')) {
     page = <RenewalsPage getToken={getToken} isAdso={isAdso} ownOffice={adminOffice ?? 'LSO'} />;
   } else if (mainView === 'analytics' && isAdso) {

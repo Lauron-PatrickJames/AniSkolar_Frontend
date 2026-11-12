@@ -135,9 +135,14 @@ export const RATING_LABELS: Record<number, string> = {
   1: 'Poor',
 };
 
-// At least "Very satisfactory" on average to renew; below that the scholar
-// is interviewed before a decision. Same as PASSING_AVERAGE on the server.
-export const PASSING_AVERAGE = 4;
+// The evaluation average a renewal needs (4, "Very satisfactory", unless
+// the AdSO changed it in Duty hours); below it the scholar is interviewed
+// before a decision. App.tsx sets it from GET /api/scholarships.
+let passing = 4;
+export function setPassingAverage(value: unknown): void {
+  if (typeof value === 'number' && value >= 1 && value <= 5) passing = value;
+}
+export const passingAverage = () => passing;
 
 export function ratingLabel(average: number): string {
   return RATING_LABELS[Math.min(5, Math.max(1, Math.floor(average)))];

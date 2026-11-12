@@ -33,6 +33,8 @@ import Renewals from './pages/student/Renewals';
 import DutyHours from './pages/student/DutyHours';
 import Messages from './pages/student/Messages';
 import OfficePortal, { OfficeHeadInfo } from './pages/office/OfficePortal';
+import { setOfficeNumbers } from './data/officeForms';
+import { setPassingAverage } from './utils/renewals';
 
 // --- Persistence helpers -----------------------------------------------
 // Only page/navigation state lives here now — WHO is logged in is entirely
@@ -240,6 +242,9 @@ export default function App() {
           setSfagOpenAllYear(body.sfagOpenAllYear === true);
           // Why each one can't be applied for now: the backend's own rule.
           setServerApplyBlocks(body.applyBlocks);
+          // The offices' amounts and the renewal pass mark, as saved.
+          setOfficeNumbers(body.scholarships);
+          setPassingAverage(body.passingAverage);
           const all = applyScholarshipOverrides(mockScholarships, body.scholarships as ScholarshipOverride[]);
           // Scholarships the AdSO created become known to every lookup by id.
           registerCustomScholarships(all);

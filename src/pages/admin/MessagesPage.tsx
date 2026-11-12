@@ -194,7 +194,7 @@ export default function MessagesPage({ getToken, isAdso = true, selectedStudent,
             const key = keyOf(t);
             const active = key === selectedStudent;
             const unread = isUnread(t);
-            const preview = t.last.body || (t.last.attachments.length ? `📎 ${t.last.attachments.length} attachment${t.last.attachments.length === 1 ? '' : 's'}` : '');
+            const preview = t.last.unsentAt ? 'Message unsent' : t.last.body || (t.last.attachments.length ? `📎 ${t.last.attachments.length} attachment${t.last.attachments.length === 1 ? '' : 's'}` : '');
             return (
               <li key={key} className="group relative">
                 <button
@@ -376,6 +376,7 @@ function ThreadView({ studentNumber, getToken, onBack, onOpenApplication, onOpen
         className="h-[min(62vh,600px)]"
         messages={data.messages}
         viewer="adso"
+        unsendPath="/api/messages/admin"
         getToken={getToken}
         onSend={send}
         emptyText="No messages yet. Write the first one below — the student is also emailed."
@@ -730,6 +731,7 @@ function OfficeThreadView({ office, getToken, onBack, onChanged, menu }: {
         className="h-[min(62vh,600px)]"
         messages={data.messages}
         viewer="adso"
+        unsendPath="/api/messages/admin"
         getToken={getToken}
         onSend={async msg => { const m = await postMessage(path, getToken, msg); setData(d => (d ? { ...d, messages: [...d.messages, m] } : d)); onChanged(); }}
         emptyText="No messages yet. Write the first one below — the office head is also emailed."
@@ -796,6 +798,7 @@ function PeerThreadView({ code, getToken, onBack, onChanged, menu }: {
         className="h-[min(62vh,600px)]"
         messages={data.messages}
         viewer="adso"
+        unsendPath="/api/messages/admin"
         getToken={getToken}
         onSend={async msg => { const m = await postMessage(path, getToken, msg); setData(d => (d ? { ...d, messages: [...d.messages, m] } : d)); onChanged(); }}
         emptyText={`No messages yet. Write the first one below — the ${data.office.short} admins are also emailed.`}

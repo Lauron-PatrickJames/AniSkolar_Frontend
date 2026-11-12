@@ -27,7 +27,24 @@ export interface ChatMessage {
   applicationId: string | null;
   applicationRef: string | null;
   readAt: string | null;
+  // Unsent by its writer (within 24 hours): no text or files left.
+  unsentAt?: string | null;
   createdAt: string;
+}
+
+// How long after sending a message can be unsent (same as the server).
+export const UNSEND_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const canUnsend = (m: ChatMessage) => !m.unsentAt && Date.now() - new Date(m.createdAt).getTime() < UNSEND_WINDOW_MS;
+
+// Unsends one of your messages. `base` is your messages path:
+// /api/messages/mine (students), /api/messages/admin (office admins) or
+// /api/messages/office/mine (duty office heads).
+export async function unsendMessage(base: string, id: string, getToken: GetToken): Promise<{ message: ChatMessage; emailSent: boolean }> {
+  const token = await getToken();
+  const res = await fetch(`${API_BASE_URL}${base}/${id}/unsend`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "Couldn't unsend the message.");
+  return { message: body.message, emailSent: !!body.emailSent };
 }
 
 // Same limits as the server.

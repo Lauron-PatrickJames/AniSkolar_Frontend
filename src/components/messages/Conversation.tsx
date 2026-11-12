@@ -1,14 +1,18 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { findExplicitWords } from '../../utils/profanity';
-import { FileText, Loader2, Paperclip, Send, X } from 'lucide-react';
+import { Ban, FileText, Loader2, Paperclip, Send, Undo2, X } from 'lucide-react';
 import {
-  ATTACHMENT_TYPES, ChatMessage, MAX_ATTACHMENTS, MAX_ATTACHMENT_SIZE, MAX_MESSAGE_LENGTH, MessageAttachment, openAttachment, useAttachmentUrl
+  ATTACHMENT_TYPES, ChatMessage, MAX_ATTACHMENTS, MAX_ATTACHMENT_SIZE, MAX_MESSAGE_LENGTH, MessageAttachment, canUnsend, openAttachment, unsendMessage, useAttachmentUrl
 } from '../../utils/messages';
 
-// A student ↔ AdSO conversation: messages oldest first (yours on the
-// right), then a box to write one, with up to 3 JPG/PNG/PDF attachments
-// and, optionally, which application it's about. Used by the student's
-// Messages page and the AdSO's.
+// A conversation: messages oldest first (yours on the right), then a box
+// to write one, with up to 3 JPG/PNG/PDF attachments and, optionally,
+// which application it's about. Used by the student's Messages page, the
+// offices' and the duty office portal.
+//
+// With `unsendPath`, your own messages can be unsent for 24 hours (and
+// "Undo" shows for a few seconds after sending); both sides then see
+// "This message was unsent".
 
 type GetToken = () => Promise<string | null>;
 
@@ -27,17 +31,29 @@ interface Props {
   composerTools?: (body: string, setBody: (text: string) => void) => React.ReactNode;
   // Shown above the message box (the AdSO's quick replies), same arguments.
   composerTop?: (body: string, setBody: (text: string) => void) => React.ReactNode;
+  // Your messages path, to unsend them (see unsendMessage); none = no unsend.
+  unsendPath?: string;
 }
+
+const UNDO_SECONDS = 8;
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
 const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 const sizeLabel = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-export default function Conversation({ messages, viewer, filesPath, getToken, onSend, emptyText, placeholder, className = '', composerTools, composerTop }: Props) {
+export default function Conversation({ messages: given, viewer, filesPath, getToken, onSend, emptyText, placeholder, className = '', composerTools, composerTop, unsendPath }: Props) {
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  // Messages unsent here (until the page reloads the conversation).
+  const [unsent, setUnsent] = useState<Record<string, ChatMessage>>({});
+  const [unsending, setUnsending] = useState<string | null>(null);
+  // "Message sent · Undo": the message just sent, for a few seconds.
+  const [undoFor, setUndoFor] = useState<string | null>(null);
+  const before = useRef<Set<string> | null>(null);
+  const messages = useMemo(() => given.map(m => unsent[m._id] ?? m), [given, unsent]);
   const listRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // Explicit words in the draft: warned about here, refused by the server.
@@ -62,22 +78,56 @@ export default function Conversation({ messages, viewer, filesPath, getToken, on
     if (fileRef.current) fileRef.current.value = '';
   };
 
+  // The message just sent shows up in `given`: offer "Undo" for it.
+  useEffect(() => {
+    if (!before.current || !unsendPath) return;
+    const fresh = given.find(m => m.from === viewer && !before.current!.has(m._id));
+    if (fresh) { before.current = null; setUndoFor(fresh._id); }
+  }, [given, viewer, unsendPath]);
+  useEffect(() => {
+    if (!undoFor) return;
+    const t = window.setTimeout(() => setUndoFor(null), UNDO_SECONDS * 1000);
+    return () => window.clearTimeout(t);
+  }, [undoFor]);
+
+  const unsend = async (m: ChatMessage, ask = true) => {
+    if (!unsendPath || unsending) return;
+    if (ask && !window.confirm('Unsend this message? Its text and files are removed for both of you.')) return;
+    setUnsending(m._id);
+    setError('');
+    setNotice('');
+    try {
+      const { message, emailSent } = await unsendMessage(unsendPath, m._id, getToken);
+      setUnsent(u => ({ ...u, [m._id]: { ...m, ...message } }));
+      if (undoFor === m._id) setUndoFor(null);
+      setNotice(emailSent ? 'Unsent. Its email alert had already gone out, so they may have seen the text there.' : 'Message unsent.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't unsend the message.");
+    } finally {
+      setUnsending(null);
+    }
+  };
+
   const send = async () => {
     if (sending) return;
     if (!body.trim() && !files.length) { setError('Write a message or attach a file.'); return; }
     if (explicit.length) { setError('Please remove the inappropriate language before sending.'); return; }
     setSending(true);
     setError('');
+    setNotice('');
+    before.current = new Set(given.map(m => m._id));
     try {
       await onSend({ body: body.trim(), files });
       setBody('');
       setFiles([]);
     } catch (err) {
+      before.current = null;
       setError(err instanceof Error ? err.message : "Couldn't send the message.");
     } finally {
       setSending(false);
     }
   };
+  const undoMessage = undoFor ? messages.find(m => m._id === undoFor) : undefined;
 
   let lastDay = '';
   return (
@@ -92,6 +142,14 @@ export default function Conversation({ messages, viewer, filesPath, getToken, on
           return (
             <React.Fragment key={m._id}>
               {showDay && <p className="pt-2 text-center text-[11px] font-semibold text-slate-400">{day}</p>}
+              {m.unsentAt ? (
+                <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                  <p className="inline-flex items-center gap-1.5 rounded-2xl px-3.5 py-2 text-xs italic text-slate-500 ring-1 ring-slate-200">
+                    <Ban className="h-3.5 w-3.5" aria-hidden />
+                    {mine ? 'You unsent a message' : `${m.authorName || (m.from === 'student' ? 'The student' : 'The office')} unsent a message`} · {timeLabel(m.createdAt)}
+                  </p>
+                </div>
+              ) : (
               <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 py-2.5 text-sm shadow-xs ${mine ? 'bg-brand-green text-white rounded-br-md' : 'bg-white text-slate-800 ring-1 ring-slate-200 rounded-bl-md'}`}>
                   {!mine && <p className="mb-0.5 text-[11px] font-bold text-slate-500">{m.authorName || (m.from === 'adso' ? 'Admissions and Scholarship Office' : m.from === 'office' ? 'Office' : 'Student')}</p>}
@@ -105,10 +163,16 @@ export default function Conversation({ messages, viewer, filesPath, getToken, on
                     </div>
                   )}
                   <p className={`mt-1 text-right text-[10px] ${mine ? 'text-white/75' : 'text-slate-400'}`}>
+                    {mine && unsendPath && canUnsend(m) && (
+                      <button type="button" onClick={() => unsend(m)} disabled={!!unsending} className="mr-1.5 font-semibold underline-offset-2 hover:underline disabled:opacity-60" aria-label="Unsend this message">
+                        {unsending === m._id ? 'Unsending…' : 'Unsend'}
+                      </button>
+                    )}
                     {timeLabel(m.createdAt)}{mine && m.readAt ? ' · Seen' : ''}
                   </p>
                 </div>
               </div>
+              )}
             </React.Fragment>
           );
         })}
@@ -119,6 +183,15 @@ export default function Conversation({ messages, viewer, filesPath, getToken, on
         onSubmit={e => { e.preventDefault(); send(); }}
       >
         {error && <p role="alert" className="text-xs font-semibold text-rose-600">{error}</p>}
+        {notice && !error && <p role="status" className="text-xs font-semibold text-slate-500">{notice}</p>}
+        {undoMessage && !undoMessage.unsentAt && (
+          <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-slate-800 px-3 py-2 text-xs text-white">
+            <span>Message sent.</span>
+            <button type="button" onClick={() => unsend(undoMessage, false)} disabled={!!unsending} className="inline-flex items-center gap-1 font-bold text-emerald-300 hover:text-emerald-200 disabled:opacity-60">
+              <Undo2 className="h-3.5 w-3.5" aria-hidden /> {unsending ? 'Undoing…' : 'Undo'}
+            </button>
+          </div>
+        )}
         {files.length > 0 && (
           <ul className="flex flex-wrap gap-2">
             {files.map((f, i) => (

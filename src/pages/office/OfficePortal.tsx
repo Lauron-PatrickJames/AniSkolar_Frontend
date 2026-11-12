@@ -759,6 +759,7 @@ function MessagesTab({ getToken }: { getToken: GetToken }) {
         className="h-[min(70dvh,680px)]"
         messages={messages}
         viewer="office"
+        unsendPath="/api/messages/office/mine"
         filesPath="/api/messages/office/files"
         getToken={getToken}
         onSend={async data => { const m = await postMessage('/api/messages/office/mine', getToken, data); setMessages(prev => [...(prev ?? []), m]); }}

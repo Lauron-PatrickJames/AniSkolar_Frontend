@@ -158,7 +158,7 @@ export default function Messages({ applications: _applications }: { applications
           <ul className="min-h-0 flex-1 overflow-y-auto p-2" aria-label="Your conversations">
             {listed.map(o => {
               const active = o.code === office;
-              const preview = o.last ? (o.last.body || (o.last.attachments.length ? '📎 Attachment' : '')) : 'Start the conversation';
+              const preview = o.last ? (o.last.unsentAt ? 'Message unsent' : o.last.body || (o.last.attachments.length ? '📎 Attachment' : '')) : 'Start the conversation';
               return (
                 <li key={o.code}>
                   <button
@@ -232,6 +232,7 @@ export default function Messages({ applications: _applications }: { applications
               className="min-h-0 flex-1"
               messages={messages}
               viewer="student"
+              unsendPath="/api/messages/mine"
               getToken={getToken}
               onSend={send}
               emptyText={`No messages yet. Say hello to the ${current.code === ADSO ? 'AdSO' : current.short} below.`}

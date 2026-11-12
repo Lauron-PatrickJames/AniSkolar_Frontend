@@ -92,8 +92,18 @@ const json = (route: Route, body: unknown, status = 200) =>
 
 // newStudent: signed in, but no student record yet (onboarding).
 // patches: every PATCH /api/students/me body, for checking what was sent.
-export async function mockApi(page: Page, { newStudent = false, patches = [] as Record<string, unknown>[] } = {}) {
-  let student: Record<string, unknown> | null = newStudent ? null : { ...STUDENT, completion: COMPLETION };
+// notScholar: holds no scholarship and has no applications (sees Explore).
+// scholarships: the offices' saved settings (GET /api/scholarships), e.g.
+// [{ id: 's15', status: 'Open' }] to open one; none = every default.
+// student: changes to the scholar's profile (e.g. another program).
+export async function mockApi(page: Page, {
+  newStudent = false,
+  patches = [] as Record<string, unknown>[],
+  notScholar = false,
+  scholarships = [] as Record<string, unknown>[],
+  student: profile = {} as Record<string, unknown>,
+} = {}) {
+  let student: Record<string, unknown> | null = newStudent ? null : { ...STUDENT, ...profile, completion: COMPLETION };
   await page.route(`${API}/api/**`, route => {
     const { pathname } = new URL(route.request().url());
     const method = route.request().method();
@@ -110,10 +120,11 @@ export async function mockApi(page: Page, { newStudent = false, patches = [] as 
     switch (pathname) {
       case '/api/students/me': return student ? json(route, { student }) : json(route, { error: 'Profile not yet completed.' }, 404);
       case '/api/students/me/holdings':
+        if (notScholar) return json(route, { held: [], exclusive: null, slotsFull: [], details: [] });
         return json(route, { held: [SFAG], exclusive: SFAG, slotsFull: [], details: [{ ...SFAG, grantPercentage: 50, approvedAt: '2026-10-29T02:00:00.000Z', referenceCode: 'SFAG-2026-0001' }] });
       case '/api/office/me': return json(route, { error: 'Not an office head' }, 404);
-      case `/api/applications/student/${STUDENT.studentNumber}`: return json(route, { applications: [APPLICATION] });
-      case '/api/scholarships': return json(route, { scholarships: [] });
+      case `/api/applications/student/${STUDENT.studentNumber}`: return json(route, { applications: notScholar ? [] : [APPLICATION] });
+      case '/api/scholarships': return json(route, { scholarships });
       case '/api/announcements/feed': return json(route, { announcements: ANNOUNCEMENTS });
       case '/api/announcements/feed/duty': return json(route, { announcements: [] });
       case '/api/duty-hours/mine': return json(route, DUTY);

@@ -5,12 +5,14 @@ import { OfficeAnswers, OfficeForm } from '../../data/officeForms';
 import { API_BASE_URL, authHeaders, titleCaseName } from './adminData';
 import { Alert, Button, Checkbox, Field, Modal, Select, TextInput, Textarea } from './AdminUI';
 
-// Scholarships without an application (directAward, e.g. the SDO's): the
-// office adds each scholar it picked (from the varsity tryouts), with the
-// coach's document and the Director's approval. They're approved at once.
-// A player who hasn't signed in yet is added by student number, name and
-// school email; it's theirs the first time they sign in, and they're
-// emailed either way. Backend: POST /api/applications/direct-award.
+// Scholarships without an application (directAward): the office adds each
+// scholar itself, e.g. the SDO a player picked from the varsity tryouts
+// (coach's document, Director's approval, tuition discount) or the ROTC
+// Office an officer at their rank (Commandant's recommendation, amount
+// from the rank). The wording comes from the form's `award`. They're
+// approved at once. Someone who hasn't signed in yet is added by student
+// number, name and school email; it's theirs the first time they sign in,
+// and they're emailed either way. Backend: POST /api/applications/direct-award.
 
 interface FoundStudent { studentNumber: string; name: string; programCode?: string; college?: string; yearLevel?: string }
 interface NewStudent { studentNumber: string; firstName: string; lastName: string; email: string }
@@ -107,23 +109,32 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  const award = form.award ?? { who: 'scholar', detailsTitle: 'Details', grant: 'discount' as const, messagePlaceholder: '' };
+  const Who = award.who[0].toUpperCase() + award.who.slice(1);
+  const byDiscount = award.grant === 'discount';
   const questions = form.questions;
   const typeQ = questions.find(q => q.type === 'choice');
   const otherQs = questions.filter(q => q !== typeQ);
   const docLabel = form.documents?.(answers)[0];
-  const grant: OfficeAnswers = { ...extras, tuitionDiscount: discount ?? undefined };
+  // The number fields the office fills in (ROTC: the amount), each with
+  // its default from the answers when left empty.
+  const amountFields = byDiscount ? [] : form.assessment.filter(f => f.type === 'number');
+  const grant: OfficeAnswers = byDiscount
+    ? { ...extras, tuitionDiscount: discount ?? undefined }
+    : { ...extras, ...Object.fromEntries(amountFields.map(f => [f.key, extras[f.key] ?? f.defaultFrom?.(answers)])) };
   const result = form.result(grant, answers);
+  const grantDone = byDiscount ? discount !== null : amountFields.every(f => grant[f.key] !== undefined && grant[f.key] !== '');
 
   const newStudentValid = !!newStudent && /^\d{9}$/.test(newStudent.studentNumber) && !!newStudent.firstName.trim() && !!newStudent.lastName.trim() && /^[^\s@]+@dlsud\.edu\.ph$/i.test(newStudent.email.trim());
   const playerDone = !!student || newStudentValid;
-  const detailsDone = questions.every(q => answers[q.key] !== undefined && String(answers[q.key]).trim() !== '');
+  const detailsDone = questions.every(q => q.type === 'confirm' ? answers[q.key] === true : answers[q.key] !== undefined && String(answers[q.key]).trim() !== '');
   const missing = useMemo(() => [
-    !playerDone && (newStudent ? 'the player’s student number, name and DLSU-D email' : 'the player'),
-    !detailsDone && 'the varsity details',
-    !file && (docLabel ? `the ${docLabel.toLowerCase()}` : 'the coach’s document'),
-    discount === null && 'the tuition discount',
+    !playerDone && (newStudent ? `the ${award.who}’s student number, name and DLSU-D email` : `the ${award.who}`),
+    !detailsDone && `the ${award.detailsTitle.toLowerCase()} details`,
+    !file && (docLabel ? `the ${docLabel.toLowerCase()}` : 'the document'),
+    !grantDone && (byDiscount ? 'the tuition discount' : 'the amount'),
     !approved && `the ${form.approver}’s approval`,
-  ].filter(Boolean) as string[], [playerDone, newStudent, detailsDone, file, docLabel, discount, approved, form.approver]);
+  ].filter(Boolean) as string[], [playerDone, newStudent, detailsDone, file, docLabel, grantDone, byDiscount, approved, form.approver, award.who, award.detailsTitle]);
 
   const pickFile = (f: File | undefined) => {
     if (!f) return;
@@ -197,7 +208,7 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
           </Alert>
         )}
 
-        <Step n={1} title="Player" done={playerDone}>
+        <Step n={1} title={Who} done={playerDone}>
           {student ? (
             <div className="flex items-center justify-between gap-3 rounded-control bg-surface-muted px-3.5 py-3 ring-1 ring-line">
               <div className="min-w-0">
@@ -246,12 +257,12 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
                   </button>
                 </div>
               )}
-              {!found && <button type="button" onClick={startNew} className="mt-1.5 text-xs font-medium text-accent hover:underline">Player not in AniSkolar yet?</button>}
+              {!found && <button type="button" onClick={startNew} className="mt-1.5 text-xs font-medium text-accent hover:underline">{Who} not in AniSkolar yet?</button>}
             </div>
           )}
         </Step>
 
-        <Step n={2} title="Varsity" done={detailsDone}>
+        <Step n={2} title={award.detailsTitle} done={detailsDone}>
           <div className="space-y-4">
             {typeQ && (
               <ChoiceCards
@@ -262,9 +273,13 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
               />
             )}
             <div className="grid gap-4 sm:grid-cols-2">
-              {otherQs.map(q => q.type === 'select' ? (
+              {otherQs.map(q => q.type === 'confirm' ? (
+                <div key={q.key} className="sm:col-span-2">
+                  <Checkbox checked={answers[q.key] === true} onChange={v => setAnswers(a => ({ ...a, [q.key]: v || undefined }))} label={q.label} disabled={busy} />
+                </div>
+              ) : q.type === 'select' ? (
                 <Field key={q.key} label={q.label}>
-                  <Select value={String(answers[q.key] ?? '')} onChange={v => setAnswers(a => ({ ...a, [q.key]: v || undefined }))} disabled={busy}>
+                  <Select value={String(answers[q.key] ?? '')} onChange={v => { setAnswers(a => ({ ...a, [q.key]: v || undefined })); if (!typeQ) setFile(null); }} disabled={busy}>
                     <option value="">Select…</option>
                     {q.options!.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </Select>
@@ -278,9 +293,9 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
           </div>
         </Step>
 
-        <Step n={3} title={docLabel ?? 'Coach’s document'} done={!!file}>
+        <Step n={3} title={docLabel ?? (typeQ ? 'Coach’s document' : 'Document')} done={!!file}>
           {!docLabel ? (
-            <p className="text-sm text-ink-muted">Pick incoming or current member above: it decides which document the coach gives.</p>
+            <p className="text-sm text-ink-muted">{typeQ ? 'Pick incoming or current member above: it decides which document the coach gives.' : 'Fill in the details above first.'}</p>
           ) : file ? (
             <div className="flex items-center gap-3 rounded-control p-2.5 ring-1 ring-line">
               {preview ? <img src={preview} alt="" className="size-14 shrink-0 rounded-sm object-cover ring-1 ring-line" /> : <FileImage className="size-6 text-ink-subtle" aria-hidden />}
@@ -304,9 +319,25 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
           )}
         </Step>
 
-        <Step n={4} title="Grant" done={discount !== null}>
+        <Step n={4} title="Grant" done={grantDone}>
           <div className="space-y-4">
-            <Field label="Tuition fee discount">
+            {amountFields.map(f => (
+              <Field key={f.key} label={f.label} helper={f.hint}>
+                <TextInput
+                  type="number"
+                  inputMode="numeric"
+                  min={f.min}
+                  max={f.max}
+                  step={f.step}
+                  className="w-40"
+                  value={extras[f.key] === undefined ? '' : String(extras[f.key])}
+                  placeholder={f.defaultFrom?.(answers) !== undefined ? String(f.defaultFrom(answers)) : ''}
+                  onChange={e => setExtras(x => ({ ...x, [f.key]: e.target.value === '' ? undefined : Math.min(f.max ?? Infinity, Math.max(f.min ?? 0, Number(e.target.value))) }))}
+                  disabled={busy}
+                />
+              </Field>
+            ))}
+            {byDiscount && <Field label="Tuition fee discount">
               <div className="flex flex-wrap items-center gap-2">
                 {DISCOUNTS.map(p => (
                   <button
@@ -334,7 +365,7 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
                   </span>
                 )}
               </div>
-            </Field>
+            </Field>}
             <div className="grid gap-2 sm:grid-cols-2">
               {form.assessment.filter(f => f.type === 'bool').map(f => (
                 <Checkbox key={f.key} checked={extras[f.key] === true} onChange={v => setExtras(x => ({ ...x, [f.key]: v }))} label={f.label} disabled={busy} />
@@ -349,8 +380,8 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
             <div className={`rounded-control p-3.5 ring-1 ring-inset ${approved ? 'bg-success-bg ring-success-fg/30' : attempted ? 'ring-danger-fg/40' : 'ring-line'}`}>
               <Checkbox checked={approved} onChange={setApproved} label={`Approved by the ${form.approver}`} disabled={busy} />
             </div>
-            <Field label="Message to the player" optional>
-              <Textarea value={note} onChange={e => setNote(e.target.value)} rows={3} maxLength={2000} disabled={busy} placeholder="e.g. Welcome to the team! Your discount starts this semester." />
+            <Field label={`Message to the ${award.who}`} optional>
+              <Textarea value={note} onChange={e => setNote(e.target.value)} rows={3} maxLength={2000} disabled={busy} placeholder={award.messagePlaceholder} />
             </Field>
           </div>
         </Step>

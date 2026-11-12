@@ -1,6 +1,32 @@
 import { GpaRequirement, GrantEligibilityAnswers, Scholarship, StudentProfile } from '../types';
 import { isOpenToProgram } from '../data/requirementCatalog';
 
+// --- One-semester grants ------------------------------------------------------
+// e.g. the USG's SFAG (oneSemester): a grant covers the semester it was
+// decided for. In Philippine time, June–December is the 1st semester (it
+// ends with the year) and January–May the 2nd (it ends June 1). Mirrors
+// semesterEnd() in the backend's utils/semester.js.
+export function semesterEnd(date: string | Date): Date {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', year: 'numeric', month: 'numeric' }).formatToParts(new Date(date));
+  const year = Number(parts.find(p => p.type === 'year')!.value);
+  const month = Number(parts.find(p => p.type === 'month')!.value);
+  const endUtc = month >= 6 ? Date.UTC(year + 1, 0, 1) : Date.UTC(year, 5, 1);
+  return new Date(endUtc - 8 * 60 * 60 * 1000);
+}
+
+// Whether an application still stands for its scholarship: always, except
+// a one-semester grant's from an earlier semester (the student can apply
+// again in the new call).
+export function isCurrentApplication(
+  scholarship: Pick<Scholarship, 'oneSemester'> | undefined,
+  app: { submittedAt?: string; createdAt?: string },
+  now = new Date(),
+): boolean {
+  if (!scholarship?.oneSemester) return true;
+  const at = app.submittedAt || app.createdAt;
+  return !at || now < semesterEnd(at);
+}
+
 // Hides scholarships the student can't take at all (e.g. freshman-only
 // grants for upperclassmen). GPA rules don't hide anything: the profile
 // GPA may be out of date, so a low one is shown as a warning instead

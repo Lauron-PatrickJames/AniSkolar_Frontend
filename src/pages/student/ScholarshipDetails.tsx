@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Award, CheckCircle, ListChecks, HelpCircle, File
 import { motion } from 'motion/react';
 import { OFFICE_SHORT_LABELS, acceptsOnlineApplications, handlingOffice, officeOf } from '../../data/scholarships';
 import { officeFormFor } from '../../data/officeForms';
+import { isCurrentApplication } from '../../utils/eligibility';
 
 interface ScholarshipDetailsProps {
   scholarship: Scholarship;
@@ -85,8 +86,10 @@ export default function ScholarshipDetails({
   // button/badge can reflect its real review status. If a student somehow
   // has more than one application on file for this scholarship, prefer the
   // most recently submitted one.
+  // A one-semester grant's application from an earlier semester doesn't
+  // count: the student can apply again.
   const existingApplication = applications
-    .filter(app => app.scholarshipId === scholarship.id)
+    .filter(app => app.scholarshipId === scholarship.id && isCurrentApplication(scholarship, app))
     .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())[0];
 
   const isApplied = !!existingApplication;

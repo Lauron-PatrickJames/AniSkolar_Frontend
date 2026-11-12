@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Building2, CalendarCheck, CalendarClock, Check, CheckCircle2, Clock, Plus, Search, Download, Hourglass, Inbox, Pencil, Shuffle, SlidersHorizontal, Users } from 'lucide-react';
+import { AlertTriangle, Building2, CalendarCheck, CalendarClock, Check, CheckCircle2, Clock, Plus, Printer, Search, Download, Hourglass, Inbox, Pencil, Shuffle, SlidersHorizontal, Trash2, Users } from 'lucide-react';
 import {
   ClaimStatus, CreditedEvent, DutyLog, DutySummary, DutyTerm, EVENT_ORGANIZERS, EventOrganizer, GRANT_PERCENTAGES, YEAR_GROUPS, YearGroup, entryHours, format12h, formatDutyDate, formatHours, sortEntries, termLabel,
   todayInManila, weekday, weeklyTotals
@@ -7,8 +7,8 @@ import {
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
 import AttendanceDialog, { AttendanceEvent, printAttendanceSheet } from './EventAttendance';
 import { ResultDialog,
-  Alert, Avatar, Badge, Button, Card, DatePicker, Menu, DetailField, EmptyState, ErrorState, Field, KpiCard, KpiGrid, MobileList, Modal, PageHeader,
-  SearchInput, SegmentedControl, Select, Table, TableSkeleton, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
+  Alert, Avatar, Badge, Button, Card, ConfirmDialog, DatePicker, DropdownMenu, Menu, DetailField, EmptyState, ErrorState, Field, MobileList, Modal, PageHeader,
+  SearchInput, SegmentedControl, Select, Table, TableSkeleton, Tabs, Td, TextInput, Textarea, Th, Toast, Tone, Tooltip, Tr
 } from './AdminUI';
 
 // AdSO: duty hours of every SFAG holder for a term (plus any other SFAG
@@ -58,11 +58,11 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
   const [rows, setRows] = useState<ScholarRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState<'All' | State>('All');
+  // Status tabs; 'No office' lists scholars not assigned to an office yet.
+  const [filter, setFilter] = useState<'All' | State | 'No office'>('All');
   const [search, setSearch] = useState('');
   const [openLogId, setOpenLogId] = useState<string | null>(null);
   const [offices, setOffices] = useState<string[]>([]);
-  const [unassignedOnly, setUnassignedOnly] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assigning, setAssigning] = useState<ScholarRow[] | null>(null);
   const [toast, setToast] = useState('');
@@ -127,11 +127,10 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows
-      .filter(r => filter === 'All' || rowState(r, today) === filter)
-      .filter(r => !unassignedOnly || !r.officeAssigned)
+      .filter(r => filter === 'All' || (filter === 'No office' ? !r.officeAssigned : rowState(r, today) === filter))
       .filter(r => !q || r.name.toLowerCase().includes(q) || r.studentNumber.includes(q) || r.officeAssigned.toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rows, filter, search, today, unassignedOnly]);
+  }, [rows, filter, search, today]);
 
   const allVisibleSelected = visible.length > 0 && visible.every(r => selected.has(r.studentNumber));
   const toggleAllVisible = () => setSelected(prev => {
@@ -176,74 +175,111 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
     URL.revokeObjectURL(url);
   };
 
-  const kpi = (label: string, state: 'All' | State, value: number, icon: React.ElementType, tone?: Tone) => (
-    <KpiCard label={label} value={value} icon={icon} tone={tone} active={filter === state} onClick={() => setFilter(state)} loading={loading && rows.length === 0} />
-  );
+  // What's left to set up this term (shown until done).
+  const noGrant = rows.filter(r => r.grantPercentage === null).length;
+  const setup = [
+    !offices.length && { key: 'offices', text: 'Add the duty offices and their heads', action: 'Add offices', onClick: () => setOfficesOpen(true) },
+    !deadline && { key: 'deadline', text: 'Set the duty deadline for this term', action: 'Set deadline', onClick: () => setDeadlineOpen(true) },
+    unassignedCount > 0 && { key: 'assign', text: `${unassignedCount} scholar${unassignedCount === 1 ? ' has' : 's have'} no office yet`, action: 'Random assign', onClick: () => setRandomOpen(true), secondary: { label: 'Show them', onClick: () => setFilter('No office') } },
+    noGrant > 0 && { key: 'grant', text: `${noGrant} scholar${noGrant === 1 ? ' has' : 's have'} no grant % set, so their required hours are unknown`, action: 'Hours per grant', onClick: () => setHoursOpen(true) },
+  ].filter(Boolean) as { key: string; text: string; action: string; onClick: () => void; secondary?: { label: string; onClick: () => void } }[];
+  const completedPct = rows.length ? Math.round((counts.Completed / rows.length) * 100) : 0;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Duty hours"
+        description="SFAG scholars' duty hours this term: who's on track, who's behind, and where they serve."
         actions={
           <>
+            <Button icon={Building2} onClick={() => setOfficesOpen(true)}>Offices</Button>
+            <Button variant="primary" icon={CalendarCheck} onClick={() => setEventsOpen(true)} disabled={!term}>Events{pendingClaimCount ? ` (${pendingClaimCount})` : ''}</Button>
             <Menu
-              label="Setup"
+              label="More"
               icon={SlidersHorizontal}
               items={[
-                { key: 'offices', label: 'Offices and heads', icon: Building2, onSelect: () => setOfficesOpen(true) },
                 { key: 'hours', label: 'Hours per grant', icon: Clock, onSelect: () => setHoursOpen(true) },
+                { key: 'deadline', label: deadline ? 'Change deadline' : 'Set deadline', icon: CalendarClock, onSelect: () => setDeadlineOpen(true) },
                 ...(rows.length ? [{ key: 'export', label: 'Export CSV', icon: Download, onSelect: exportCsv }] : []),
               ]}
             />
-            {unassignedCount > 0 && <Button icon={Shuffle} onClick={() => setRandomOpen(true)} disabled={!term}>Random assign</Button>}
-            <Button variant="primary" icon={CalendarCheck} onClick={() => setEventsOpen(true)} disabled={!term}>Events{pendingClaimCount ? ` (${pendingClaimCount})` : ''}</Button>
           </>
         }
       />
 
+      {/* Term, deadline and overall progress */}
       {term && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Select value={termKey(term)} onChange={v => { const [y, t] = v.split('|'); load({ academicYear: Number(y), term: t as DutyTerm }); }} label="Term" className="w-full sm:w-80">
-            {termOptions.map(t => <option key={termKey(t)} value={termKey(t)}>{termLabel(t)}</option>)}
+        <div className="flex flex-col gap-4 rounded-card bg-surface p-4 ring-1 ring-line lg:flex-row lg:items-center lg:gap-6">
+          <Select value={termKey(term)} onChange={v => { const [y, t] = v.split('|'); load({ academicYear: Number(y), term: t as DutyTerm }); }} label="Term" className="w-full lg:w-72">
+            {termOptions.map(t => <option key={termKey(t)} value={termKey(t)}>{termLabel(t)}{current && termKey(t) === termKey(current) ? ' (current)' : ''}</option>)}
           </Select>
-          <div className={`flex items-center gap-3 rounded-control px-3 py-1.5 ring-1 ${deadline ? 'ring-line' : 'bg-warning-bg ring-warning-fg/30'}`}>
-            <CalendarClock className={`size-4 shrink-0 ${deadline ? 'text-ink-subtle' : 'text-warning-fg'}`} aria-hidden />
-            <span className="text-sm text-ink">
-              Deadline: <span className="font-semibold">{deadline ? formatDutyDate(deadline, true) : 'not set'}</span>
-            </span>
-            <Button size="sm" variant="ghost" onClick={() => setDeadlineOpen(true)}>{deadline ? 'Change' : 'Set deadline'}</Button>
+          <div className="flex min-w-0 items-center gap-3 lg:border-l lg:border-line lg:pl-6">
+            <CalendarClock className={`size-5 shrink-0 ${deadline ? 'text-ink-subtle' : 'text-warning-fg'}`} aria-hidden />
+            <div className="min-w-0">
+              <p className="text-xs text-ink-subtle">Deadline</p>
+              <p className={`text-sm font-semibold ${deadline ? 'text-ink' : 'text-warning-fg'}`}>{deadline ? formatDutyDate(deadline, true) : 'Not set'}</p>
+            </div>
+            <Button size="xs" variant="ghost" onClick={() => setDeadlineOpen(true)}>{deadline ? 'Change' : 'Set'}</Button>
+          </div>
+          <div className="min-w-0 flex-1 lg:border-l lg:border-line lg:pl-6">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-xs text-ink-subtle">Completed their hours</p>
+              <p className="text-sm tabular-nums text-ink"><span className="font-semibold">{counts.Completed}</span> of {rows.length}{counts.Overdue > 0 && <span className="ml-2 text-danger-fg">· {counts.Overdue} overdue</span>}</p>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-bg" aria-hidden>
+              <div className="h-full rounded-full bg-success-solid transition-all" style={{ width: `${completedPct}%` }} />
+            </div>
           </div>
         </div>
       )}
 
-      <KpiGrid columns={4}>
-        {kpi('Scholars', 'All', rows.length, Users)}
-        {kpi('Not started', 'Not started', counts['Not started'], Hourglass, 'warning')}
-        {kpi('Overdue', 'Overdue', counts.Overdue, AlertTriangle, 'danger')}
-        {kpi('Completed', 'Completed', counts.Completed, CheckCircle2, 'success')}
-      </KpiGrid>
+      {/* What's left to set up */}
+      {term && !loading && setup.length > 0 && (
+        <section aria-label="To set up this term" className="rounded-card bg-warning-bg/40 ring-1 ring-warning-fg/20">
+          <p className="flex items-center gap-2 border-b border-warning-fg/15 px-4 py-2.5 text-sm font-semibold text-ink">
+            <AlertTriangle className="size-4 text-warning-fg" aria-hidden /> To finish setting up this term
+          </p>
+          <ul className="divide-y divide-warning-fg/10">
+            {setup.map(item => (
+              <li key={item.key} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                <span className="min-w-0 flex-1 text-sm text-ink">{item.text}</span>
+                {item.secondary && <Button size="sm" variant="ghost" onClick={item.secondary.onClick}>{item.secondary.label}</Button>}
+                <Button size="sm" onClick={item.onClick}>{item.action}</Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <Card
         flush
         headerSlot={
-          <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-center sm:justify-between">
-            <SearchInput value={search} onChange={setSearch} label="Search scholars" placeholder="Search name, student number or office…" className="sm:w-80" />
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="border-b border-line">
+            <div className="overflow-x-auto px-4 pt-2">
+              <Tabs<'All' | State | 'No office'>
+                label="Show scholars"
+                value={filter}
+                onChange={setFilter}
+                tabs={[
+                  { key: 'All', label: 'All', count: rows.length },
+                  { key: 'Not started', label: 'Not started', count: counts['Not started'] },
+                  { key: 'In progress', label: 'In progress', count: counts['In progress'] },
+                  { key: 'Overdue', label: 'Overdue', count: counts.Overdue },
+                  { key: 'Completed', label: 'Completed', count: counts.Completed },
+                  ...(unassignedCount > 0 || filter === 'No office' ? [{ key: 'No office' as const, label: 'No office', count: unassignedCount }] : []),
+                ]}
+              />
+            </div>
+            <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <SearchInput value={search} onChange={setSearch} label="Search scholars" placeholder="Search name, student number or office…" className="sm:w-80" />
               {selected.size > 0 ? (
-                <>
-                  <span className="text-sm text-ink-muted">{selected.size} selected</span>
+                <div className="flex flex-wrap items-center gap-2 rounded-control bg-accent-subtle px-3 py-1.5">
+                  <span className="text-sm font-medium text-ink">{selected.size} selected</span>
                   <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
                   <Button size="sm" variant="primary" icon={Building2} onClick={() => setAssigning(rows.filter(r => selected.has(r.studentNumber)))}>Assign office</Button>
-                </>
+                </div>
               ) : (
-                <>
-                  {filter !== 'All' && <Button size="sm" variant="ghost" onClick={() => setFilter('All')}>Show all ({rows.length})</Button>}
-                  {(unassignedCount > 0 || unassignedOnly) && (
-                    <Button size="sm" variant={unassignedOnly ? 'primary' : 'secondary'} aria-pressed={unassignedOnly} onClick={() => setUnassignedOnly(v => !v)}>
-                      No office yet ({unassignedCount})
-                    </Button>
-                  )}
-                </>
+                <p className="text-xs text-ink-subtle">Tick scholars to assign an office · click a row to see their duties</p>
               )}
             </div>
           </div>
@@ -256,7 +292,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
         ) : rows.length === 0 ? (
           <EmptyState icon={Clock} title="No scholars for this term" />
         ) : visible.length === 0 ? (
-          <EmptyState title="No scholars match" />
+          <EmptyState icon={search ? Search : Users} title={search ? 'No scholar matches your search' : `No scholars ${filter === 'No office' ? 'without an office' : `“${filter}”`}`} />
         ) : (
           <>
             <div className="hidden xl:block">
@@ -306,7 +342,14 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
                           </div>
                         </Td>
                         <Td><OfficeButton row={row} onClick={() => setAssigning([row])} /></Td>
-                        <Td numeric>{s ? `${formatHours(s.completed)}${s.required !== null ? ` / ${formatHours(s.required)}` : ''}` : '—'}</Td>
+                        <Td numeric>
+                          {s ? `${formatHours(s.completed)}${s.required !== null ? ` / ${formatHours(s.required)}` : ''}` : '—'}
+                          {s?.required ? (
+                            <div className="ml-auto mt-1 h-1 w-24 overflow-hidden rounded-full bg-neutral-bg" aria-hidden>
+                              <div className={`h-full rounded-full ${state === 'Completed' ? 'bg-success-solid' : state === 'Overdue' ? 'bg-danger-solid' : 'bg-accent'}`} style={{ width: `${Math.min(100, (s.completed / s.required) * 100)}%` }} />
+                            </div>
+                          ) : null}
+                        </Td>
                         <Td numeric>{s?.remaining !== null && s?.remaining !== undefined ? formatHours(Math.max(0, s.remaining)) : '—'}</Td>
                         <Td numeric>{formatHours(s?.weeklyNeeded)}</Td>
                         <Td><Badge tone={STATE_TONE[state]} dot>{state}</Badge></Td>
@@ -724,6 +767,9 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
   const [rejecting, setRejecting] = useState<{ key: string; note: string } | null>(null);
   const [changed, setChanged] = useState(false);
   const [attendanceFor, setAttendanceFor] = useState<AdminEvent | null>(null);
+  // The add / edit form shows only when asked for (or when there are no events).
+  const [formOpen, setFormOpen] = useState(false);
+  const [deleting, setDeleting] = useState<AdminEvent | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -764,7 +810,17 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
     e.preventDefault();
     const payload = { name: draft.name, date: draft.date, organizer: draft.organizer, creditHours: Number(draft.creditHours) };
     const ok = draft.id ? await call('draft', `events/${draft.id}`, 'PUT', payload) : await call('draft', 'events', 'POST', payload);
-    if (ok) setDraft(emptyDraft());
+    if (ok) { setDraft(emptyDraft()); setFormOpen(false); }
+  };
+  const startEdit = (ev: AdminEvent) => {
+    setDraft({ id: ev._id, name: ev.name, date: ev.date, organizer: ev.organizer, creditHours: String(ev.creditHours) });
+    setFormOpen(true);
+  };
+  const cancelForm = () => { setDraft(emptyDraft()); setFormOpen(false); };
+  const remove = async () => {
+    if (!deleting) return;
+    const ok = await call(`del-${deleting._id}`, `events/${deleting._id}`, 'DELETE');
+    if (ok) setDeleting(null);
   };
   const review = async (c: PendingClaim, status: 'Approved' | 'Rejected', note = '') => {
     const ok = await call(`${c.studentNumber}|${c.eventId}`, 'claims', 'PUT', { studentNumber: c.studentNumber, eventId: c.eventId, status, note });
@@ -781,7 +837,7 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
       dismissible={!busy}
       footer={<Button onClick={close} disabled={!!busy}>Done</Button>}
     >
-      {error && <Alert tone="danger">{error}</Alert>}
+      {error && <Alert tone="danger" onDismiss={() => setError('')}>{error}</Alert>}
       {!events ? (!error && <TableSkeleton rows={4} label="Loading events" />) : (
         <div className="space-y-6">
           {pending.length > 0 && <section className="space-y-2">
@@ -820,51 +876,109 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
             )}
           </section>}
 
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-ink">{draft.id ? 'Edit event' : 'Add an event'}</h3>
-            <form onSubmit={saveDraft} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_9rem_11rem_6rem]">
-              <Field label="Event name"><TextInput value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} maxLength={200} placeholder="e.g. Scholars' Assembly" /></Field>
-              <Field label="Date"><DatePicker value={draft.date} onChange={v => setDraft(d => ({ ...d, date: v }))} /></Field>
-              <Field label="Organized by">
-                <Select value={draft.organizer} onChange={v => setDraft(d => ({ ...d, organizer: v as EventOrganizer }))}>
-                  {EVENT_ORGANIZERS.map(o => <option key={o} value={o}>{o}</option>)}
-                </Select>
-              </Field>
-              <Field label="Credit hrs"><TextInput type="number" inputMode="decimal" min={0.25} max={24} step="0.25" value={draft.creditHours} onChange={e => setDraft(d => ({ ...d, creditHours: e.target.value }))} /></Field>
-              <div className="flex gap-2 sm:col-span-4">
-                {draft.id && <Button variant="ghost" onClick={() => setDraft(emptyDraft())} disabled={busy === 'draft'}>Cancel edit</Button>}
-                <Button type="submit" variant="primary" loading={busy === 'draft'}>{draft.id ? 'Save event' : 'Add event'}</Button>
+          {/* Add / edit an event */}
+          {(formOpen || events.length === 0) ? (
+            <section className="rounded-card bg-surface-muted p-4 ring-1 ring-line sm:p-5">
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-ink">{draft.id ? 'Edit event' : 'New event'}</h3>
+                {events.length > 0 && <Button size="xs" variant="ghost" onClick={cancelForm} disabled={busy === 'draft'}>Cancel</Button>}
               </div>
-            </form>
-            <p className="text-xs text-ink-subtle">The credit is what the scholarship office approved for the event, not its length (e.g. a 1-hour event credited 3 hours). COSA events: add them once the office approves COSA's request.</p>
-          </section>
+              <form onSubmit={saveDraft} className="space-y-4">
+                <Field label="Event name">
+                  <TextInput value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} maxLength={200} placeholder="e.g. Scholars' Assembly" autoFocus />
+                </Field>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <Field label="Date"><DatePicker value={draft.date} onChange={v => setDraft(d => ({ ...d, date: v }))} /></Field>
+                  <Field label="Organized by">
+                    <Select value={draft.organizer} onChange={v => setDraft(d => ({ ...d, organizer: v as EventOrganizer }))}>
+                      {EVENT_ORGANIZERS.map(o => <option key={o} value={o}>{o}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label="Hours credited" helper="What the office approved, not how long it ran.">
+                    <TextInput type="number" inputMode="decimal" min={0.25} max={24} step="0.25" value={draft.creditHours} onChange={e => setDraft(d => ({ ...d, creditHours: e.target.value }))} />
+                  </Field>
+                </div>
+                {draft.organizer !== 'Scholarship office' && (
+                  <p className="text-xs text-ink-subtle">Add COSA events once the office approves COSA's request.</p>
+                )}
+                <div className="flex justify-end gap-2">
+                  <Button type="submit" variant="primary" icon={draft.id ? Check : Plus} loading={busy === 'draft'} disabled={!draft.name.trim()}>
+                    {draft.id ? 'Save changes' : 'Add event'}
+                  </Button>
+                </div>
+              </form>
+            </section>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-ink">Events this term <span className="font-normal text-ink-subtle">· {events.length}</span></h3>
+              <Button size="sm" variant="primary" icon={Plus} onClick={() => { setDraft(emptyDraft()); setFormOpen(true); }} disabled={!!busy}>New event</Button>
+            </div>
+          )}
 
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-ink">Events this term ({events.length})</h3>
-            {events.length === 0 ? <p className="text-sm text-ink-muted">No events yet.</p> : (
-              <ul className="divide-y divide-line rounded-control ring-1 ring-line">
-                {events.map(ev => (
-                  <li key={ev._id} className="flex flex-wrap items-center justify-between gap-2 p-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-ink">{ev.name}</p>
-                      <p className="text-xs text-ink-muted">
-                        {weekday(ev.date)}, {formatDutyDate(ev.date, true)} · {ev.organizer} · {formatHours(ev.creditHours)} hours
-                        {' · '}{ev.claims.Approved} credited{ev.claims.Pending ? `, ${ev.claims.Pending} waiting` : ''}
-                        {' · '}{ev.sheets.length ? `${ev.sheets.length} sheet${ev.sheets.length === 1 ? '' : 's'} uploaded` : 'no sheet yet'}
-                      </p>
+          {/* The term's events, newest first */}
+          {events.length > 0 && (
+            <ul className="space-y-2.5">
+              {[...events].sort((x, y) => y.date.localeCompare(x.date)).map(ev => {
+                const upcoming = ev.date > todayInManila();
+                const done = !!ev.attendanceSavedAt;
+                const d = new Date(`${ev.date}T00:00:00Z`);
+                const status = upcoming
+                  ? <Badge tone="neutral" icon={CalendarClock}>Upcoming</Badge>
+                  : done
+                    ? <Badge tone="success" dot>Attendance checked · {ev.claims.Approved} credited</Badge>
+                    : <Badge tone="warning" dot>Attendance to check</Badge>;
+                return (
+                  <li key={ev._id} className={`flex flex-col gap-3 rounded-card bg-surface p-3.5 ring-1 sm:flex-row sm:items-center ${draft.id === ev._id ? 'ring-accent' : 'ring-line'}`}>
+                    <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                      {/* Date tile */}
+                      <div className="flex w-12 shrink-0 flex-col items-center overflow-hidden rounded-control ring-1 ring-line" aria-hidden>
+                        <span className="w-full bg-surface-muted py-0.5 text-center text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                          {d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}
+                        </span>
+                        <span className="py-1 text-base font-semibold leading-none tabular-nums text-ink">{d.getUTCDate()}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink">{ev.name}</p>
+                        <p className="mt-0.5 text-xs text-ink-muted">
+                          {weekday(ev.date)}, {formatDutyDate(ev.date, true)} · {ev.organizer} · <span className="font-medium text-ink">{formatHours(ev.creditHours)} h credit</span>
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {status}
+                          {ev.claims.Pending > 0 && <Badge tone="info">{ev.claims.Pending} waiting</Badge>}
+                          <span className="text-xs text-ink-subtle">{ev.sheets.length ? `${ev.sheets.length} sheet${ev.sheets.length === 1 ? '' : 's'} uploaded` : 'No sheet uploaded'}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => { if (!printAttendanceSheet(ev)) setError('Allow pop-ups for AniSkolar to print the sheet.'); }} disabled={!!busy}>Print sheet</Button>
-                      <Button size="sm" onClick={() => setAttendanceFor(ev)} disabled={!!busy}>{ev.date > todayInManila() ? 'Attendance' : ev.attendanceSavedAt ? 'Edit attendance' : 'Check attendance'}</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setDraft({ id: ev._id, name: ev.name, date: ev.date, organizer: ev.organizer, creditHours: String(ev.creditHours) })} disabled={!!busy}>Edit</Button>
-                      <Button size="sm" variant="ghost" onClick={() => { if (window.confirm(`Delete "${ev.name}" and its uploaded sheets?`)) call(`del-${ev._id}`, `events/${ev._id}`, 'DELETE'); }} loading={busy === `del-${ev._id}`} disabled={!!busy && busy !== `del-${ev._id}`}>Delete</Button>
+                    <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-auto">
+                      <Button size="sm" variant={!upcoming && !done ? 'primary' : 'secondary'} onClick={() => setAttendanceFor(ev)} disabled={!!busy}>
+                        {upcoming ? 'Attendance' : done ? 'Edit attendance' : 'Check attendance'}
+                      </Button>
+                      <DropdownMenu
+                        label={`More for ${ev.name}`}
+                        items={[
+                          { key: 'print', label: 'Print attendance sheet', icon: Printer, onSelect: () => { if (!printAttendanceSheet(ev)) setError('Allow pop-ups for AniSkolar to print the sheet.'); } },
+                          { key: 'edit', label: 'Edit event', icon: Pencil, onSelect: () => startEdit(ev) },
+                          { key: 'delete', label: 'Delete', icon: Trash2, tone: 'danger', onSelect: () => setDeleting(ev) },
+                        ]}
+                      />
                     </div>
                   </li>
-                ))}
-              </ul>
-            )}
-          </section>
+                );
+              })}
+            </ul>
+          )}
         </div>
+      )}
+      {deleting && (
+        <ConfirmDialog
+          tone="danger"
+          title={`Delete “${deleting.name}”?`}
+          description={deleting.sheets.length ? 'Its uploaded attendance sheets are deleted too. This can’t be undone.' : 'This can’t be undone.'}
+          confirmLabel="Delete event"
+          busy={busy === `del-${deleting._id}`}
+          onConfirm={remove}
+          onCancel={() => setDeleting(null)}
+        />
       )}
       {attendanceFor && (
         <AttendanceDialog

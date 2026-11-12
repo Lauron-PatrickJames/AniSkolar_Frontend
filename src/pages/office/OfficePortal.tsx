@@ -1,16 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { Building2, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, Flag, Hourglass, LogOut, Megaphone, MessageSquare, Minus, Plus, Search, Send, ShieldCheck, Trash2, Undo2, UserMinus, UserPlus, UserRound, Users, X } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, Flag, Hourglass, MessageSquare, Search, Undo2, Users, X } from 'lucide-react';
 import AccountSecurity from '../../components/AccountSecurity';
-import logo from '../../assets/logo.png';
+import AdminLayout, { NavSection } from '../admin/AdminLayout';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
 import { DutyTerm, format12h, hoursUntilRemoved, formatDutyDate, formatHours, termLabel, weekday } from '../../utils/dutyHours';
 import { EVALUATION_ITEMS, PASSING_AVERAGE, RATING_LABELS, ratingLabel } from '../../utils/renewals';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from '../admin/adminData';
 import { ResultDialog,
-  Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, EmptyState, MobileList, ErrorState, Field, KpiCard, KpiGrid, Modal, PageHeader, SegmentedControl, Select, Table,
-  TableSkeleton, Tabs, Td, TextInput, Textarea, Th, Toast, Tr
+  Alert, Avatar, Badge, Button, Card, EmptyState, MobileList, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table,
+  TableSkeleton, Td, TextInput, Textarea, Th, Tr
 } from '../admin/AdminUI';
 
 // The office portal: for the head of a duty office (listed by the AdSO in
@@ -27,7 +27,7 @@ export interface OfficeHeadInfo {
   current: { academicYear: number; term: DutyTerm };
 }
 
-type Tab = 'scholars' | 'evaluations' | 'announcements' | 'messages';
+type Tab = 'scholars' | 'evaluations' | 'messages';
 type GetToken = () => Promise<string | null>;
 
 async function api<T>(getToken: GetToken, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
@@ -41,9 +41,31 @@ async function api<T>(getToken: GetToken, path: string, init: { method?: string;
   return body as T;
 }
 
+// The sections, in the sidebar (phones: a row of tabs).
+const SECTIONS: { key: Tab; label: string; icon: React.ElementType; description: string }[] = [
+  { key: 'scholars', label: 'Scholars & duties', icon: Users, description: 'Check the duties your SFAG scholars log, and follow their hours.' },
+  { key: 'evaluations', label: 'Evaluations', icon: ClipboardCheck, description: 'Rate each scholar once they finish their hours. It goes into their renewal.' },
+  { key: 'messages', label: 'Messages', icon: MessageSquare, description: 'Your conversation with the Admissions and Scholarship Office.' },
+];
+const isTab = (v: string): v is Tab => SECTIONS.some(sec => sec.key === v);
+
 export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo; onLogout: () => void }) {
   const { getToken } = useAuth();
-  const [tab, setTab] = useState<Tab>('scholars');
+  // The open section is kept in the address (#evaluations…), so a refresh
+  // or the browser's Back stays put.
+  const [tab, setTabState] = useState<Tab>(() => {
+    const h = window.location.hash.slice(1);
+    return isTab(h) ? h : 'scholars';
+  });
+  const setTab = useCallback((next: Tab) => {
+    setTabState(next);
+    if (window.location.hash.slice(1) !== next) window.history.pushState(window.history.state, '', `#${next}`);
+  }, []);
+  useEffect(() => {
+    const onPop = () => { const h = window.location.hash.slice(1); setTabState(isTab(h) ? h : 'scholars'); };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   const [counts, setCounts] = useState({ waiting: 0, evaluations: 0, unread: 0 });
   const [toast, setToast] = useState('');
   const [securityOpen, setSecurityOpen] = useState(false);
@@ -71,60 +93,75 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
     return () => window.removeEventListener(MESSAGES_READ_EVENT, refreshCounts);
   }, [refreshCounts]);
 
-  return (
-    <div data-admin className="min-h-dvh bg-canvas text-ink">
-      <header className="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur">
-        <div className="mx-auto flex h-topbar max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface ring-1 ring-line">
-              <img src={logo} alt="" className="size-6 object-contain" />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-tight text-accent">AniSkolar</p>
-              <p className="truncate text-xs leading-tight text-ink-subtle">Office portal</p>
-            </div>
-          </div>
-          <div className="flex min-w-0 items-center gap-3">
-            <Badge icon={Building2} className="hidden max-w-xs truncate sm:inline-flex">{head.office}</Badge>
-            <Button size="sm" variant="ghost" icon={ShieldCheck} onClick={() => setSecurityOpen(true)}><span className="hidden sm:inline">Account security</span></Button>
-            <Button size="sm" variant="ghost" icon={LogOut} onClick={onLogout}>Sign out</Button>
-          </div>
-        </div>
-      </header>
+  const countOf = (t: Tab) => (t === 'scholars' ? counts.waiting : t === 'evaluations' ? counts.evaluations : t === 'messages' ? counts.unread : 0);
+  const section = SECTIONS.find(sec => sec.key === tab)!;
+  // Same shell as the admin console: sidebar, top bar with breadcrumbs and
+  // the account menu.
+  const nav: NavSection[] = [
+    { title: '', items: [SECTIONS[0], SECTIONS[1]].map(sec => ({ id: sec.key, label: sec.label, icon: sec.icon, count: countOf(sec.key), countLabel: 'to do' })) },
+    { title: 'Communication', items: [SECTIONS[2]].map(sec => ({ id: sec.key, label: sec.label, icon: sec.icon, count: countOf(sec.key), countLabel: sec.key === 'messages' ? 'unread' : 'to do' })) },
+  ];
 
-      <main className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
-        <PageHeader
-          title={head.office}
-        />
-        <KpiGrid columns={3}>
-          <KpiCard label="Duties to check" value={counts.waiting} icon={Clock} tone={counts.waiting ? 'warning' : 'neutral'} active={tab === 'scholars'} onClick={() => setTab('scholars')} />
-          <KpiCard label="Ready to evaluate" value={counts.evaluations} icon={ClipboardCheck} tone={counts.evaluations ? 'info' : 'neutral'} active={tab === 'evaluations'} onClick={() => setTab('evaluations')} />
-          <KpiCard label="Unread messages" value={counts.unread} icon={MessageSquare} tone={counts.unread ? 'info' : 'neutral'} active={tab === 'messages'} onClick={() => setTab('messages')} />
-        </KpiGrid>
-        <Tabs<Tab>
-          label="Office portal sections"
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            { key: 'scholars', label: 'Scholars & duties', icon: Users, count: counts.waiting || undefined },
-            { key: 'evaluations', label: 'Evaluations', icon: ClipboardCheck, count: counts.evaluations || undefined },
-            { key: 'announcements', label: 'Announcements', icon: Megaphone },
-            { key: 'messages', label: 'Messages', icon: MessageSquare, count: counts.unread || undefined },
-          ]}
-        />
+  return (
+    <>
+      <AdminLayout
+        currentView={tab}
+        onNavigate={view => setTab(view as unknown as Tab)}
+        nav={nav}
+        consoleName="Office portal"
+        homeView="scholars"
+        onSecurity={() => setSecurityOpen(true)}
+        onLogout={onLogout}
+        adminEmail={head.email}
+        adminName={head.name}
+        officeLabel={head.office}
+        officeShort={head.office}
+        breadcrumbs={[{ label: section.label }]}
+        pageKey={tab}
+      >
+        <PageHeader title={section.label} description={section.description} />
+
+        {/* What needs doing, from any section. */}
+        {tab === 'scholars' && (counts.waiting > 0 || counts.evaluations > 0 || counts.unread > 0) && (
+          <div className="flex flex-col divide-y divide-line rounded-card bg-surface ring-1 ring-line sm:flex-row sm:divide-x sm:divide-y-0">
+            {counts.waiting > 0 && (
+              <TodoItem icon={Clock} tone="warning" text={`${counts.waiting} dut${counts.waiting === 1 ? 'y' : 'ies'} to check below`} action="" />
+            )}
+            {counts.evaluations > 0 && (
+              <TodoItem icon={ClipboardCheck} tone="info" text={`${counts.evaluations} scholar${counts.evaluations === 1 ? '' : 's'} ready to evaluate`} action="Evaluate" onClick={() => setTab('evaluations')} />
+            )}
+            {counts.unread > 0 && (
+              <TodoItem icon={MessageSquare} tone="info" text={`${counts.unread} unread message${counts.unread === 1 ? '' : 's'}`} action="Read" onClick={() => setTab('messages')} />
+            )}
+          </div>
+        )}
+
         {tab === 'scholars' && <ScholarsTab head={head} getToken={getToken} onChanged={refreshCounts} onToast={setToast} onEvaluate={() => setTab('evaluations')} />}
         {tab === 'evaluations' && <EvaluationsTab getToken={getToken} onChanged={refreshCounts} onToast={setToast} />}
-        {tab === 'announcements' && <AnnouncementsTab head={head} getToken={getToken} onToast={setToast} />}
         {tab === 'messages' && <MessagesTab getToken={getToken} />}
-      </main>
+      </AdminLayout>
       {toast && <ResultDialog message={toast} onClose={() => setToast('')} />}
       {securityOpen && (
         <Modal title="Account security" onClose={() => setSecurityOpen(false)} size="lg">
           <AccountSecurity />
         </Modal>
       )}
-    </div>
+    </>
   );
+}
+
+// One "to do" in the strip above the scholars: what, and a way there.
+function TodoItem({ icon: Icon, tone, text, action, onClick }: { icon: React.ElementType; tone: 'warning' | 'info'; text: string; action: string; onClick?: () => void }) {
+  const inner = (
+    <>
+      <Icon className={`size-4 shrink-0 ${tone === 'warning' ? 'text-warning-fg' : 'text-accent'}`} aria-hidden />
+      <span className="flex-1 text-sm font-medium text-ink">{text}</span>
+      {onClick && <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent">{action} <ArrowRight className="size-3.5" aria-hidden /></span>}
+    </>
+  );
+  return onClick
+    ? <button type="button" onClick={onClick} className="flex flex-1 items-center gap-2.5 px-4 py-3 text-left hover:bg-surface-muted focus:outline-hidden focus-visible:bg-surface-muted">{inner}</button>
+    : <div className="flex flex-1 items-center gap-2.5 px-4 py-3">{inner}</div>;
 }
 
 // --- Scholars & duties ------------------------------------------------------------
@@ -171,8 +208,9 @@ function EvalBadge({ state }: { state: EvalState }) {
 }
 
 function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head: OfficeHeadInfo; getToken: GetToken; onChanged: () => void; onToast: (m: string) => void; onEvaluate: () => void }) {
-  // 'all' (default): every semester, grouped newest first; or one semester.
-  const [filter, setFilter] = useState<'all' | string>('all');
+  // The current semester by default; or another one, or all of them.
+  const [filter, setFilter] = useState<'all' | string>(() => termKey(head.current));
+  const [query, setQuery] = useState('');
   const [rows, setRows] = useState<ScholarSummaryRow[] | null>(null);
   const [error, setError] = useState('');
   const [open, setOpen] = useState<ScholarSummaryRow | null>(null);
@@ -198,16 +236,24 @@ function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head:
       if (!byTerm.has(k)) byTerm.set(k, { term: t, rows: [] });
       byTerm.get(k)!.rows.push(r);
     }
+    // Who needs you first: duties to check, then ready to evaluate, then by name.
+    const rank = (r: ScholarSummaryRow) => (r.waitingCount ? 0 : r.evaluationState === 'ready' ? 1 : 2);
+    for (const g of byTerm.values()) g.rows.sort((x, y) => rank(x) - rank(y) || (x.name || '').localeCompare(y.name || ''));
     return [...byTerm.values()].sort((a, b) => b.term.academicYear - a.term.academicYear || b.term.term.localeCompare(a.term.term));
   }, [rows, head.current]);
-  const shown = filter === 'all' ? groups.filter(g => g.rows.length || termKey(g.term) === termKey(head.current)) : groups.filter(g => termKey(g.term) === filter);
+  const q = query.trim().toLowerCase();
+  const shown = (filter === 'all' ? groups.filter(g => g.rows.length || termKey(g.term) === termKey(head.current)) : groups.filter(g => termKey(g.term) === filter))
+    .map(g => ({ ...g, rows: q ? g.rows.filter(r => (r.name || '').toLowerCase().includes(q) || r.studentNumber.includes(q)) : g.rows }));
 
   return (
     <div className="space-y-4">
-      <Select value={filter} onChange={setFilter} label="Semester" className="w-full sm:w-80">
-        <option value="all">All semesters</option>
-        {groups.map(g => <option key={termKey(g.term)} value={termKey(g.term)}>{termLabel(g.term)}{termKey(g.term) === termKey(head.current) ? ' (current)' : ''}</option>)}
-      </Select>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="sm:w-72"><SearchInput value={query} onChange={setQuery} label="Search scholars" placeholder="Search name or student no.…" /></div>
+        <Select value={filter} onChange={setFilter} label="Semester" className="w-full sm:w-72">
+          {groups.map(g => <option key={termKey(g.term)} value={termKey(g.term)}>{termLabel(g.term)}{termKey(g.term) === termKey(head.current) ? ' (current)' : ''}</option>)}
+          <option value="all">All semesters</option>
+        </Select>
+      </div>
       {error && !rows ? <Card><ErrorState title="Couldn't load your scholars" message={error} onRetry={load} /></Card>
         : !rows ? <Card flush><TableSkeleton rows={4} label="Loading scholars" /></Card>
           : (
@@ -220,7 +266,7 @@ function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head:
                   title={`${termLabel(g.term)}${termKey(g.term) === termKey(head.current) ? ' · current' : ''}`}
                   description={g.rows.length ? `${g.rows.length} scholar${g.rows.length === 1 ? '' : 's'}${waiting ? ` · ${waiting} dut${waiting === 1 ? 'y' : 'ies'} to check` : ' · all duties checked'}` : undefined}
                 >
-                  {g.rows.length === 0 ? <EmptyState icon={Users} title="No scholars this semester" /> : (
+                  {g.rows.length === 0 ? <EmptyState icon={q ? Search : Users} title={q ? 'No scholar matches your search' : 'No scholars this semester'} /> : (
                     <>
                     <MobileList>
                       {g.rows.map(r => (
@@ -683,137 +729,6 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
 
 // --- Messages ---------------------------------------------------------------------
 
-// --- Announcements --------------------------------------------------------------
-// For the scholars assigned to this office: they see it with their
-// announcements, and can get it by email too, once the AdSO approves it.
-
-interface OfficeAnnouncement {
-  id: string;
-  title: string;
-  content: string;
-  // pending: waiting for the AdSO; draft: the AdSO returned it (review.note).
-  status: 'pending' | 'published' | 'draft' | 'scheduled';
-  review?: { decision: 'approved' | 'returned' | null; note: string | null; decidedAt: string | null } | null;
-  createdAt: string;
-  publishedAt: string | null;
-  emailEnabled: boolean;
-  emailStatus: string;
-  emailSent: number;
-  emailTotal: number;
-}
-
-function AnnouncementsTab({ head, getToken, onToast }: { head: OfficeHeadInfo; getToken: GetToken; onToast: (m: string) => void }) {
-  const [items, setItems] = useState<OfficeAnnouncement[] | null>(null);
-  const [error, setError] = useState('');
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [email, setEmail] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [formError, setFormError] = useState('');
-  const [deleting, setDeleting] = useState<OfficeAnnouncement | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setItems((await api<{ announcements: OfficeAnnouncement[] }>(getToken, '/api/office/announcements')).announcements);
-      setError('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load your announcements.');
-    }
-  }, [getToken]);
-  useEffect(() => { load(); }, [load]);
-
-  const post = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (busy) return;
-    if (!title.trim() || !content.trim()) return setFormError('Write a title and the message.');
-    setBusy(true);
-    setFormError('');
-    try {
-      await api(getToken, '/api/office/announcements', { method: 'POST', body: { title: title.trim(), content: content.trim(), email } });
-      setTitle(''); setContent('');
-      onToast(email ? 'Sent to the AdSO for approval. Once approved, your scholars see it and get it by email.' : 'Sent to the AdSO for approval. Your scholars see it once it’s approved.');
-      load();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Failed to post it.');
-    } finally {
-      setBusy(false);
-    }
-  };
-  const remove = async () => {
-    if (!deleting) return;
-    setBusy(true);
-    try {
-      await api(getToken, `/api/office/announcements/${deleting.id}`, { method: 'DELETE' });
-      setDeleting(null);
-      load();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Failed to delete it.');
-      setDeleting(null);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-5">
-      <Card title="New announcement" description={termLabel(head.current)} className="lg:col-span-2">
-        <form onSubmit={post} className="space-y-4">
-          {formError && <Alert tone="danger">{formError}</Alert>}
-          <Field label="Title"><TextInput value={title} onChange={e => setTitle(e.target.value)} maxLength={150} disabled={busy} placeholder="e.g. No duty on Friday" /></Field>
-          <Field label="Message"><Textarea value={content} onChange={e => setContent(e.target.value)} rows={6} maxLength={8000} disabled={busy} className="resize-y" /></Field>
-          <Checkbox checked={email} onChange={setEmail} disabled={busy} label="Also email them (Outlook)" />
-          <p className="text-xs text-ink-subtle">The Admissions and Scholarship Office approves announcements before your scholars see them.</p>
-          <Button type="submit" variant="primary" icon={Send} loading={busy}>Submit for approval</Button>
-        </form>
-      </Card>
-      <Card flush title="Your announcements" className="lg:col-span-3">
-        {error && !items ? <ErrorState title="Couldn't load your announcements" message={error} onRetry={load} />
-          : !items ? <TableSkeleton rows={3} label="Loading announcements" />
-          : !items.length ? <EmptyState icon={Megaphone} title="Nothing posted yet" />
-          : (
-            <ul className="divide-y divide-line">
-              {items.map(a => (
-                <li key={a.id} className="flex items-start gap-3 px-5 py-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium text-ink">{a.title}</p>
-                      {a.status === 'pending' ? <Badge tone="warning" icon={Hourglass}>Waiting for AdSO</Badge>
-                        : a.status === 'draft' ? <Badge tone="danger" dot>Returned</Badge>
-                          : <Badge tone="success" dot>Posted</Badge>}
-                    </div>
-                    <p className="mt-1 line-clamp-3 whitespace-pre-line text-sm text-ink-muted">{a.content}</p>
-                    {a.status === 'draft' && a.review?.note && (
-                      <p className="mt-1.5 text-xs text-danger-fg">
-                        <span className="font-semibold">The AdSO returned it:</span> {a.review.note} Delete it and post a corrected one.
-                      </p>
-                    )}
-                    <p className="mt-1.5 text-xs text-ink-subtle">
-                      {a.status === 'published' && a.publishedAt ? formatDateTime(a.publishedAt) : `Submitted ${formatDateTime(a.createdAt)}`}
-                      {a.status === 'published' && a.emailEnabled && ` · emailed ${a.emailStatus === 'sent' ? `to ${a.emailSent}` : a.emailStatus === 'failed' ? '(failed)' : '(sending)'}`}
-                      {a.status === 'pending' && a.emailEnabled && ' · emailed once approved'}
-                    </p>
-                  </div>
-                  <Button size="sm" variant="ghost" icon={Trash2} onClick={() => setDeleting(a)} aria-label={`Delete ${a.title}`} />
-                </li>
-              ))}
-            </ul>
-          )}
-      </Card>
-      {deleting && (
-        <ConfirmDialog
-          title="Delete this announcement?"
-          description={deleting.status === 'published' ? "Your scholars won't see it any more." : 'It won’t be sent for approval any more.'}
-          confirmLabel="Delete"
-          tone="danger"
-          busy={busy}
-          onConfirm={remove}
-          onCancel={() => setDeleting(null)}
-        />
-      )}
-    </div>
-  );
-}
-
 function MessagesTab({ getToken }: { getToken: GetToken }) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [error, setError] = useState('');
@@ -841,7 +756,7 @@ function MessagesTab({ getToken }: { getToken: GetToken }) {
   return (
     <Card flush title="Admissions and Scholarship Office">
       <Conversation
-        className="h-[min(62vh,600px)]"
+        className="h-[min(70dvh,680px)]"
         messages={messages}
         viewer="office"
         filesPath="/api/messages/office/files"

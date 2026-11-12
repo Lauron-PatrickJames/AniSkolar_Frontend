@@ -133,7 +133,7 @@ export async function mockApi(page: Page, {
       case '/api/renewals/mine': return json(route, { available: [], renewals: [] });
       case '/api/messages/mine/unread': return json(route, { unread: 0 });
       case '/api/messages/mine': return json(route, { messages: [] });
-      case '/api/messages/mine/offices': return json(route, { offices: [{ code: 'LSO', name: 'Admissions and Scholarship Office (AdSO)', short: 'AdSO', unread: 0, last: null }] });
+      case '/api/messages/mine/offices': return json(route, { offices: [{ code: 'LSO', name: 'Admissions and Scholarship Office (AdSO)', short: 'AdSO', started: true, unread: 0, last: null }] });
       default: return json(route, {});
     }
   });

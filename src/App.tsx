@@ -39,6 +39,8 @@ import OfficePortal, { OfficeHeadInfo } from './pages/office/OfficePortal';
 // Clerk's responsibility (it persists its own session via cookies), so
 // there's no more isLoggedIn flag or cached student profile to keep in sync.
 const SESSION_STORAGE_KEY = 'aniskolar_session';
+// "Apply" pressed while signed out: the scholarship to open after sign-in.
+const PENDING_APPLY_KEY = 'aniskolar_pending_apply';
 
 // Reads from Vite's env at build time; falls back to localhost for local
 // dev. Set VITE_API_BASE_URL in your .env (or your host's env config) once
@@ -496,7 +498,8 @@ export default function App() {
         if (currentPage === 'login' || currentPage === 'landing') {
           // Replaces the sign-in page, so Back doesn't return to it.
           replaceNextEntry.current = true;
-          setCurrentPage('dashboard');
+          // Onboarding comes first; the pending Apply waits for it.
+          if (data.student.completion?.coreComplete === false || !openPendingApply()) setCurrentPage('dashboard');
         }
       } catch (err) {
         // A failed profile fetch (network error, 5xx, etc) is NOT the same
@@ -607,8 +610,21 @@ export default function App() {
     setCurrentPage('scholarship-details');
   };
 
+  // After sign-in: open the scholarship "Apply" was pressed on, if any.
+  function openPendingApply(): boolean {
+    let id: string | null = null;
+    try { id = sessionStorage.getItem(PENDING_APPLY_KEY); sessionStorage.removeItem(PENDING_APPLY_KEY); } catch { /* no storage */ }
+    const target = id ? (scholarships.find(s => s.id === id) ?? mockScholarships.find(s => s.id === id)) : undefined;
+    if (!target) return false;
+    setSelectedScholarshipId(target.id);
+    setResubmitApplication(null);
+    setCurrentPage(acceptsOnlineApplications(target) ? 'apply-scholarship' : 'scholarship-details');
+    return true;
+  }
+
   const handleApplyScholarship = (id: string) => {
     if (!isSignedIn) {
+      try { sessionStorage.setItem(PENDING_APPLY_KEY, id); } catch { /* no storage */ }
       setCurrentPage('login');
       return;
     }
@@ -824,7 +840,7 @@ export default function App() {
           setStudent(completedStudent);
           setAuthPhase('ready');
           replaceNextEntry.current = currentPage !== 'dashboard';
-          setCurrentPage('dashboard');
+          if (!openPendingApply()) setCurrentPage('dashboard');
         }}
       />
     );
@@ -879,6 +895,7 @@ export default function App() {
             <PublicLayout onLoginClick={() => handleNavigate('login')} onLogoClick={() => handleNavigate('landing')}>
               <LandingPage
                 onLoginClick={() => handleNavigate('login')}
+                onApplyClick={handleApplyScholarship}
                 onExploreClick={() => {
                   const scElem = document.getElementById('scholarships');
                   if (scElem) {

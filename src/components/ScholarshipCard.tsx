@@ -49,6 +49,7 @@ export default function ScholarshipCard({
   id
 }: ScholarshipCardProps) {
   const blocked = !isApplied && !!blockedReason;
+  const closed = !isApplied && !blocked && scholarship.status === 'Closed';
   const showsRequirements = scholarship.requirements.length > 0;
   const preview = showsRequirements ? scholarship.requirements : scholarship.eligibility;
 
@@ -209,15 +210,17 @@ export default function ScholarshipCard({
           {onApply && acceptsOnlineApplications(scholarship) && (
             <button
               onClick={() => onApply(scholarship.id)}
-              disabled={isApplied || blocked || scholarship.status === 'Closed'}
-              className={`flex-1 h-10 text-xs font-semibold px-4 rounded-lg flex items-center justify-center space-x-1.5 transition-colors focus:outline-hidden ${
-                isApplied || blocked
+              type="button"
+              disabled={isApplied || blocked || closed}
+              title={closed ? 'Applications are closed for now' : undefined}
+              className={`flex-1 h-10 text-xs font-semibold px-4 rounded-lg flex items-center justify-center space-x-1.5 transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2 ${
+                isApplied || blocked || closed
                   ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                   : 'bg-brand-green text-white hover:bg-brand-green-dark shadow-sm'
               }`}
             >
-              <span>{isApplied ? 'Applied' : blocked ? 'Not available' : 'Apply'}</span>
-              {!isApplied && !blocked && <ChevronRight className="w-3.5 h-3.5" />}
+              <span>{isApplied ? 'Applied' : blocked ? 'Not available' : closed ? 'Closed' : 'Apply'}</span>
+              {!isApplied && !blocked && !closed && <ChevronRight className="w-3.5 h-3.5" />}
             </button>
           )}
         </div>

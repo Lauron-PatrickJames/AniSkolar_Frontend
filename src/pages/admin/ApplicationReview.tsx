@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { TemplatePicker, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
+import { QuickReplies, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
 import {
   AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Download, ExternalLink, FileText, MessageSquare, RotateCcw, ShieldCheck, XCircle
 } from 'lucide-react';
@@ -710,18 +710,16 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
           </>
         ) : (
           <>
+            <QuickReplies
+              getToken={getToken}
+              context="application"
+              vars={{ firstName: firstNameOf(name), scholarship: app.scholarshipName, referenceCode: app.referenceCode }}
+              value={message}
+              onInsert={text => { setMessage(text); if (noteError) setNoteError(''); }}
+              disabled={busy}
+            />
             <Field
               label="Message to applicant"
-              labelAside={
-                <TemplatePicker
-                  getToken={getToken}
-                  context="application"
-                  vars={{ firstName: firstNameOf(name), scholarship: app.scholarshipName, referenceCode: app.referenceCode }}
-                  value={message}
-                  onInsert={text => { setMessage(text); if (noteError) setNoteError(''); }}
-                  disabled={busy}
-                />
-              }
               optional={!changing}
               helper={noteError ? undefined : changing ? 'Required: say why the decision changed.' : undefined}
               error={noteError || undefined}

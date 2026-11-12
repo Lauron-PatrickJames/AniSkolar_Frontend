@@ -25,13 +25,15 @@ interface Props {
   // Extra controls by the Attach button (the AdSO's message templates):
   // given the current text and a way to replace it.
   composerTools?: (body: string, setBody: (text: string) => void) => React.ReactNode;
+  // Shown above the message box (the AdSO's quick replies), same arguments.
+  composerTop?: (body: string, setBody: (text: string) => void) => React.ReactNode;
 }
 
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
 const timeLabel = (iso: string) => new Date(iso).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 const sizeLabel = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-export default function Conversation({ messages, viewer, filesPath, getToken, onSend, emptyText, placeholder, className = '', composerTools }: Props) {
+export default function Conversation({ messages, viewer, filesPath, getToken, onSend, emptyText, placeholder, className = '', composerTools, composerTop }: Props) {
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
@@ -131,6 +133,7 @@ export default function Conversation({ messages, viewer, filesPath, getToken, on
             ))}
           </ul>
         )}
+        {composerTop?.(body, setBody)}
         <div className={`rounded-xl border bg-white focus-within:ring-2 ${explicit.length ? 'border-amber-400 ring-2 ring-amber-200' : 'border-slate-200 focus-within:border-brand-green focus-within:ring-brand-green/20'}`}>
         <textarea
           value={body}

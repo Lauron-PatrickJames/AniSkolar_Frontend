@@ -6,10 +6,11 @@ import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messa
 import { collegeName } from '../../data/programs';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
 import { ResultDialog, Alert, Avatar, Button, Card, ConfirmDialog, DropdownMenu, DropdownMenuItem, EmptyState, Menu, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, Skeleton, TableSkeleton, TextInput, Toast } from './AdminUI';
-import { TemplatePicker, UnfilledHint, firstNameOf } from './ReplyTemplates';
+import { QuickReplies, UnfilledHint, firstNameOf } from './ReplyTemplates';
 
-// AdSO: conversations with students (backend routes/messages.js), one per
-// student. Left: every conversation, newest first, with unread counts;
+// An office's conversations with students (backend routes/messages.js),
+// one per student: each office (AdSO, POLCA, Alumni…) has its own inbox.
+// The AdSO also has the duty offices' conversations. Left: every conversation, newest first, with unread counts;
 // right: the open one. A conversation can also be started from an
 // application or a scholar ("Message student"), or here by student number.
 // The AdSO can pin, archive, mark as unread or delete a conversation; that
@@ -51,8 +52,10 @@ interface ThreadDetail {
   state?: { pinned: boolean; archived: boolean; markedUnread: boolean };
 }
 
-export default function MessagesPage({ getToken, selectedStudent, onSelectStudent, onOpenApplication, onOpenScholar }: {
+export default function MessagesPage({ getToken, isAdso = true, selectedStudent, onSelectStudent, onOpenApplication, onOpenScholar }: {
   getToken: () => Promise<string | null>;
+  // Duty offices write to the AdSO only.
+  isAdso?: boolean;
   selectedStudent: string | null;
   onSelectStudent: (studentNumber: string | null) => void;
   onOpenApplication: (applicationId: string) => void;
@@ -255,7 +258,7 @@ export default function MessagesPage({ getToken, selectedStudent, onSelectStuden
           </Card>
         )}
       </div>
-      {newOpen && <NewMessageDialog getToken={getToken} onClose={() => setNewOpen(false)} onOpen={key => { setNewOpen(false); onSelectStudent(key); }} />}
+      {newOpen && <NewMessageDialog getToken={getToken} isAdso={isAdso} onClose={() => setNewOpen(false)} onOpen={key => { setNewOpen(false); onSelectStudent(key); }} />}
       {deleting && (
         <ConfirmDialog
           tone="danger"
@@ -363,12 +366,10 @@ function ThreadView({ studentNumber, getToken, onBack, onOpenApplication, onOpen
         onSend={send}
         emptyText="No messages yet. Write the first one below — the student is also emailed."
         placeholder="Write to the student…"
-        composerTools={(body, setBody) => (
-          <>
-            <TemplatePicker getToken={getToken} context="message" vars={{ firstName: firstNameOf(s.name) }} value={body} onInsert={setBody} />
-            <UnfilledHint text={body} />
-          </>
+        composerTop={(body, setBody) => (
+          <QuickReplies getToken={getToken} vars={{ firstName: firstNameOf(s.name) }} value={body} onInsert={setBody} />
         )}
+        composerTools={body => <UnfilledHint text={body} />}
       />
     </Card>
   );
@@ -480,13 +481,14 @@ function StudentProfileDialog({ studentNumber, getToken, onClose, onOpenRecord }
 
 // New message: pick who from a live search (students by name or student
 // number) or the list of duty offices with a head; picking opens the chat.
-function NewMessageDialog({ getToken, onClose, onOpen }: { getToken: () => Promise<string | null>; onClose: () => void; onOpen: (key: string) => void }) {
+function NewMessageDialog({ getToken, isAdso, onClose, onOpen }: { getToken: () => Promise<string | null>; isAdso: boolean; onClose: () => void; onOpen: (key: string) => void }) {
   const [to, setTo] = useState<'Student' | 'Office'>('Student');
   const [query, setQuery] = useState('');
   const [found, setFound] = useState<{ studentNumber: string; name: string; programCode?: string; college?: string; yearLevel?: string }[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [offices, setOffices] = useState<{ office: string; headName?: string; headEmail?: string }[]>([]);
   useEffect(() => {
+    if (!isAdso) return;
     (async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/settings`, { headers: await authHeaders(getToken) });
@@ -495,7 +497,7 @@ function NewMessageDialog({ getToken, onClose, onOpen }: { getToken: () => Promi
         // no offices to pick
       }
     })();
-  }, [getToken]);
+  }, [getToken, isAdso]);
 
   // Students, a moment after typing.
   useEffect(() => {
@@ -504,7 +506,7 @@ function NewMessageDialog({ getToken, onClose, onOpen }: { getToken: () => Promi
     setSearching(true);
     const timer = window.setTimeout(async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/announcements/email/students?q=${encodeURIComponent(query.trim())}`, { headers: await authHeaders(getToken) });
+        const res = await fetch(`${API_BASE_URL}/api/messages/admin/students?q=${encodeURIComponent(query.trim())}`, { headers: await authHeaders(getToken) });
         const body = await res.json().catch(() => ({}));
         if (!cancelled) setFound(res.ok ? body.students ?? [] : []);
       } catch {
@@ -558,9 +560,9 @@ function NewMessageDialog({ getToken, onClose, onOpen }: { getToken: () => Promi
                   </li>
                 ))}
                 {found && found.length === 0 && (
-                  typedNumber
+                  typedNumber && isAdso
                     ? <li><button type="button" onClick={() => onOpen(typedNumber)} className={row}><MessageSquare className="size-4 text-ink-subtle" aria-hidden /><span className="text-sm text-ink">Write to <span className="font-medium tabular-nums">{typedNumber}</span></span></button></li>
-                    : <li className="py-10 text-center text-sm text-ink-subtle">No student found.</li>
+                    : <li className="py-10 text-center text-sm text-ink-subtle">{isAdso ? 'No student found.' : 'No student found among your office’s applicants.'}</li>
                 )}
               </ul>
             )
@@ -643,6 +645,10 @@ function OfficeThreadView({ office, getToken, onBack, onChanged, menu }: {
         onSend={async msg => { const m = await postMessage(path, getToken, msg); setData(d => (d ? { ...d, messages: [...d.messages, m] } : d)); onChanged(); }}
         emptyText="No messages yet. Write the first one below — the office head is also emailed."
         placeholder="Write to the office…"
+        composerTop={(body, setBody) => (
+          <QuickReplies getToken={getToken} vars={{ firstName: firstNameOf(data.office.headName) }} value={body} onInsert={setBody} />
+        )}
+        composerTools={body => <UnfilledHint text={body} />}
       />
     </Card>
   );

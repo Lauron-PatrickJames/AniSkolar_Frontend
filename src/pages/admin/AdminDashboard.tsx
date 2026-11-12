@@ -66,7 +66,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const directAward = mockScholarships.filter(s => s.directAward && officeOf(s) === (adminOffice ?? 'LSO'));
   const onlyDirect = !!adminOffice && directAward.length > 0 && mockScholarships.filter(s => officeOf(s) === adminOffice).every(s => s.directAward);
   const hiddenViews: MainView[] = isAdso ? [] : [
-    'analytics', 'automation', 'fse', 'dutyHours', 'messages', 'students',
+    'analytics', 'automation', 'fse', 'dutyHours', 'students',
     ...(officeHasRenewals ? [] : ['renewals' as MainView]),
   ];
   // Its scholars' records still open in the application view.
@@ -153,18 +153,17 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const pendingCount = useMemo(() => applications.filter(a => a.status === 'Under Evaluation').length, [applications]);
 
-  // Unread messages from students (AdSO only): on every page change, every
-  // minute, and when a conversation is read.
+  // Unread messages from students in this office's inbox (every office has
+  // one): on every page change, every minute, and when a conversation is read.
   const [messageCount, setMessageCount] = useState(0);
   const checkMessages = useCallback(async () => {
-    if (!isAdso) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/messages/admin/unread`, { headers: await authHeaders(getToken) });
       if (res.ok && mounted.current) setMessageCount((await res.json()).unread ?? 0);
     } catch {
       // keep the last count
     }
-  }, [isAdso, getToken]);
+  }, [getToken]);
   useEffect(() => {
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') checkMessages(); }, 60_000);
     window.addEventListener(MESSAGES_READ_EVENT, checkMessages);
@@ -189,7 +188,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     return () => window.clearInterval(timer);
   }, [checkAnnouncements]);
   useEffect(() => { checkAnnouncements(); }, [checkAnnouncements, mainView]);
-  // Opens the conversation with a student (AdSO).
+  // Opens the conversation with a student in this office's Messages.
   const messageStudent = (studentNumber: string) => { navigate('messages'); setSelectedScholar(studentNumber); };
   const selected = selectedId ? applications.find(a => a._id === selectedId) ?? null : null;
 
@@ -292,10 +291,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const nextId = queueIndex >= 0 && queueIndex < queue.length - 1 ? queue[queueIndex + 1] : null;
 
   let page: React.ReactNode;
-  if (mainView === 'messages' && isAdso) {
+  if (mainView === 'messages') {
     page = (
       <MessagesPage
         getToken={getToken}
+        isAdso={isAdso}
         selectedStudent={selectedScholar}
         onSelectStudent={studentNumber => (studentNumber ? setSelectedScholar(studentNumber) : backToList())}
         onOpenApplication={applicationId => { navigate('applications'); openApplication(applicationId, []); }}
@@ -339,7 +339,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           // Opened from a scholar, not the list: no Prev / Next.
           openApplication(applicationId, []);
         }}
-        onMessageStudent={isAdso ? messageStudent : undefined}
+        onMessageStudent={messageStudent}
         onAddScholar={directAward.length ? () => setAddScholarFor(directAward[0].id) : undefined}
       />
     );
@@ -402,7 +402,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onPrev={prevId ? () => stepTo(prevId) : undefined}
         onNext={nextId ? () => stepTo(nextId) : undefined}
         onOpenScholar={studentNumber => { navigate('lifecycle'); setSelectedScholar(studentNumber); }}
-        onMessageStudent={isAdso ? messageStudent : undefined}
+        onMessageStudent={messageStudent}
         onAdminFieldsSaved={adminFields => setApplications(prev => prev.map(a => (a._id === selected._id ? { ...a, adminFields } : a)))}
       />
     );

@@ -11,6 +11,8 @@ import heroImage from '../assets/sample hero 1.jpg';
 
 interface LandingPageProps {
   onLoginClick: () => void;
+  // Apply on a card: sign in, then that scholarship's application.
+  onApplyClick?: (id: string) => void;
   onExploreClick: () => void;
   onViewScholarship: (id: string) => void;
   scholarships?: Scholarship[];
@@ -24,7 +26,7 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   invalid_domain: 'Please sign in with your official DLSU-D email address (@dlsud.edu.ph). Other email accounts are not allowed.',
 };
 
-export default function LandingPage({ onLoginClick, onExploreClick, onViewScholarship, scholarships = mockScholarships, announcements = [], announcementsLoaded = true }: LandingPageProps) {
+export default function LandingPage({ onLoginClick, onApplyClick, onExploreClick, onViewScholarship, scholarships = mockScholarships, announcements = [], announcementsLoaded = true }: LandingPageProps) {
   // Local state for Accordion FAQs
   const [openFaqIdx, setOpenFaqIdx] = useState<number | null>(0);
 
@@ -212,7 +214,7 @@ export default function LandingPage({ onLoginClick, onExploreClick, onViewSchola
                 key={scholarship.id}
                 scholarship={scholarship}
                 onViewDetails={onViewScholarship}
-                onApply={onLoginClick} // Prompt login first
+                onApply={onApplyClick ?? (() => onLoginClick())}
               />
             ))}
           </div>

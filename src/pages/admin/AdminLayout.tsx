@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionConfig } from 'motion/react';
-import { Award, BarChart3, Building2, Calculator, ChevronDown, ChevronRight, Clock, GraduationCap, LayoutDashboard, LayoutList, MessageSquareText, LogOut, Megaphone, Menu, MessageSquare, RefreshCw, ShieldCheck, Users, X, Zap } from 'lucide-react';
+import { Award, BarChart3, Building2, Calculator, ChevronDown, ChevronRight, Clock, GraduationCap, LayoutDashboard, LayoutList, LogOut, Megaphone, Menu, MessageSquare, RefreshCw, ShieldCheck, Users, X, Zap } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import { Avatar, IconButton } from './AdminUI';
 
@@ -28,7 +28,7 @@ const SECTIONS: { title: string; items: { id: MainView; icon: React.ElementType 
   { title: 'Programs', items: [{ id: 'scholarships', icon: Award }] },
   { title: 'Review', items: [{ id: 'applications', icon: LayoutList }, { id: 'renewals', icon: RefreshCw }, { id: 'lifecycle', icon: GraduationCap }, { id: 'students', icon: Users }, { id: 'dutyHours', icon: Clock }] },
   { title: 'Insights', items: [{ id: 'analytics', icon: BarChart3 }, { id: 'fse', icon: Calculator }] },
-  { title: 'Communication', items: [{ id: 'messages', icon: MessageSquare }, { id: 'announcements', icon: Megaphone }, { id: 'templates', icon: MessageSquareText }] },
+  { title: 'Communication', items: [{ id: 'messages', icon: MessageSquare }, { id: 'announcements', icon: Megaphone }] },
   { title: 'Manage', items: [{ id: 'automation', icon: Zap }] }
 ];
 

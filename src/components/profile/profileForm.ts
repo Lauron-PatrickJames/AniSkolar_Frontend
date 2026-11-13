@@ -31,9 +31,12 @@ export interface ProfileDraft {
   fatherName: string;
   fatherContactNo: string;
   fatherDeceased: boolean;
+  // Not part of the student's life (solo-parent household, unknown parent).
+  fatherAbsent: boolean;
   motherName: string;
   motherContactNo: string;
   motherDeceased: boolean;
+  motherAbsent: boolean;
   guardianType: GuardianType | '';
   guardianName: string;
   guardianRelationship: string;
@@ -58,7 +61,7 @@ export function emptyDraft(): ProfileDraft {
     firstName: '', lastName: '', middleName: '', nameSuffix: '', dateOfBirth: '', placeOfBirth: '', nationality: 'Filipino', civilStatus: '',
     homeAddress: '', cityMunicipality: '', province: '', zipCode: '', country: PHILIPPINES,
     mobileNumber: '', telephoneNumber: '',
-    fatherName: '', fatherContactNo: '', fatherDeceased: false, motherName: '', motherContactNo: '', motherDeceased: false,
+    fatherName: '', fatherContactNo: '', fatherDeceased: false, fatherAbsent: false, motherName: '', motherContactNo: '', motherDeceased: false, motherAbsent: false,
     guardianType: '', guardianName: '', guardianRelationship: '', guardianContactNo: '', guardianAddress: '',
     guardianAddressSameAsHome: false,
   };
@@ -91,9 +94,11 @@ export function draftFromStudent(s: StudentProfile): ProfileDraft {
     fatherName: text(s.fatherName),
     fatherContactNo: formatPhone(s.fatherContactNo),
     fatherDeceased: !!s.fatherDeceased,
+    fatherAbsent: !!s.fatherAbsent && !s.fatherDeceased,
     motherName: text(s.motherName),
     motherContactNo: formatPhone(s.motherContactNo),
     motherDeceased: !!s.motherDeceased,
+    motherAbsent: !!s.motherAbsent && !s.motherDeceased,
     guardianType: guardianTypeOf(s),
     guardianName: text(s.guardianName),
     guardianRelationship: text(s.guardianRelationship),
@@ -111,7 +116,7 @@ export const SECTION_FIELDS: Record<DraftSection, DraftField[]> = {
   academic: ['programCode', 'yearLevel', 'section', 'gpa'],
   personal: ['firstName', 'lastName', 'middleName', 'nameSuffix', 'dateOfBirth', 'placeOfBirth', 'nationality', 'civilStatus'],
   contact: ['homeAddress', 'country', 'province', 'cityMunicipality', 'zipCode', 'mobileNumber', 'telephoneNumber'],
-  family: ['fatherName', 'fatherContactNo', 'fatherDeceased', 'motherName', 'motherContactNo', 'motherDeceased', 'guardianType', 'guardianName', 'guardianRelationship', 'guardianContactNo', 'guardianAddress', 'guardianAddressSameAsHome'],
+  family: ['fatherName', 'fatherContactNo', 'fatherDeceased', 'fatherAbsent', 'motherName', 'motherContactNo', 'motherDeceased', 'motherAbsent', 'guardianType', 'guardianName', 'guardianRelationship', 'guardianContactNo', 'guardianAddress', 'guardianAddressSameAsHome'],
 };
 export const ALL_SECTIONS = Object.keys(SECTION_FIELDS) as DraftSection[];
 
@@ -122,8 +127,12 @@ export function changedSections(before: ProfileDraft, after: ProfileDraft): Draf
 
 // Living parents, both listed: no guardian needed (as the backend's
 // profile completion counts it).
-export const needsGuardian = (d: Pick<ProfileDraft, 'fatherName' | 'fatherDeceased' | 'motherName' | 'motherDeceased'>) =>
-  !(d.fatherName.trim() && !d.fatherDeceased && d.motherName.trim() && !d.motherDeceased);
+type ParentFields = Pick<ProfileDraft, 'fatherName' | 'fatherDeceased' | 'fatherAbsent' | 'motherName' | 'motherDeceased' | 'motherAbsent'>;
+// Living and part of the student's life: can be the guardian, and gives a
+// contact number.
+export const parentPresent = (d: ParentFields, who: 'father' | 'mother') => !d[`${who}Deceased`] && !d[`${who}Absent`];
+export const needsGuardian = (d: ParentFields) =>
+  !(d.fatherName.trim() && parentPresent(d, 'father') && d.motherName.trim() && parentPresent(d, 'mother'));
 
 const isPh = (d: ProfileDraft) => !d.country || d.country === PHILIPPINES;
 
@@ -161,10 +170,16 @@ export function validateDraft(d: ProfileDraft, { sections = ALL_SECTIONS }: { se
   need('province', isPh(d) ? 'Choose your province.' : 'Enter your state or province.');
   need('cityMunicipality', 'Choose your city or municipality.');
   need('zipCode', 'Enter your ZIP code.');
-  need('fatherName', 'Enter your father’s full name.');
-  if (!d.fatherDeceased) need('fatherContactNo', 'Enter your father’s contact number, or tick “Deceased”.');
-  need('motherName', 'Enter your mother’s full name.');
-  if (!d.motherDeceased) need('motherContactNo', 'Enter your mother’s contact number, or tick “Deceased”.');
+  // A deceased parent's name is optional; a parent marked "Not applicable"
+  // (solo parent, unknown) has no name or number at all.
+  if (parentPresent(d, 'father')) {
+    need('fatherName', 'Enter your father’s full name, or mark him deceased or not applicable.');
+    need('fatherContactNo', 'Enter your father’s contact number.');
+  }
+  if (parentPresent(d, 'mother')) {
+    need('motherName', 'Enter your mother’s full name, or mark her deceased or not applicable.');
+    need('motherContactNo', 'Enter your mother’s contact number.');
+  }
   if (checked.has('guardianType') && !d.guardianType && needsGuardian(d)) e.guardianType = 'Choose who your guardian is.';
   if (d.guardianType === 'other') {
     need('guardianContactNo', 'Enter your guardian’s contact number.');
@@ -202,8 +217,8 @@ export function validateDraft(d: ProfileDraft, { sections = ALL_SECTIONS }: { se
     if (d[f].trim() && !isValidContactNumber(d[f])) e[f] = 'Enter a valid phone number.';
   }
 
-  if (d.guardianType === 'father' && d.fatherDeceased) e.guardianType = 'Your father is marked deceased; choose another guardian.';
-  if (d.guardianType === 'mother' && d.motherDeceased) e.guardianType = 'Your mother is marked deceased; choose another guardian.';
+  if (d.guardianType === 'father' && !parentPresent(d, 'father')) e.guardianType = 'Choose another guardian; your father can’t be listed.';
+  if (d.guardianType === 'mother' && !parentPresent(d, 'mother')) e.guardianType = 'Choose another guardian; your mother can’t be listed.';
   if (d.guardianType === 'other') {
     need('guardianName', 'Enter your guardian’s name.');
     need('guardianRelationship', 'Enter how they’re related to you.');
@@ -247,12 +262,14 @@ function fullPayload(d: ProfileDraft) {
     country: ph ? PHILIPPINES : d.country.trim(),
     mobileNumber: d.mobileNumber.trim(),
     telephoneNumber: d.telephoneNumber.trim(),
-    fatherName: d.fatherName.trim(),
-    fatherContactNo: d.fatherDeceased ? '' : d.fatherContactNo.trim(),
+    fatherName: d.fatherAbsent ? '' : d.fatherName.trim(),
+    fatherContactNo: parentPresent(d, 'father') ? d.fatherContactNo.trim() : '',
     fatherDeceased: d.fatherDeceased,
-    motherName: d.motherName.trim(),
-    motherContactNo: d.motherDeceased ? '' : d.motherContactNo.trim(),
+    fatherAbsent: d.fatherAbsent && !d.fatherDeceased,
+    motherName: d.motherAbsent ? '' : d.motherName.trim(),
+    motherContactNo: parentPresent(d, 'mother') ? d.motherContactNo.trim() : '',
     motherDeceased: d.motherDeceased,
+    motherAbsent: d.motherAbsent && !d.motherDeceased,
     guardianType: d.guardianType,
     guardianName: d.guardianType === 'other' ? d.guardianName.trim() : '',
     guardianRelationship: d.guardianType === 'other' ? d.guardianRelationship.trim() : '',

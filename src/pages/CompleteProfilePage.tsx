@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth, useClerk, useUser } from '@clerk/react';
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowRight, LogOut } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, LogOut } from 'lucide-react';
 import { StudentProfile } from '../types';
 import logo from '../assets/logo.png';
+import CampusBackdrop from '../components/CampusBackdrop';
 import { Alert, Button, Field, TextInput } from './admin/AdminUI';
 import { AcademicFields, ContactFields, FamilyFields, LockedValue, PersonalFields } from '../components/profile/ProfileFormSections';
 import { DraftField, DraftSection, ProfileDraft, SECTION_FIELDS, draftFromStudent, draftToPayload, emptyDraft, validateDraft } from '../components/profile/profileForm';
@@ -129,6 +130,7 @@ export default function CompleteProfilePage({ existing, onComplete }: CompletePr
   const firstName = titleCaseName(names.firstName.split(' ')[0] ?? '');
   const email = user?.primaryEmailAddress?.emailAddress ?? '';
 
+
   return (
     <div data-admin className="min-h-dvh bg-canvas text-ink">
       <header className="sticky top-0 z-20 border-b border-line bg-surface/90 backdrop-blur">
@@ -151,23 +153,23 @@ export default function CompleteProfilePage({ existing, onComplete }: CompletePr
         </div>
       </header>
 
-      <main className="mx-auto max-w-xl px-4 py-8 sm:px-6 sm:py-12">
+      <main className="pb-10">
         {completing ? <MoreDetailsSteps student={completing} onDone={onComplete} /> : (
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
-        >
-          <h1 className="font-display text-2xl font-bold tracking-tight text-ink">
-            {existing ? 'A few details are missing' : `Welcome${firstName ? `, ${firstName}` : ''}`}
-          </h1>
-          <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-            {existing
+        <>
+          <Hero
+            title={existing ? 'A few details are missing' : `Welcome${firstName ? `, ${firstName}` : ''}`}
+            description={existing
               ? 'We need these to show you the scholarships you can apply for.'
-              : 'Four details to get you started: they decide which scholarships you’re shown. The rest of your profile can wait. Fill it in from your Profile any time, or save it from your first application.'}
-          </p>
-
-          <form ref={formRef} onSubmit={submit} noValidate className="mt-6 space-y-5 rounded-card bg-surface p-5 shadow-card ring-1 ring-line sm:p-6 @container">
+              : 'We need four details to show you the scholarships you can apply for.'}
+          />
+          <motion.div
+            className="relative z-10 mx-auto -mt-12 max-w-3xl px-4 sm:-mt-14 sm:px-6"
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: 'easeOut', delay: 0.05 }}
+          >
+          <form ref={formRef} onSubmit={submit} noValidate className="overflow-hidden rounded-xl border border-line bg-surface shadow-card @container">
+            <div className="space-y-4 px-5 py-5 sm:px-7 sm:py-6">
             {serverError && <Alert tone="danger" onDismiss={() => setServerError('')}>{serverError}</Alert>}
             <AcademicFields
               draft={draft}
@@ -180,13 +182,14 @@ export default function CompleteProfilePage({ existing, onComplete }: CompletePr
               } : undefined}
               extra={existing ? undefined : (
                 <div data-field="studentNumber">
-                  <Field label="Student number" error={errorFor('studentNumber')} helper={!errorFor('studentNumber') ? 'The 9 digits on your student ID, e.g. 202312345.' : undefined}>
+                  <Field label="Student number" error={errorFor('studentNumber')} helper={!errorFor('studentNumber') ? 'The 9 digits on your student ID.' : undefined}>
                     <TextInput
                       value={studentNumber}
                       inputMode="numeric"
                       autoComplete="off"
                       maxLength={9}
                       placeholder="e.g. 202312345"
+                      className="tabular-nums tracking-wide"
                       onChange={e => { setStudentNumber(e.target.value.replace(/\D/g, '')); setStudentNumberTaken(''); }}
                       onBlur={() => touch('studentNumber')}
                     />
@@ -194,26 +197,52 @@ export default function CompleteProfilePage({ existing, onComplete }: CompletePr
                 </div>
               )}
             />
-            <div className="space-y-3 border-t border-line pt-5">
+            </div>
+
+            <div className="flex flex-col gap-4 border-t border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+              <p className="text-xs leading-relaxed text-ink-subtle sm:max-w-xs">
+                The rest of your profile can be filled in any time.
+                {!existing?.programCode && ' Check your program: only the Admissions and Scholarship Office can change it later.'}
+              </p>
               {/* "Continue" comes first so Enter in a field means Continue;
                   shown on the right on wider screens. */}
-              <div className="flex flex-col items-stretch gap-2 sm:flex-row-reverse">
+              <div className="flex flex-col gap-2 sm:flex-row-reverse">
                 <Button type="submit" variant="primary" loading={submitting && !wantsFull.current} disabled={submitting} iconRight={ArrowRight} onClick={() => { wantsFull.current = false; }}>
-                  Continue
+                  Continue to portal
                 </Button>
                 <Button type="submit" loading={submitting && wantsFull.current} disabled={submitting} onClick={() => { wantsFull.current = true; }}>
-                  Complete my full profile
+                  Fill in full profile now
                 </Button>
               </div>
-              <p className="text-xs text-ink-subtle sm:text-right">
-                “Continue” takes you to the portal now; the rest can be filled in any time. Your program can only be changed by the Admissions and Scholarship Office afterwards.
-              </p>
             </div>
           </form>
-        </motion.div>
+          </motion.div>
+        </>
         )}
       </main>
     </div>
+  );
+}
+
+// Green campus band at the top of both setup views; the form card overlaps
+// its bottom edge.
+function Hero({ eyebrow, title, description, wide, children }: { eyebrow?: string; title: string; description: string; wide?: boolean; children?: React.ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <section className="relative overflow-hidden bg-[#06301b]">
+      <CampusBackdrop tint="linear-gradient(160deg, rgba(0, 48, 26, 0.86), rgba(0, 72, 38, 0.93))" />
+      <motion.div
+        className={`relative z-10 mx-auto px-4 pt-7 pb-20 sm:px-6 sm:pt-9 sm:pb-22 ${wide ? 'max-w-5xl' : 'max-w-3xl'}`}
+        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+      >
+        {eyebrow && <p className="text-sm text-emerald-100/80">{eyebrow}</p>}
+        <h1 className="mt-0.5 font-display text-2xl font-bold tracking-tight text-balance text-white sm:text-3xl">{title}</h1>
+        <p className="mt-2 max-w-xl text-sm leading-relaxed text-pretty text-emerald-50/85">{description}</p>
+        {children}
+      </motion.div>
+    </section>
   );
 }
 
@@ -255,6 +284,7 @@ function MoreDetailsSteps({ student, onDone }: { student: StudentProfile; onDone
   const [serverError, setServerError] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
   const current = MORE_STEPS[step];
+  const isLast = step === MORE_STEPS.length - 1;
 
   const all = validateDraft(draft, { sections: current.sections });
   const errors = Object.fromEntries(current.fields.filter(f => all[f]).map(f => [f, all[f]])) as Partial<Record<DraftField, string>>;
@@ -290,7 +320,7 @@ function MoreDetailsSteps({ student, onDone }: { student: StudentProfile; onDone
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setServerError(data.error || 'These details couldn’t be saved. Please try again.'); return; }
       setLatest(data.student);
-      if (step === MORE_STEPS.length - 1) { onDone(data.student); return; }
+      if (isLast) { onDone(data.student); return; }
       setStep(step + 1);
       setAttempted(false);
       setTouched(new Set());
@@ -302,24 +332,34 @@ function MoreDetailsSteps({ student, onDone }: { student: StudentProfile; onDone
   };
 
   return (
+    <>
+    <Hero
+      wide
+      eyebrow={`Step ${step + 1} of ${MORE_STEPS.length}`}
+      title={current.title}
+      description={`${current.description} Saved as you go.`}
+    >
+      <ol className="mt-4 grid max-w-2xl grid-cols-3 gap-2" aria-label="Steps">
+        {MORE_STEPS.map((s, i) => (
+          <li key={s.title} className="space-y-1.5">
+            <span aria-hidden className={`block h-1 rounded-full transition-colors duration-300 ${i <= step ? 'bg-white' : 'bg-white/20'}`} />
+            <span className={`hidden text-xs sm:block ${i === step ? 'font-medium text-white' : 'text-emerald-100/60'}`}>
+              {s.title}<span className="sr-only">{i < step ? ' (saved)' : i === step ? ' (current)' : ''}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </Hero>
     <motion.div
       key={step}
-      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+      className="relative z-10 mx-auto -mt-14 max-w-5xl px-4 sm:-mt-16 sm:px-6"
+      initial={reduceMotion ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: 'easeOut' }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
     >
-      <p className="text-xs font-semibold uppercase tracking-wide text-accent">Step {step + 1} of {MORE_STEPS.length}</p>
-      <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-ink">{current.title}</h1>
-      <p className="mt-2 text-sm leading-relaxed text-ink-muted">{current.description} Each step is saved as you go.</p>
-      <div className="mt-4 flex gap-1.5" aria-hidden>
-        {MORE_STEPS.map((s, i) => (
-          <span key={s.title} className={`h-1 flex-1 rounded-full transition-colors ${i <= step ? 'bg-accent' : 'bg-line'}`} />
-        ))}
-      </div>
-
-      <form onSubmit={save} noValidate className="mt-6 space-y-5 rounded-card bg-surface p-5 shadow-card ring-1 ring-line sm:p-6 @container">
-        {serverError && <Alert tone="danger" onDismiss={() => setServerError('')}>{serverError}</Alert>}
-        <div ref={panelRef} className="space-y-5">
+      <form onSubmit={save} noValidate className="overflow-hidden rounded-xl border border-line bg-surface shadow-card @container">
+        <div ref={panelRef} className="space-y-5 px-5 py-6 sm:px-7 sm:py-7">
+          {serverError && <Alert tone="danger" onDismiss={() => setServerError('')}>{serverError}</Alert>}
           {step === 0 && (
             <>
               <div data-field="section" className="max-w-xs">
@@ -336,13 +376,23 @@ function MoreDetailsSteps({ student, onDone }: { student: StudentProfile; onDone
           {step === 1 && <ContactFields draft={draft} update={update} errorFor={errorFor} touch={touch} email={latest.email} />}
           {step === 2 && <FamilyFields draft={draft} update={update} errorFor={errorFor} touch={touch} />}
         </div>
-        <div className="flex flex-col-reverse items-stretch gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <Button variant="ghost" disabled={saving} onClick={() => onDone(latest)}>Skip the rest for now</Button>
-          <Button type="submit" variant="primary" loading={saving} iconRight={step === MORE_STEPS.length - 1 ? undefined : ArrowRight}>
-            {step === MORE_STEPS.length - 1 ? 'Save and finish' : 'Save and continue'}
+        <div className="flex flex-col-reverse items-stretch gap-3 border-t border-line bg-surface-muted/60 px-5 py-4 sm:flex-row sm:items-center sm:px-7">
+          <div className="flex items-center justify-between gap-2 sm:justify-start">
+            {step > 0 && (
+              <Button variant="ghost" icon={ArrowLeft} disabled={saving} onClick={() => { setStep(step - 1); setAttempted(false); setTouched(new Set()); }}>
+                Back
+              </Button>
+            )}
+            <Button variant="ghost" disabled={saving} onClick={() => onDone(latest)} title="Steps you’ve already saved are kept.">
+              Skip, go to the portal
+            </Button>
+          </div>
+          <Button type="submit" variant="primary" className="sm:ml-auto" loading={saving} iconRight={isLast ? Check : ArrowRight}>
+            {isLast ? 'Save and go to the portal' : `Save, next: ${MORE_STEPS[step + 1].title}`}
           </Button>
         </div>
       </form>
     </motion.div>
+    </>
   );
 }

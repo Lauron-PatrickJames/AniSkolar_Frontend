@@ -417,7 +417,8 @@ function StudentProfileDialog({ studentNumber, getToken, onClose, onOpenRecord }
   }, [studentNumber, getToken]);
 
   const date = (v?: string) => (v ? new Date(v).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '');
-  const parent = (name?: string, contact?: string, deceased?: boolean) => (name ? `${name}${deceased ? ' (deceased)' : contact ? ` · ${contact}` : ''}` : '');
+  const parent = (name?: string, contact?: string, deceased?: boolean, absent?: boolean) => (absent ? 'Not applicable'
+    : name ? `${name}${deceased ? ' (deceased)' : contact ? ` · ${contact}` : ''}` : deceased ? 'Deceased' : '');
   const guardian = p ? (p.guardianType === 'father' ? `Father (${p.fatherName ?? ''})` : p.guardianType === 'mother' ? `Mother (${p.motherName ?? ''})`
     : p.guardianName ? [p.guardianName, p.guardianRelationship, p.guardianContactNo].filter(Boolean).join(' · ') : '') : '';
   const sections: [string, [string, React.ReactNode][]][] = p ? [
@@ -440,8 +441,8 @@ function StudentProfileDialog({ studentNumber, getToken, onClose, onOpenRecord }
       ['Home address', [p.homeAddress, p.cityMunicipality, p.province, p.zipCode].filter(Boolean).join(', ')],
     ]],
     ['Family', [
-      ['Father', parent(p.fatherName, p.fatherContactNo, p.fatherDeceased)],
-      ['Mother', parent(p.motherName, p.motherContactNo, p.motherDeceased)],
+      ['Father', parent(p.fatherName, p.fatherContactNo, p.fatherDeceased, p.fatherAbsent)],
+      ['Mother', parent(p.motherName, p.motherContactNo, p.motherDeceased, p.motherAbsent)],
       ['Guardian', guardian],
     ]],
   ] : [];

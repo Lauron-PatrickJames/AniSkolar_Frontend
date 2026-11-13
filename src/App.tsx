@@ -179,6 +179,9 @@ export default function App() {
   const initialSession = loadPersistedSession();
 
   const { isLoaded: userLoaded, isSignedIn, user } = useUser();
+  // For the Back/Forward handler, which is set up once.
+  const signedInRef = useRef(isSignedIn);
+  signedInRef.current = isSignedIn;
   const { getToken } = useAuth();
   const { signOut } = useClerk();
 
@@ -331,7 +334,18 @@ export default function App() {
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state as HistoryEntryState | null;
-      if (!state || typeof state.page !== 'string') return;
+      if (!state || typeof state.page !== 'string') {
+        // A landing page section (#about, #faqs…) from its menu links: Back
+        // or Forward to one shows the landing page at that section, even
+        // from the sign-in page (signed-out visitors only).
+        const id = window.location.hash.slice(1);
+        if (id && !signedInRef.current) {
+          setResubmitApplication(null);
+          setCurrentPage('landing');
+          window.setTimeout(() => document.getElementById(id)?.scrollIntoView(), 60);
+        }
+        return;
+      }
       let page = state.page;
       // A form can't be restored from history: going back or forward to a
       // resubmission, or to an application already sent, shows the

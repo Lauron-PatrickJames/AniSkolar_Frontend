@@ -706,9 +706,12 @@ export interface StudentProfile {
   fatherName?: string;
   fatherContactNo?: string;
   fatherDeceased?: boolean;
+  // Not part of the student's life (solo-parent household, unknown parent).
+  fatherAbsent?: boolean;
   motherName?: string;
   motherContactNo?: string;
   motherDeceased?: boolean;
+  motherAbsent?: boolean;
   // Who the guardian is; 'father' / 'mother' mirror that parent into the
   // guardian fields on save (backend routes/students.js).
   guardianType?: GuardianType;

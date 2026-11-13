@@ -4,7 +4,7 @@ import { Checkbox, Combobox, ComboboxOption, DatePicker, Field, Select, TextInpu
 import { PROGRAMS, YEAR_LEVELS, collegeName, findProgram } from '../../data/programs';
 import { CITIES_BY_PROVINCE, PROVINCES } from '../../data/phLocations';
 import { formatPhone, normalizePhMobile } from '../../utils/profile';
-import { CIVIL_STATUS_OPTIONS, DraftField, NAME_SUFFIXES, PHILIPPINES, ProfileDraft } from './profileForm';
+import { CIVIL_STATUS_OPTIONS, DraftField, NAME_SUFFIXES, PHILIPPINES, ProfileDraft, parentPresent } from './profileForm';
 
 // The profile's form sections, shared by the first-time setup page and the
 // Profile edit dialog. Each field sits in a [data-field] wrapper so a form
@@ -68,9 +68,10 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
               <dd className="text-ink">{program.code}</dd>
             </dl>
       )}
-      <div className="space-y-5 @2xl:grid @2xl:grid-cols-3 @2xl:items-start @2xl:gap-4 @2xl:space-y-0">
+      {/* Without the section (onboarding), year level and GPA share one row. */}
+      <div className={withSection ? 'space-y-5 @2xl:grid @2xl:grid-cols-3 @2xl:items-start @2xl:gap-4 @2xl:space-y-0' : 'grid grid-cols-2 items-start gap-3 sm:gap-4'}>
       {locked.enrollment ?? (
-        <div className={`grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:gap-4 ${withSection ? '@2xl:col-span-2' : ''}`}>
+        <div className={withSection ? 'grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:col-span-2 @2xl:gap-4' : 'min-w-0'}>
           <Slot name="yearLevel">
             <Field label="Year level" error={errorFor('yearLevel')}>
               <Select value={draft.yearLevel} onChange={v => { update({ yearLevel: v }); touch('yearLevel'); }}>
@@ -89,7 +90,7 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
         </div>
       )}
       {locked.gpa ?? (
-        <Slot name="gpa" className="sm:max-w-[calc(50%-0.625rem)] @2xl:max-w-none">
+        <Slot name="gpa" className={withSection ? 'sm:max-w-[calc(50%-0.625rem)] @2xl:max-w-none' : ''}>
           <Field label="Cumulative GPA" optional={draft.yearLevel === '1st Year'} error={errorFor('gpa')} helper={!errorFor('gpa') ? (draft.yearLevel === '1st Year' ? '0.00 to 4.00. Incoming freshmen without a college GPA yet can leave this blank.' : '0.00 to 4.00, as on your latest grades.') : undefined}>
             <TextInput
               value={draft.gpa}
@@ -210,12 +211,13 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
   const cityOptions: ComboboxOption[] = (CITIES_BY_PROVINCE[draft.province] ?? []).map(c => ({ value: c, label: c }));
   return (
     <div className="space-y-5 @2xl:space-y-4">
-      {email && (
-        <Field label="University email" helper="From your university account.">
-          <TextInput value={email} readOnly disabled />
-        </Field>
-      )}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:gap-4">
+      {/* Email, mobile and telephone share a row on wide forms. */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:gap-4 @3xl:grid-cols-3">
+        {email && (
+          <Field label="University email" helper="From your university account.">
+            <TextInput value={email} readOnly disabled />
+          </Field>
+        )}
         <Slot name="mobileNumber">
           <Field label="Mobile number" error={errorFor('mobileNumber')} helper={!errorFor('mobileNumber') ? 'The office uses this to reach you about your application.' : undefined}>
             <TextInput
@@ -316,37 +318,62 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
 
 // --- Parents & guardian ------------------------------------------------------------
 
+type ParentStatus = 'living' | 'deceased' | 'absent';
+const PARENT_STATUSES: [ParentStatus, string][] = [['living', 'Living'], ['deceased', 'Deceased'], ['absent', 'Not applicable']];
+
 export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
   const parent = (who: 'father' | 'mother') => {
     const nameKey = `${who}Name` as const;
     const contactKey = `${who}ContactNo` as const;
     const deceasedKey = `${who}Deceased` as const;
+    const absentKey = `${who}Absent` as const;
     const title = who === 'father' ? 'Father' : 'Mother';
-    const deceased = draft[deceasedKey];
+    const status: ParentStatus = draft[deceasedKey] ? 'deceased' : draft[absentKey] ? 'absent' : 'living';
+    const setStatus = (next: ParentStatus) => update({
+      [deceasedKey]: next === 'deceased',
+      [absentKey]: next === 'absent',
+      // A parent who isn't living or around can't be the guardian.
+      ...(next !== 'living' && draft.guardianType === who ? { guardianType: '' } : {}),
+    });
     return (
-      <fieldset className="space-y-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
+      <fieldset className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <legend className="text-sm font-semibold text-ink">{title}</legend>
-          <Checkbox
-            checked={deceased}
-            onChange={v => update({ [deceasedKey]: v, ...(v && draft.guardianType === who ? { guardianType: '' } : {}) })}
-            label="Deceased"
-          />
+          <div role="radiogroup" aria-label={`${title}: status`} className="inline-flex rounded-control bg-surface-muted p-0.5 ring-1 ring-inset ring-line">
+            {PARENT_STATUSES.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={status === value}
+                onClick={() => setStatus(value)}
+                className={`rounded-[calc(var(--radius-control)-2px)] px-3 py-1 text-xs font-medium transition-colors ${status === value ? 'bg-surface text-ink shadow-sm ring-1 ring-line' : 'text-ink-subtle hover:text-ink'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] @2xl:gap-4">
-          <Slot name={nameKey}>
-            <Field label="Full name" error={errorFor(nameKey)}>
-              <TextInput value={draft[nameKey]} onChange={e => update({ [nameKey]: e.target.value })} onBlur={() => touch(nameKey)} maxLength={120} placeholder="First, middle and last name" />
-            </Field>
-          </Slot>
-          {!deceased && (
-            <Slot name={contactKey}>
-              <Field label="Contact number" error={errorFor(contactKey)}>
-                <TextInput type="tel" inputMode="tel" value={draft[contactKey]} onChange={e => update({ [contactKey]: e.target.value })} onBlur={e => { update({ [contactKey]: tidyPhone(e.currentTarget.value) }); touch(contactKey); }} placeholder="0917 123 4567" />
+        {status === 'absent' ? (
+          <p className="rounded-control bg-surface-muted px-3 py-2.5 text-sm text-ink-muted">
+            No details needed, for example in a solo-parent household. Choose your guardian below.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] @2xl:gap-4">
+            <Slot name={nameKey}>
+              <Field label="Full name" optional={status === 'deceased'} error={errorFor(nameKey)}>
+                <TextInput value={draft[nameKey]} onChange={e => update({ [nameKey]: e.target.value })} onBlur={() => touch(nameKey)} maxLength={120} placeholder="First, middle and last name" />
               </Field>
             </Slot>
-          )}
-        </div>
+            {status === 'living' && (
+              <Slot name={contactKey}>
+                <Field label="Contact number" error={errorFor(contactKey)}>
+                  <TextInput type="tel" inputMode="tel" value={draft[contactKey]} onChange={e => update({ [contactKey]: e.target.value })} onBlur={e => { update({ [contactKey]: tidyPhone(e.currentTarget.value) }); touch(contactKey); }} placeholder="0917 123 4567" />
+                </Field>
+              </Slot>
+            )}
+          </div>
+        )}
       </fieldset>
     );
   };
@@ -379,8 +406,8 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
         <legend className="mb-1 text-sm font-semibold text-ink">Guardian</legend>
         <p className="text-xs text-ink-subtle">Who the office contacts if they can’t reach you.</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {!draft.fatherDeceased && choice('father', 'Same as father', draft.fatherName.trim() || undefined)}
-          {!draft.motherDeceased && choice('mother', 'Same as mother', draft.motherName.trim() || undefined)}
+          {parentPresent(draft, 'father') && choice('father', 'Same as father', draft.fatherName.trim() || undefined)}
+          {parentPresent(draft, 'mother') && choice('mother', 'Same as mother', draft.motherName.trim() || undefined)}
           {choice('other', 'Someone else')}
         </div>
         {errorFor('guardianType') && <p className="text-xs font-medium text-danger">{errorFor('guardianType')}</p>}

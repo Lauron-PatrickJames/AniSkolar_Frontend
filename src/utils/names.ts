@@ -18,11 +18,20 @@ export function profileNameParts(student: Pick<StudentProfile, 'firstName' | 'mi
 export function titleCaseName(raw: string): string {
   const s = (raw ?? '').trim().replace(/\s+/g, ' ');
   const letters = s.replace(/[^A-Za-zÀ-ÿ]/g, '');
-  if (!letters || (letters !== letters.toUpperCase() && letters !== letters.toLowerCase())) return s;
-  return s
+  if (!letters) return s;
+  const fix = (text: string) => text
     .toLowerCase()
     .replace(/(^|[\s\-'’(])([a-zà-ÿ])/g, (_m, before: string, ch: string) => before + ch.toUpperCase())
     .replace(/\b(Ii|Iii|Iv|Vi|Vii|Viii)\b/g, m => m.toUpperCase());
+  // All in capitals (or all lowercase): the whole name.
+  if (letters === letters.toUpperCase() || letters === letters.toLowerCase()) return fix(s);
+  // Mixed, e.g. "PATRICK JAMES Secuya LAURON" (the Microsoft account's
+  // capitals with a typed middle name): only the words in capitals change;
+  // the rest stay as typed ("dela Cruz", "McDonald").
+  return s.split(' ').map(word => {
+    const w = word.replace(/[^A-Za-zÀ-ÿ]/g, '');
+    return w.length >= 2 && w === w.toUpperCase() && !/^(II|III|IV|VI|VII|VIII)$/.test(w) ? fix(word) : word;
+  }).join(' ');
 }
 
 // "Patrick James Secuya Lauron" in title case, from the name parts (first,

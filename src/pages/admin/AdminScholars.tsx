@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Download, FileText, MessageSquare, Pencil, Printer, UserPlus, Users } from 'lucide-react';
+import { ChevronRight, Download, FileText, MessageSquare, Pencil, Printer, Trash2, UserPlus, Users } from 'lucide-react';
 import EditProfileDialog from '../../components/profile/EditProfileDialog';
 import { StudentProfile } from '../../types';
 import { downloadZip } from '../../utils/documents';
@@ -8,7 +8,7 @@ import {
   applicantProgram, applicantYearLevel, formatDate, isReturningScholar, plural, shortAcademicYear, titleCaseName
 } from './adminData';
 import {
-  Alert, Avatar, Badge, Button, Card, Checkbox, CopyButton, DropdownMenu, EmptyState, ErrorState, Menu, MobileList, Modal, PageHeader,
+  Alert, Avatar, Badge, Button, Card, Checkbox, ConfirmDialog, CopyButton, DropdownMenu, EmptyState, ErrorState, Menu, MobileList, Modal, PageHeader,
   Pagination, RowLink, SearchInput, SegmentedControl, Select, StatusBadge, STATUS_META, Table, TableSkeleton, Td, Th,
   Toolbar, Tooltip, Tr, Truncate, usePagination
 } from './AdminUI';
@@ -458,6 +458,7 @@ export default function AdminScholars({
         onMessageStudent={onMessageStudent}
         exportError={exportError}
         onExportError={setExportError}
+        onDeleted={() => { onRefresh?.(); onSelectStudent(null); }}
       />
     );
   }
@@ -612,13 +613,15 @@ const HISTORY_VIEWS: readonly HistoryView[] = ['By application', 'All activity']
 
 const isActive = (status: AppStatus) => status === 'Under Evaluation' || status === 'Needs Revision';
 
-function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent, exportError, onExportError }: {
+function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent, exportError, onExportError, onDeleted }: {
   getToken: () => Promise<string | null>;
   scholar: ScholarSummary;
   onOpenApplication: (applicationId: string) => void;
   onMessageStudent?: (studentNumber: string) => void;
   exportError: string;
   onExportError: (message: string) => void;
+  // After the student was deleted (moved to the Trash).
+  onDeleted: () => void;
 }) {
   const [view, setView] = useState<HistoryView>('By application');
   // The most recent application still in review starts open.
@@ -677,6 +680,33 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
     return () => { cancelled = true; };
   }, [canEdit, scholar.studentNumber, getToken]);
   const openRequests = (studentProfile?.correctionRequests ?? []).filter(r => r.status === 'open');
+
+  // AdSO (the full profile loaded): delete the student with their records,
+  // to the Trash for 30 days. The server refuses anyone with something
+  // active (POST /api/students/delete).
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const deleteStudent = async () => {
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/students/delete`, {
+        method: 'POST',
+        headers: await authHeaders(getToken, true),
+        body: JSON.stringify({ studentNumbers: [scholar.studentNumber] }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Couldn't delete the student.");
+      if (body.skipped?.length) throw new Error(body.skipped[0].reason);
+      setConfirmDelete(false);
+      onDeleted();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Couldn't delete the student.");
+    } finally {
+      setDeleting(false);
+    }
+  };
   const saveProfile = async (changes: Record<string, unknown>) => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/students/${encodeURIComponent(scholar.studentNumber)}/profile`, {
@@ -733,7 +763,8 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
                   onSelect: () => { onExportError(''); downloadZip(`student/${encodeURIComponent(scholar.studentNumber)}`, getToken).catch(err => onExportError(err instanceof Error ? err.message : "Couldn't prepare the download.")); },
                 },
                 { key: 'csv', label: 'Export to Excel', icon: FileText, onSelect: () => exportScholarApplicationsToCSV(scholar) },
-                { key: 'print', label: 'Print', icon: Printer, onSelect: print }
+                { key: 'print', label: 'Print', icon: Printer, onSelect: print },
+                ...(studentProfile ? [{ key: 'delete', label: 'Delete student', icon: Trash2, tone: 'danger' as const, onSelect: () => { setDeleteError(''); setConfirmDelete(true); } }] : []),
               ]}
             />
           </div>
@@ -741,6 +772,24 @@ function ScholarDetail({ scholar, getToken, onOpenApplication, onMessageStudent,
       />
 
       {profileNote && <Alert tone="success" onDismiss={() => setProfileNote('')}>{profileNote}</Alert>}
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete ${scholar.name}?`}
+          confirmLabel="Delete"
+          confirmIcon={Trash2}
+          tone="danger"
+          busy={deleting}
+          error={deleteError}
+          onConfirm={deleteStudent}
+          onCancel={() => { if (!deleting) setConfirmDelete(false); }}
+        >
+          <ul className="list-disc space-y-1 pl-5 text-sm text-ink-muted">
+            <li>Their profile, applications, renewals, duty logs and messages move to the Trash.</li>
+            <li>You can restore them from the Trash for 30 days. After that they and their uploaded files are deleted for good.</li>
+            <li>Only students with nothing active can be deleted: no current scholarship, and no application or renewal being decided.</li>
+          </ul>
+        </ConfirmDialog>
+      )}
       {openRequests.length > 0 && (
         <Alert
           tone="warning"

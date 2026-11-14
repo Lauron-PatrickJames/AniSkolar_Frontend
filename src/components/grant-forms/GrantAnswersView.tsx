@@ -2,7 +2,7 @@ import React from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { EvaluationSheet, GrantApplicationDetails, HouseholdMember, Scholarship } from '../../types';
 import { formatPeso } from '../../utils/format';
-import { HOUSEHOLD_ROLES, VEHICLE_TYPES, calculateAge, coResidingTotal } from '../../utils/grantForms';
+import { HOUSEHOLD_ROLES, VEHICLE_TYPES, calculateAge, coResidingTotal, parentStatus } from '../../utils/grantForms';
 
 // Read-only rendering of a grant-form application, grouped by the same
 // sections as the form. Used by the admin application detail view and the
@@ -163,12 +163,21 @@ export function ApplicationFormAnswers({ details, scholarship }: { details: Gran
 
       <AnswerGroup title="Parents">
         <AnswerGrid>
-          <AnswerField label="Father" value={pg.father.name} />
-          <AnswerField label="Occupation" value={pg.father.occupation} />
-          <AnswerField label="Monthly Income" value={formatPeso(pg.father.monthlyIncome)} />
-          <AnswerField label="Mother" value={pg.mother.name} />
-          <AnswerField label="Occupation" value={pg.mother.occupation} />
-          <AnswerField label="Monthly Income" value={formatPeso(pg.mother.monthlyIncome)} />
+          {(['father', 'mother'] as const).map(who => {
+            const parent = pg[who];
+            const status = parentStatus(parent);
+            const living = status === 'Living';
+            return (
+              <React.Fragment key={who}>
+                <AnswerField
+                  label={who === 'father' ? 'Father' : 'Mother'}
+                  value={status === 'Not applicable' ? 'Not applicable' : status === 'Deceased' ? (parent.name ? `${parent.name} (deceased)` : 'Deceased') : parent.name}
+                />
+                <AnswerField label="Occupation" value={living ? parent.occupation : '—'} />
+                <AnswerField label="Monthly Income" value={living ? formatPeso(parent.monthlyIncome) : '—'} />
+              </React.Fragment>
+            );
+          })}
         </AnswerGrid>
       </AnswerGroup>
 

@@ -490,6 +490,7 @@ export default function GrantApplication({
   const SectionBody = SECTION_COMPONENTS[currentKey];
   const reselect = Object.entries(reselectNames).filter(([, names]) => names.length > 0);
   const prev = currentIndex > 0 ? sections[currentIndex - 1] : null;
+  const next = currentIndex < sections.length - 1 ? sections[currentIndex + 1] : null;
   const statusOf = (key: string) => {
     const k = key as GrantSectionKey;
     if (sectionDone(k)) return 'done' as const;
@@ -498,7 +499,7 @@ export default function GrantApplication({
 
   return (
     <GrantFormProvider value={contextValue}>
-      <div id={id} className="space-y-6">
+      <div id={id} className="space-y-5">
         <BackLink onClick={onBack} />
 
         <WizardHeader
@@ -512,7 +513,7 @@ export default function GrantApplication({
 
         {isResubmit && <RevisionNote note={existingApplication?.reviewNote} />}
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-4">
           <SectionNav
             sections={sections}
             currentKey={currentKey}
@@ -530,6 +531,7 @@ export default function GrantApplication({
               footer={
                 <WizardFooter
                   prevLabel={prev?.label}
+                  nextLabel={next?.label}
                   onPrev={prev ? () => goTo(prev.key) : undefined}
                   onDiscard={!isResubmit ? discardDraft : undefined}
                   isLast={currentKey === 'review'}

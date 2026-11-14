@@ -22,9 +22,9 @@ export function BackLink({ label = 'Back to Scholarship Details', onClick }: { l
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-brand-green transition-colors focus:outline-hidden"
+      className="inline-flex items-center gap-1.5 rounded-control text-sm font-medium text-ink-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-accent"
     >
-      <ArrowLeft className="w-4 h-4" />
+      <ArrowLeft className="size-4" aria-hidden />
       <span>{label}</span>
     </button>
   );
@@ -40,26 +40,20 @@ export function WizardHeader({ scholarshipName, isResubmit, subtitle, right, don
 }) {
   const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-xs space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-        <div>
-          <h2 className="font-display font-black text-xl md:text-2xl text-slate-900 tracking-tight">
-            {isResubmit ? 'Resubmit Application: ' : 'Application Form: '}<span className="text-brand-green">{scholarshipName}</span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">{subtitle}</p>
+    <div className="space-y-4 rounded-card bg-surface p-5 shadow-card ring-1 ring-line md:px-6">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-ink-subtle">{isResubmit ? 'Resubmit application' : 'Application form'}</p>
+          <h2 className="font-display text-xl font-semibold tracking-tight text-ink md:text-2xl">{scholarshipName}</h2>
+          <p className="mt-0.5 text-xs text-ink-subtle">{subtitle}</p>
         </div>
         {right}
       </div>
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-bold text-slate-500">
-            {doneCount} of {total} sections complete
-          </span>
-          <span className="text-xs font-bold text-brand-green">{pct}%</span>
+      <div className="flex items-center gap-3">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-line" aria-hidden>
+          <motion.div className="h-full rounded-full bg-accent" initial={false} animate={{ width: `${pct}%` }} transition={{ duration: 0.3 }} />
         </div>
-        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-          <motion.div className="h-full bg-brand-green rounded-full" initial={false} animate={{ width: `${pct}%` }} transition={{ duration: 0.3 }} />
-        </div>
+        <span className="shrink-0 text-xs tabular-nums text-ink-subtle">{doneCount} of {total} sections done</span>
       </div>
     </div>
   );
@@ -68,8 +62,8 @@ export function WizardHeader({ scholarshipName, isResubmit, subtitle, right, don
 export function RevisionNote({ note }: { note?: string }) {
   if (!note) return null;
   return (
-    <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 text-xs text-sky-800 flex items-start gap-2.5">
-      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+    <div className="flex items-start gap-2.5 rounded-card bg-sky-50 p-4 text-sm text-sky-900 ring-1 ring-inset ring-sky-200">
+      <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
       <span><strong>Requested changes:</strong> {note}</span>
     </div>
   );
@@ -84,7 +78,7 @@ export function SectionNav({ sections, currentKey, statusOf, onSelect, partLabel
 }) {
   const parts = Array.from(new Set(sections.map(s => s.part)));
   return (
-    <nav className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 shadow-xs p-3 lg:sticky lg:top-24">
+    <nav className="rounded-card bg-surface p-2 shadow-card ring-1 ring-line lg:sticky lg:top-24 lg:col-span-1 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto">
       <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible scrollbar-none">
         {parts.map(part => {
           const partSections = sections.filter(s => s.part === part);
@@ -92,9 +86,9 @@ export function SectionNav({ sections, currentKey, statusOf, onSelect, partLabel
           const partDone = countable.filter(s => statusOf(s.key) === 'done').length;
           return (
             <div key={part} className="flex lg:flex-col gap-1 lg:mb-2 shrink-0">
-              <p className="hidden lg:flex items-center justify-between px-2 pt-2 pb-1 text-xs font-semibold text-slate-500">
+              <p className="hidden items-center justify-between px-2.5 pb-1 pt-2 text-xs font-medium text-ink-subtle lg:flex">
                 <span>{partLabels[part] ?? part}</span>
-                {countable.length > 0 && <span className={partDone === countable.length ? 'text-brand-green' : ''}>{partDone}/{countable.length}</span>}
+                {countable.length > 0 && <span className={`tabular-nums ${partDone === countable.length ? 'text-accent' : ''}`}>{partDone}/{countable.length}</span>}
               </p>
               {partSections.map(section => {
                 const active = section.key === currentKey;
@@ -104,16 +98,17 @@ export function SectionNav({ sections, currentKey, statusOf, onSelect, partLabel
                     key={section.key}
                     type="button"
                     onClick={() => onSelect(section.key)}
-                    className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold text-left whitespace-nowrap lg:whitespace-normal transition-colors focus:outline-hidden ${
-                      active ? 'bg-brand-green/10 text-brand-green' : 'text-slate-600 hover:bg-slate-50'
+                    aria-current={active ? 'step' : undefined}
+                    className={`flex items-center gap-2 whitespace-nowrap rounded-control px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent lg:whitespace-normal ${
+                      active ? 'bg-accent-subtle font-medium text-accent' : 'text-ink-muted hover:bg-surface-muted hover:text-ink'
                     }`}
                   >
                     {status === 'done' ? (
-                      <CheckCircle className="w-4 h-4 text-brand-green shrink-0" />
+                      <CheckCircle className="size-4 shrink-0 text-accent" aria-label="Done" />
                     ) : status === 'error' ? (
-                      <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                      <AlertCircle className="size-4 shrink-0 text-danger" aria-label="Needs attention" />
                     ) : (
-                      <Circle className={`w-4 h-4 shrink-0 ${active ? 'text-brand-green' : 'text-slate-300'}`} />
+                      <Circle className={`size-4 shrink-0 ${active ? 'text-accent' : 'text-line-strong'}`} aria-hidden />
                     )}
                     <span>{section.label}</span>
                   </button>
@@ -130,8 +125,8 @@ export function SectionNav({ sections, currentKey, statusOf, onSelect, partLabel
 export function FormBanner({ message }: { message?: string }) {
   if (!message) return null;
   return (
-    <div className="p-4 bg-rose-50 text-rose-800 rounded-xl border border-rose-100 text-xs font-bold flex items-start gap-2">
-      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+    <div role="alert" className="flex items-start gap-2 rounded-card bg-danger-bg p-4 text-sm font-medium text-danger-fg ring-1 ring-inset ring-danger/20">
+      <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
       <span>{message}</span>
     </div>
   );
@@ -146,10 +141,10 @@ export function SectionPanel({ partLabel, title, sectionKey, footer, children }:
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-xs">
-      <div className="px-6 md:px-8 pt-6 pb-4 border-b border-slate-100">
-        <p className="text-xs font-semibold text-slate-500">{partLabel}</p>
-        <h3 className="font-display font-bold text-lg text-slate-900">{title}</h3>
+    <div className="rounded-card bg-surface shadow-card ring-1 ring-line">
+      <div className="border-b border-line px-5 pb-4 pt-5 md:px-6">
+        <p className="text-xs font-medium text-ink-subtle">{partLabel}</p>
+        <h3 className="font-display text-lg font-semibold text-ink">{title}</h3>
       </div>
       <AnimatePresence mode="wait">
         <motion.div
@@ -158,12 +153,13 @@ export function SectionPanel({ partLabel, title, sectionKey, footer, children }:
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -12 }}
           transition={{ duration: 0.18 }}
-          className="p-6 md:p-8"
+          className="p-5 md:p-6"
         >
           {children}
         </motion.div>
       </AnimatePresence>
-      <div className="flex justify-between items-center gap-3 px-6 md:px-8 py-4 border-t border-slate-100">
+      {/* Stays in view at the bottom of the screen on long sections. */}
+      <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-b-card border-t border-line bg-surface/95 px-5 py-3 backdrop-blur-sm md:px-6">
         {footer}
       </div>
     </div>
@@ -172,8 +168,10 @@ export function SectionPanel({ partLabel, title, sectionKey, footer, children }:
 
 // Footer content for SectionPanel: previous-section / discard on the left,
 // next / submit on the right.
-export function WizardFooter({ prevLabel, onPrev, onDiscard, isLast, onNext, onSubmit, isSubmitting, submitLabel }: {
+export function WizardFooter({ prevLabel, nextLabel, onPrev, onDiscard, isLast, onNext, onSubmit, isSubmitting, submitLabel }: {
   prevLabel?: string;
+  // The next section's name, shown on the Next button.
+  nextLabel?: string;
   onPrev?: () => void;
   onDiscard?: () => void;
   isLast: boolean;
@@ -188,14 +186,14 @@ export function WizardFooter({ prevLabel, onPrev, onDiscard, isLast, onNext, onS
         <button
           type="button"
           onClick={onPrev}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-brand-green bg-slate-50 hover:bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-lg transition-colors focus:outline-hidden"
+          className="inline-flex h-9 items-center gap-1.5 rounded-control bg-surface px-3 text-sm font-medium text-ink ring-1 ring-inset ring-line-strong transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="size-4 text-ink-subtle" aria-hidden />
           <span className="hidden sm:inline">{prevLabel}</span>
           <span className="sm:hidden">Back</span>
         </button>
       ) : onDiscard ? (
-        <button type="button" onClick={onDiscard} className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors focus:outline-hidden">
+        <button type="button" onClick={onDiscard} className="rounded-control text-sm font-medium text-ink-subtle transition-colors hover:text-danger focus-visible:outline-2 focus-visible:outline-accent">
           Discard draft and start over
         </button>
       ) : <span />}
@@ -204,19 +202,20 @@ export function WizardFooter({ prevLabel, onPrev, onDiscard, isLast, onNext, onS
         <button
           type="button"
           onClick={onNext}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark px-5 py-2.5 rounded-lg transition-colors focus:outline-hidden"
+          className="inline-flex h-9 items-center gap-1.5 rounded-control bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
-          <span>Next</span>
-          <ArrowRight className="w-3.5 h-3.5" />
+          <span className="sm:hidden">Next</span>
+          <span className="hidden max-w-[22rem] truncate sm:inline">{nextLabel ? `Next: ${nextLabel}` : 'Next'}</span>
+          <ArrowRight className="size-4" aria-hidden />
         </button>
       ) : (
         <button
           type="button"
           onClick={onSubmit}
           disabled={isSubmitting}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-dark px-6 py-3 rounded-xl transition-all shadow-md shadow-emerald-900/10 focus:outline-hidden disabled:opacity-50"
+          className="inline-flex h-9 items-center gap-1.5 rounded-control bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-50"
         >
-          {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          {isSubmitting && <Loader2 className="size-4 animate-spin" aria-hidden />}
           {isSubmitting ? 'Submitting…' : submitLabel}
         </button>
       )}
@@ -226,10 +225,10 @@ export function WizardFooter({ prevLabel, onPrev, onDiscard, isLast, onNext, onS
 
 export function PrivacyNote({ officeLabel }: { officeLabel: string }) {
   return (
-    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex items-start gap-2.5">
-      <ShieldAlert className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-      <p className="text-xs text-slate-500 leading-relaxed">
-        <span className="font-bold">Privacy:</span> The {officeLabel} complies with the Philippine Data Privacy Act of 2012. Your information is kept confidential and used solely to evaluate your scholarship application.
+    <div className="flex items-start gap-2.5 px-1">
+      <ShieldAlert className="mt-0.5 size-4 shrink-0 text-ink-subtle" aria-hidden />
+      <p className="text-xs leading-relaxed text-ink-subtle">
+        <span className="font-medium text-ink-muted">Privacy:</span> The {officeLabel} complies with the Philippine Data Privacy Act of 2012. Your information is kept confidential and used solely to evaluate your scholarship application.
       </p>
     </div>
   );
@@ -255,10 +254,10 @@ export function DraftIndicator({ status, savedAt, onSave, localOnly }: {
     : 'Not saved yet';
   return (
     <div className="flex items-center gap-2 shrink-0">
-      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${status === 'offline' ? 'text-amber-600' : 'text-slate-400'}`}>
-        {status === 'saving' ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          : status === 'offline' ? <CloudOff className="w-3.5 h-3.5" />
-          : savedAt ? <CheckCircle className="w-3.5 h-3.5 text-brand-green" /> : null}
+      <span className={`inline-flex items-center gap-1.5 text-xs ${status === 'offline' ? 'text-amber-700' : 'text-ink-subtle'}`}>
+        {status === 'saving' ? <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          : status === 'offline' ? <CloudOff className="size-3.5" aria-hidden />
+          : savedAt ? <CheckCircle className="size-3.5 text-accent" aria-hidden /> : null}
         {label}
       </span>
       {onSave && (
@@ -266,9 +265,9 @@ export function DraftIndicator({ status, savedAt, onSave, localOnly }: {
           type="button"
           onClick={onSave}
           disabled={status === 'saving'}
-          className="inline-flex items-center gap-1 text-xs font-bold text-brand-green hover:text-brand-green-dark bg-brand-green/5 hover:bg-brand-green/10 border border-brand-green/20 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 focus:outline-hidden"
+          className="inline-flex h-8 items-center gap-1.5 rounded-control bg-surface px-2.5 text-sm font-medium text-ink ring-1 ring-inset ring-line-strong transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
         >
-          <Save className="w-3.5 h-3.5" />
+          <Save className="size-3.5 text-ink-subtle" aria-hidden />
           Save draft
         </button>
       )}

@@ -352,10 +352,15 @@ export interface GrantStudentData {
   secondarySchoolType: 'Public' | 'Private' | '';
 }
 
+// 'Not applicable': not part of the student's life (solo-parent
+// household, unknown parent). Missing on older drafts = 'Living'.
+export type GrantParentStatus = 'Living' | 'Deceased' | 'Not applicable';
+
 export interface GrantParentInfo {
   name: string;
   occupation: string;
   monthlyIncome: number;
+  status?: GrantParentStatus;
 }
 
 export interface GrantGuardianInfo {

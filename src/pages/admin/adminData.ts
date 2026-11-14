@@ -145,6 +145,9 @@ export interface AdminApplication {
   // the AdSO once approved; it decides the scholar's duty hours.
   sfagPercentage?: number | null;
   sfagPercentageRequested?: number | null;
+  // The AdSO's approval chain (its own scholarships; ApprovalChain.tsx).
+  approvalStage?: 'associate' | 'head' | 'director';
+  approvalSteps?: { action: string; fromStage?: string; toStage?: string; note?: string; by?: string; byName?: string; role?: string | null; at: string }[];
   sfagPercentageSetBy?: string;
   sfagPercentageSetAt?: string;
   // Scholarships without renewals (POLCA): when the office marked the

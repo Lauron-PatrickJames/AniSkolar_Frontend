@@ -7,7 +7,8 @@ import { Alert, Button, Card, Checkbox, DatePicker, Field, Select, TextInput } f
 // the Heraldo's points, Vicissitude's rating, the ROTC amount, the USG's
 // on-site schedule, the SDO's grant — with the result worked out. The AdSO
 // sees it read-only on another office's scholarship. Never shown to the
-// student; the decision message tells them what they got.
+// student, except an interview's schedule (POLCA); the decision message
+// tells them what they got.
 export default function OfficeAssessmentCard({ app, form, getToken, readOnly, onSaved }: {
   app: AdminApplication;
   form: OfficeForm;
@@ -67,6 +68,12 @@ export default function OfficeAssessmentCard({ app, form, getToken, readOnly, on
         return <Field key={f.key} label={f.label}><DatePicker value={String(value ?? '')} onChange={v => set(f.key, v || undefined)} disabled={disabled} /></Field>;
       case 'time':
         return <Field key={f.key} label={f.label}><TextInput type="time" value={String(value ?? '')} onChange={e => set(f.key, e.target.value || undefined)} disabled={disabled} /></Field>;
+      case 'text':
+        return (
+          <Field key={f.key} label={f.label} helper={f.hint}>
+            <TextInput value={String(value ?? '')} maxLength={f.max} placeholder={f.placeholder} onChange={e => set(f.key, e.target.value || undefined)} disabled={disabled} />
+          </Field>
+        );
       default:
         return (
           <Field key={f.key} label={f.label} helper={f.hint}>
@@ -88,7 +95,7 @@ export default function OfficeAssessmentCard({ app, form, getToken, readOnly, on
   return (
     <Card
       title={form.assessmentTitle}
-      description={readOnly ? undefined : 'Only your office sees this.'}
+      description={readOnly ? undefined : form.assessmentNote ?? 'Only your office sees this.'}
       footer={!readOnly && dirty ? <Button size="sm" variant="primary" onClick={save} loading={busy}>Save</Button> : undefined}
     >
       <div className="space-y-4">

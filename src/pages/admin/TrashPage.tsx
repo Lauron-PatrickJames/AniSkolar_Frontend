@@ -1,19 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Calculator, CalendarDays, FileImage, FileText, Megaphone, MessageSquareText, RotateCcw, Trash2 } from 'lucide-react';
+import { Calculator, CalendarDays, FileImage, FileText, Megaphone, MessageSquareText, RotateCcw, Trash2, UserRound } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatDateTime } from './adminData';
 import { Alert, Button, Card, ConfirmDialog, EmptyState, ErrorState, MobileList, PageHeader, Table, TableSkeleton, Td, Th, Toast, Tr } from './AdminUI';
 import { OFFICE_SHORT_LABELS } from '../../data/scholarships';
 import { ScholarshipOffice } from '../../types';
 
 // The Trash (backend routes/trash.js): announcements, duty events,
-// attendance sheets, FSE reports, created scholarships and message
-// templates deleted in the last 30 days. Restore puts one back as it was;
+// attendance sheets, FSE reports, created scholarships, message
+// templates and students (with their records) deleted in the last 30 days. Restore puts one back as it was;
 // after 30 days it's deleted for good. Each office sees its own; the AdSO
 // sees everything.
 
 interface TrashRow {
   id: string;
-  kind: 'announcement' | 'dutyEvent' | 'attendanceSheet' | 'fseReport' | 'scholarship' | 'replyTemplate';
+  kind: 'announcement' | 'dutyEvent' | 'attendanceSheet' | 'fseReport' | 'scholarship' | 'replyTemplate' | 'student';
   title: string;
   office: string;
   deletedAt: string;
@@ -28,6 +28,7 @@ const KINDS: Record<TrashRow['kind'], { label: string; icon: React.ElementType }
   fseReport: { label: 'FSE report', icon: Calculator },
   scholarship: { label: 'Scholarship', icon: FileText },
   replyTemplate: { label: 'Message template', icon: MessageSquareText },
+  student: { label: 'Student and records', icon: UserRound },
 };
 
 const daysLeft = (purgeAt: string) => Math.max(0, Math.ceil((new Date(purgeAt).getTime() - Date.now()) / 86_400_000));

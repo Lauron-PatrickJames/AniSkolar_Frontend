@@ -24,10 +24,11 @@ export interface AssessmentField {
   key: string;
   label: string;
   hint?: string;
-  type: 'number' | 'choice' | 'bool' | 'date' | 'time';
+  type: 'number' | 'choice' | 'bool' | 'date' | 'time' | 'text';
   min?: number;
   max?: number;
   step?: number;
+  placeholder?: string;
   options?: { value: string; label: string }[];
   // Filled from the student's answer when the office hasn't set it.
   fromAnswer?: string;
@@ -77,7 +78,12 @@ export interface OfficeForm {
   // Who decides, shown to students and on the approve button.
   approver: string;
   assessmentTitle: string;
+  // Under the card's title; default "Only your office sees this."
+  assessmentNote?: string;
   assessment: AssessmentField[];
+  // Every applicant is interviewed first: the student sees the schedule
+  // (date, time, where) and Approve needs interviewResult 'passed'.
+  interview?: boolean;
   result: (values: OfficeAnswers, answers: OfficeAnswers) => AssessmentResult | null;
   // Amounts or levels the office can change (Scholarships → the scholarship).
   numbersTitle?: string;
@@ -188,6 +194,32 @@ function vicissitudeDiscount(rating: number): number {
 }
 
 export const OFFICE_FORMS: Record<string, OfficeForm> = {
+  // POLCA interviews every applicant before approving (on site or online).
+  // Its grant form has no office step, so only the interview is used here.
+  s3: {
+    stepLabel: 'Interview',
+    intro: 'POLCA interviews every applicant before deciding.',
+    questions: [],
+    approver: 'POLCA Office',
+    assessmentTitle: 'Interview',
+    assessmentNote: 'The applicant sees the format, date, time and place (or link), and is emailed when you set or change them. The result is only for your office.',
+    interview: true,
+    assessment: [
+      { key: 'interviewMode', label: 'Format', type: 'choice', options: [{ value: 'onsite', label: 'Onsite (in person)' }, { value: 'online', label: 'Online' }] },
+      { key: 'interviewDate', label: 'Date', type: 'date' },
+      { key: 'interviewTime', label: 'Time', type: 'time' },
+      { key: 'interviewVenue', label: 'Place or meeting link', hint: 'Onsite: the room, e.g. POLCA Office. Online: the Teams or Meet link (or “link to follow”).', type: 'text', max: 500, placeholder: 'POLCA Office' },
+      { key: 'interviewResult', label: 'Result', type: 'choice', options: [{ value: 'passed', label: 'Passed' }, { value: 'failed', label: 'Did not pass' }] },
+    ],
+    result: v => {
+      const mode = v.interviewMode === 'online' ? 'Online · ' : v.interviewMode === 'onsite' ? 'Onsite · ' : '';
+      const when = v.interviewDate ? `${mode}${formatDay(String(v.interviewDate))}${v.interviewTime ? `, ${formatTime(String(v.interviewTime))}` : ''}${v.interviewVenue ? ` · ${v.interviewVenue}` : ''}` : '';
+      if (v.interviewResult === 'passed') return { headline: 'Passed the interview', lines: [when, 'You can now approve the application.'].filter(Boolean), tone: 'success' };
+      if (v.interviewResult === 'failed') return { headline: 'Did not pass the interview', lines: [when, 'Reject the application with a message to the applicant.'].filter(Boolean), tone: 'danger' };
+      if (when) return { headline: 'Interview scheduled', lines: [when, 'After the interview, set the result. Approving needs a passed interview.'], tone: 'neutral' };
+      return { headline: 'Not interviewed yet', lines: ['Set the format, date, time and place or link; the applicant is emailed. For a walk-in interview, just set the result afterwards.'], tone: 'neutral' };
+    },
+  },
   // The SDO has no application: these are the details it records when it
   // adds a player picked from the tryouts (AddScholarDialog).
   s7: {
@@ -443,8 +475,8 @@ export const OFFICE_FORMS: Record<string, OfficeForm> = {
   },
 };
 
-const formatDay = (iso: string) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(`${iso}T00:00:00Z`));
-const formatTime = (hhmm: string) => {
+export const formatDay = (iso: string) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(`${iso}T00:00:00Z`));
+export const formatTime = (hhmm: string) => {
   const [h, m] = hhmm.split(':').map(Number);
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
 };

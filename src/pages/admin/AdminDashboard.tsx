@@ -423,6 +423,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         loadError={loadError}
         onReload={fetchApplications}
         onOpen={app => openApplication(app._id, filterApplications(applications, listFilters).map(a => a._id))}
+        getToken={getToken}
         filters={listFilters}
         onFiltersChange={setListFilters}
         adminOffice={adminOffice}

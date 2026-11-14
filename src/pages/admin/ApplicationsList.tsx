@@ -1,11 +1,13 @@
-import React, { useMemo } from 'react';
-import { ChevronRight, Inbox } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { CheckCircle2, ChevronRight, Inbox } from 'lucide-react';
+import { useUser } from '@clerk/react';
+import { AdsoRole, canAct } from './ApprovalChain';
 import { acceptsOnlineApplications, mockScholarships, officeDisplayName, officeOf } from '../../data/scholarships';
 import {
-  AdminApplication, STATUS_OPTIONS, applicantName, formatDateTime, isOfficeApp, titleCaseName
+  API_BASE_URL, AdminApplication, STATUS_OPTIONS, applicantName, authHeaders, formatDateTime, isOfficeApp, titleCaseName
 } from './adminData';
 import {
-  Alert, Avatar, Badge, Button, Card, CopyButton, EmptyState, ErrorState, MobileList, PageHeader, Pagination, RowLink,
+  Alert, Avatar, Badge, Button, Card, ConfirmDialog, CopyButton, EmptyState, ErrorState, Field, MobileList, PageHeader, Pagination, RowLink, Textarea, Toast,
   SearchInput, Select, StatusBadge, Table, TableSkeleton, Tabs, Td, Th, Toolbar, Tooltip, Tr, Truncate, paginate
 } from './AdminUI';
 import {
@@ -22,6 +24,14 @@ const chainStageText = (app: AdminApplication) => {
   return { associate: 'With the Associate', head: 'With the Head', director: 'For the Director' }[app.approvalStage ?? 'associate'];
 };
 
+// Ready for the Director's batch approval: with the Director, and the
+// Head's latest recommendation is to approve.
+const readyForBatch = (app: AdminApplication) => {
+  if (app.status !== 'Under Evaluation' || isOfficeApp(app) || app.approvalStage !== 'director') return false;
+  const rec = [...(app.approvalSteps ?? [])].reverse().find(s => s.action === 'recommendApproval' || s.action === 'recommendRejection');
+  return rec?.action === 'recommendApproval';
+};
+
 export { DEFAULT_FILTERS };
 export type { ListFilters };
 
@@ -33,6 +43,7 @@ interface ApplicationsListProps {
   loadError: string;
   onReload: () => Promise<void>;
   onOpen: (app: AdminApplication) => void;
+  getToken: () => Promise<string | null>;
   // Kept by the parent so they survive opening an application and coming back.
   filters: ListFilters;
   onFiltersChange: (filters: ListFilters) => void;
@@ -60,7 +71,7 @@ const EMPTY_TABS: Record<StatusTab, { title: string; description: string }> = {
 };
 
 export default function ApplicationsList({
-  applications, isLoading, loadError, onReload, onOpen, filters, onFiltersChange, adminOffice, officeLabel
+  applications, isLoading, loadError, onReload, onOpen, getToken, filters, onFiltersChange, adminOffice, officeLabel
 }: ApplicationsListProps) {
   const hasData = applications.length > 0;
   const firstLoad = isLoading && !hasData;
@@ -95,6 +106,63 @@ export default function ApplicationsList({
   // Counts are hidden until there's data, so a failed or pending load
   // doesn't read as "0 applications".
   const tabCount = (n: number) => (firstLoad || failedEmpty ? undefined : n);
+
+  // The Director approves the Head-recommended applications in a batch
+  // (POST /api/applications/batch-approve); rejecting stays one at a time.
+  const { user } = useUser();
+  const rawRole = (user?.publicMetadata as { adsoRole?: string } | undefined)?.adsoRole;
+  const adsoRole: AdsoRole = rawRole === 'associate' || rawRole === 'head' || rawRole === 'director' ? rawRole : null;
+  const batchView = isAdso && canAct(adsoRole, 'director') && filters.status === 'Under Evaluation';
+  const readyCount = useMemo(() => filtered.filter(readyForBatch).length, [filtered]);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [confirming, setConfirming] = useState(false);
+  const [batchNote, setBatchNote] = useState('');
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchError, setBatchError] = useState('');
+  const [skipped, setSkipped] = useState<{ id: string; reason: string }[]>([]);
+  const [toast, setToast] = useState('');
+  const pickedReady = filtered.filter(a => picked.has(a._id) && readyForBatch(a));
+  const pageReady = pager.pageItems.filter(readyForBatch);
+  const allPagePicked = pageReady.length > 0 && pageReady.every(a => picked.has(a._id));
+  const toggle = (id: string) => setPicked(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const togglePage = () => setPicked(p => { const n = new Set(p); pageReady.forEach(a => (allPagePicked ? n.delete(a._id) : n.add(a._id))); return n; });
+  const nameOfId = (id: string) => { const a = applications.find(x => x._id === id); return a ? `${titleCaseName(applicantName(a))} (${a.scholarshipName})` : id; };
+  const approveBatch = async () => {
+    setBatchBusy(true);
+    setBatchError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/applications/batch-approve`, {
+        method: 'POST',
+        headers: await authHeaders(getToken, true),
+        body: JSON.stringify({ ids: pickedReady.map(a => a._id), reviewNote: batchNote.trim() || undefined }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Couldn’t approve them.');
+      setConfirming(false);
+      setPicked(new Set());
+      setBatchNote('');
+      setSkipped(body.skipped ?? []);
+      const n = (body.approved ?? []).length;
+      if (n) setToast(`Approved ${n} application${n === 1 ? '' : 's'}.`);
+      await onReload();
+    } catch (err) {
+      setBatchError(err instanceof Error ? err.message : 'Couldn’t approve them.');
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+  const pickBox = (app: AdminApplication) => (
+    <input
+      type="checkbox"
+      className="size-4 rounded accent-accent disabled:opacity-30"
+      checked={picked.has(app._id)}
+      disabled={!readyForBatch(app)}
+      title={readyForBatch(app) ? undefined : 'Only applications the Head recommended for approval'}
+      aria-label={`Select ${titleCaseName(applicantName(app))}`}
+      onClick={e => e.stopPropagation()}
+      onChange={() => toggle(app._id)}
+    />
+  );
   const listFiltersActive = filters.search.trim() !== '' || filters.scholarship !== 'All' || filters.office !== 'All';
   const clearListFilters = () => onFiltersChange({ ...DEFAULT_FILTERS, status: filters.status, sort: filters.sort });
 
@@ -155,10 +223,36 @@ export default function ApplicationsList({
           )
         ) : (
           <>
+            {batchView && skipped.length > 0 && (
+              <div className="px-4 pt-4">
+                <Alert tone="warning" title={`${skipped.length} not approved`} onDismiss={() => setSkipped([])}>
+                  <ul className="list-disc pl-5">{skipped.map(k => <li key={k.id}>{nameOfId(k.id)}: {k.reason}</li>)}</ul>
+                </Alert>
+              </div>
+            )}
+            {batchView && readyCount > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface-muted px-4 py-2.5">
+                <p className="text-sm text-ink">
+                  {pickedReady.length > 0
+                    ? `${pickedReady.length} selected`
+                    : `${readyCount} recommended for approval by the Head. Select them to approve together.`}
+                </p>
+                <div className="flex gap-2">
+                  {pickedReady.length > 0 && <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Clear</Button>}
+                  {pickedReady.length < readyCount && <Button size="sm" onClick={() => setPicked(new Set(filtered.filter(readyForBatch).map(a => a._id)))}>Select all {readyCount}</Button>}
+                  {pickedReady.length > 0 && <Button size="sm" variant="primary" icon={CheckCircle2} onClick={() => { setBatchError(''); setConfirming(true); }}>Approve {pickedReady.length}</Button>}
+                </div>
+              </div>
+            )}
             <div className="hidden xl:block">
             <Table label="Applications" minWidth={showWaiting ? '60rem' : '56rem'}>
               <thead>
                 <tr>
+                  {batchView && (
+                    <Th sticky={false} className="w-10">
+                      <input type="checkbox" className="size-4 rounded accent-accent disabled:opacity-30" checked={allPagePicked} disabled={!pageReady.length} onChange={togglePage} aria-label="Select the recommended applications on this page" />
+                    </Th>
+                  )}
                   <Th sticky={false}>Applicant</Th>
                   <Th sticky={false} className="w-40">College</Th>
                   <Th sticky={false}>Scholarship</Th>
@@ -177,6 +271,7 @@ export default function ApplicationsList({
                   const college = profile?.college || findProgram(profile?.programCode)?.college || '';
                   return (
                     <Tr key={app._id} onClick={() => onOpen(app)}>
+                      {batchView && <Td>{pickBox(app)}</Td>}
                       <Td>
                         <div className="flex min-w-0 items-start gap-3">
                           <Avatar name={name} avatarUrl={app.avatarUrl} size="sm" />
@@ -267,6 +362,27 @@ export default function ApplicationsList({
           </>
         )}
       </Card>
+      {confirming && (
+        <ConfirmDialog
+          title={`Approve ${pickedReady.length} application${pickedReady.length === 1 ? '' : 's'}?`}
+          confirmLabel={`Approve ${pickedReady.length}`}
+          confirmIcon={CheckCircle2}
+          busy={batchBusy}
+          error={batchError}
+          onConfirm={approveBatch}
+          onCancel={() => { if (!batchBusy) setConfirming(false); }}
+        >
+          <ul className="mb-3 list-disc space-y-1 pl-5 text-sm text-ink-muted">
+            <li>Each one the Head recommended for approval is approved, and the applicants see it in their portal.</li>
+            <li>SFAG applications get the grant percentage the student applied for.</li>
+            <li>Any that can’t be approved now (no slots left, already holds another scholarship, or changed meanwhile) are skipped and listed.</li>
+          </ul>
+          <Field label="Message to the applicants" optional helper="Sent with every approval in this batch.">
+            <Textarea value={batchNote} onChange={e => setBatchNote(e.target.value)} rows={3} maxLength={2000} disabled={batchBusy} className="resize-y" />
+          </Field>
+        </ConfirmDialog>
+      )}
+      {toast && <Toast message={toast} onClose={() => setToast('')} />}
     </>
   );
 }

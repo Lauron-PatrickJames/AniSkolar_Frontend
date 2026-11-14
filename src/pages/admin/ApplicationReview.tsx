@@ -124,6 +124,16 @@ export default function ApplicationReview({
     ['Mobile', applicantPhone(app) || '—']
   ];
 
+  const assessmentCard = officeFormFor(app.scholarshipId) && (
+    <OfficeAssessmentCard
+      app={app}
+      form={officeFormFor(app.scholarshipId)!}
+      getToken={getToken}
+      readOnly={!adminOffice}
+      onSaved={updated => { onUpdated(updated); setToast('Saved.'); }}
+    />
+  );
+
   return (
     <>
       <PageHeader
@@ -193,6 +203,9 @@ export default function ApplicationReview({
           aria-label="Review decision"
           className="min-w-0 space-y-6 xl:sticky xl:top-20 xl:-m-1 xl:max-h-[calc(100dvh-var(--spacing-topbar)-3rem)] xl:overflow-y-auto xl:p-1"
         >
+          {/* Interviewed scholarships (POLCA): the interview comes first, so
+              its card sits above the decision. */}
+          {officeFormFor(app.scholarshipId)?.interview && assessmentCard}
           {/* An office's scholarship: that office decides; the AdSO sees it read-only. */}
           {!adminOffice && officeApp && <PartnerDecision app={app} name={name} />}
           {!(!adminOffice && officeApp) && <DecisionPanel
@@ -212,15 +225,7 @@ export default function ApplicationReview({
           {app.status === 'Approved' && !(!adminOffice && officeApp) && mockScholarships.find(s => s.id === app.scholarshipId)?.noRenewal && (
             <ScholarshipEndCard app={app} getToken={getToken} onSaved={(updated, msg) => { onUpdated(updated); setToast(msg); }} />
           )}
-          {officeFormFor(app.scholarshipId) && (
-            <OfficeAssessmentCard
-              app={app}
-              form={officeFormFor(app.scholarshipId)!}
-              getToken={getToken}
-              readOnly={!adminOffice}
-              onSaved={updated => { onUpdated(updated); setToast('Saved.'); }}
-            />
-          )}
+          {officeFormFor(app.scholarshipId) && !officeFormFor(app.scholarshipId)!.interview && assessmentCard}
           {app.applicationFormType === 'polca' && !!adminOffice && (
             <PolcaAdminFieldsCard
               applicationId={app._id}
@@ -609,6 +614,10 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
   // The AdSO looking at a partner office's decided application it hasn't
   // ruled on itself (the office's decision is shown above).
   const awaitingAdso = !adminOffice && officeApp && decided && app.decisionOffice !== 'LSO';
+  // POLCA interviews every applicant: Approve waits for a passed interview.
+  const interviewBlock = officeFormFor(app.scholarshipId)?.interview && app.officeAssessment?.interviewResult !== 'passed'
+    ? (app.officeAssessment?.interviewResult === 'failed' ? 'The applicant didn’t pass the interview, so they can’t be approved.' : 'Approve opens once the interview above is marked passed. You can still ask for a revision or reject.')
+    : null;
 
   const start = (status: Decision) => {
     setError('');
@@ -710,6 +719,11 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
           </>
         ) : (
           <>
+            {interviewBlock && (
+              <Alert tone={app.officeAssessment?.interviewResult === 'failed' ? 'danger' : 'info'} title={app.officeAssessment?.interviewResult === 'failed' ? 'Did not pass the interview' : 'Interview first'}>
+                {interviewBlock}
+              </Alert>
+            )}
             <QuickReplies
               getToken={getToken}
               context="application"
@@ -758,7 +772,7 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
                     key={status}
                     variant={d.variant}
                     icon={d.icon}
-                    disabled={busy}
+                    disabled={busy || (status === 'Approved' && !!interviewBlock)}
                     onClick={() => start(status)}
                     className="w-full"
                   >

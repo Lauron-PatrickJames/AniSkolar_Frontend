@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, CheckCircle2, Clock, FileText, RotateCcw, Search, XCircle, AlertTriangle, Ban } from 'lucide-react';
+import { ArrowRight, CalendarClock, CheckCircle2, Clock, FileText, RotateCcw, Search, XCircle, AlertTriangle, Ban } from 'lucide-react';
 import { Application } from '../../types';
 import { officeDisplayName } from '../../data/scholarships';
+import { formatDay, formatTime, officeFormFor } from '../../data/officeForms';
 
 // Every application the student has submitted, newest first, with its
 // status, the office's message and what to do next.
@@ -104,6 +105,24 @@ export default function MyApplications({ applications, onViewScholarship, onResu
                     <Icon className="h-3.5 w-3.5" /> {meta.label}
                   </span>
                 </div>
+
+                {(a.status === 'Under Evaluation' || a.status === 'Needs Revision') && officeFormFor(a.scholarshipId)?.interview && (
+                  a.interview ? (
+                    <div className="mt-4 flex gap-3 rounded-xl bg-sky-50 p-3.5 ring-1 ring-sky-200">
+                      <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-sky-700" />
+                      <div className="text-sm">
+                        <p className="font-semibold text-sky-900">{a.interview.mode === 'online' ? 'Online interview' : a.interview.mode === 'onsite' ? 'Onsite interview' : 'Interview'}</p>
+                        <p className="text-sky-900">{formatDay(a.interview.date)}{a.interview.time ? `, ${formatTime(a.interview.time)}` : ''}</p>
+                        {a.interview.venue && (/^https?:\/\//i.test(a.interview.venue)
+                          ? <a href={a.interview.venue} target="_blank" rel="noopener noreferrer" className="break-all font-medium text-sky-800 underline">Join the meeting</a>
+                          : <p className="break-words text-sky-800">{a.interview.venue}</p>)}
+                        <p className="mt-1 text-xs text-sky-700">{a.interview.mode === 'online' ? 'Join on time from a quiet place with a working camera and microphone.' : 'Please come on time.'} If you can’t make it, message the office.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-xs text-slate-500">Every applicant is interviewed before a decision. The office will email you the schedule, and it will show here.</p>
+                  )
+                )}
 
                 {a.reviewNote && (
                   <div className="mt-4 rounded-xl bg-slate-50 p-3.5 ring-1 ring-slate-200">

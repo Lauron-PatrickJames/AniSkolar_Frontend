@@ -618,6 +618,9 @@ export interface Application {
   // SFAG: the tuition discount applied for, and the one granted.
   sfagPercentageRequested?: number | null;
   sfagPercentage?: number | null;
+  // Scholarships that interview applicants (POLCA): the schedule the
+  // office set, once set.
+  interview?: { mode?: 'onsite' | 'online'; date: string; time?: string; venue?: string };
   // Present only for applications submitted through the detailed SFAG
   // Grant form (applicationFormType === 'sfag'). Holds the full 5-tab
   // dataset in addition to the summary fields above.

@@ -163,7 +163,7 @@ export function QuickReplies({ getToken, context = 'message', decision, vars, va
         onWheel={onWheel}
         role="list"
         aria-label="Quick replies"
-        className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]"
+        className="relative flex min-w-0 flex-1 gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,black_calc(100%-24px),transparent)]"
       >
         {!templates ? (
           ['w-14', 'w-24', 'w-20', 'w-16'].map(w => <Skeleton key={w} className={`h-7 shrink-0 rounded-full ${w}`} />)

@@ -1,4 +1,5 @@
 import { StudentProfile, Application, Announcement } from '../types';
+import { formatDay, formatTime } from '../data/officeForms';
 
 export interface NotificationItem {
   id: string;
@@ -105,6 +106,25 @@ export function buildNotifications(student: StudentProfile, applications: Applic
       scholarshipId: app.scholarshipId,
       status: app.status,
       note: app.reviewNote?.trim() || undefined,
+    });
+  });
+
+  // An interview set (or moved) by the office (POLCA): one per schedule,
+  // while the application is still being decided.
+  applications.forEach(app => {
+    if (!app.interview || !(app.status === 'Under Evaluation' || app.status === 'Needs Revision')) return;
+    const { mode, date, time, venue } = app.interview;
+    const id = `interview-${app.id}-${mode ?? ''}-${date}-${time ?? ''}-${venue ?? ''}`;
+    if (cleared.has(id)) return;
+    const when = `${formatDay(date)}${time ? `, ${formatTime(time)}` : ''}`;
+    items.unshift({
+      id,
+      page: 'applications',
+      title: `Interview: ${app.scholarshipName}`,
+      text: `You're scheduled for an ${mode === 'online' ? 'online ' : mode === 'onsite' ? 'onsite ' : ''}interview on ${when}${venue ? (mode === 'online' ? '. The link is in My Applications' : ` at ${venue}`) : ''}. ${mode === 'online' ? 'Join' : 'Please come'} on time; if you can't make it, message the office.`,
+      time: when,
+      isRead: read.has(id),
+      scholarshipId: app.scholarshipId,
     });
   });
 

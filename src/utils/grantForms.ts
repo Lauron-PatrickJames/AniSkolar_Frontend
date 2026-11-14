@@ -11,6 +11,8 @@ import {
   EvaluationSheet,
   GrantApplicationDetails,
   GrantEligibilityAnswers,
+  GrantParentInfo,
+  GrantParentStatus,
   HouseholdMember,
   Scholarship,
   SchoolRecord,
@@ -169,6 +171,14 @@ export function getGrantSections(scholarship: Scholarship): GrantSectionDef[] {
   ];
 }
 
+// --- Parents ------------------------------------------------------------------
+
+export const PARENT_STATUSES: readonly GrantParentStatus[] = ['Living', 'Deceased', 'Not applicable'];
+export const parentStatus = (p: Pick<GrantParentInfo, 'status'>): GrantParentStatus => p.status ?? 'Living';
+// No living parent on the form: the guardian is who the office contacts.
+export const needsGuardian = (v: Pick<GrantApplicationDetails, 'parentsGuardian'>) =>
+  parentStatus(v.parentsGuardian.father) !== 'Living' && parentStatus(v.parentsGuardian.mother) !== 'Living';
+
 // --- Path helpers (form state is one nested object) ---------------------------
 
 export function getIn(obj: unknown, path: string): any {
@@ -292,8 +302,8 @@ function emptyDetails(scholarship: Scholarship): GrantApplicationDetails {
       email: '', secondarySchool: '', secondarySchoolType: ''
     },
     parentsGuardian: {
-      father: { name: '', occupation: '', monthlyIncome: 0 },
-      mother: { name: '', occupation: '', monthlyIncome: 0 },
+      father: { name: '', occupation: '', monthlyIncome: 0, status: 'Living' },
+      mother: { name: '', occupation: '', monthlyIncome: 0, status: 'Living' },
       guardian: { name: '', relationship: '', address: '', landlineNo: '', mobileNo: '' }
     },
     contactSchool: { streetAddress: '', barangay: '', municipality: '', province: '', landlineNo: '', mobileNo: '' },
@@ -338,6 +348,8 @@ export function initialGrantValues(scholarship: Scholarship, student: StudentPro
   };
   base.parentsGuardian.father.name = student.fatherName || '';
   base.parentsGuardian.mother.name = student.motherName || '';
+  base.parentsGuardian.father.status = student.fatherDeceased ? 'Deceased' : student.fatherAbsent ? 'Not applicable' : 'Living';
+  base.parentsGuardian.mother.status = student.motherDeceased ? 'Deceased' : student.motherAbsent ? 'Not applicable' : 'Living';
   base.parentsGuardian.guardian = {
     ...base.parentsGuardian.guardian,
     name: student.guardianName || '',
@@ -487,7 +499,10 @@ export function validateGrantSection(key: GrantSectionKey, ctx: GrantValidationC
       break;
     }
     case 'family': {
-      for (const who of ['father', 'mother']) {
+      // Only a living parent needs details; a deceased parent's name is
+      // optional, and "Not applicable" (solo parent, unknown) needs none.
+      for (const who of ['father', 'mother'] as const) {
+        if (parentStatus(v.parentsGuardian[who]) !== 'Living') continue;
         requireText(errs, v, `parentsGuardian.${who}.name`);
         requireText(errs, v, `parentsGuardian.${who}.occupation`);
         requireNonNegative(errs, v, `parentsGuardian.${who}.monthlyIncome`);
@@ -499,6 +514,10 @@ export function validateGrantSection(key: GrantSectionKey, ctx: GrantValidationC
       if (blank(mobile)) errs['contactSchool.mobileNo'] = REQUIRED;
       else if (!isPhMobile(mobile)) errs['contactSchool.mobileNo'] = 'Use a valid PH mobile number, e.g. 09171234567.';
       const g = v.parentsGuardian.guardian;
+      if (needsGuardian(v)) {
+        requireText(errs, v, 'parentsGuardian.guardian.name');
+        if (blank(g.mobileNo) && blank(g.landlineNo)) errs['parentsGuardian.guardian.mobileNo'] = 'Enter a number the office can reach your guardian on.';
+      }
       if (!blank(g.name)) {
         requireText(errs, v, 'parentsGuardian.guardian.relationship');
         if (!blank(g.mobileNo) && !isPhMobile(g.mobileNo)) {
@@ -582,9 +601,11 @@ export function validateGrantSection(key: GrantSectionKey, ctx: GrantValidationC
     case 'ev-family': {
       const fam = sheet!.family;
       requireChoice(errs, v, 'evaluationSheet.family.parentsSeparated');
-      for (const role of ['father', 'mother']) {
-        requireText(errs, v, `evaluationSheet.family.${role}.name`);
-        requireChoice(errs, v, `evaluationSheet.family.${role}.living`);
+      // Follows the parent status from "Parents, Contact & Guardian".
+      for (const role of ['father', 'mother'] as const) {
+        const status = parentStatus(v.parentsGuardian[role]);
+        if (status === 'Living') requireText(errs, v, `evaluationSheet.family.${role}.name`);
+        if (status !== 'Not applicable') requireChoice(errs, v, `evaluationSheet.family.${role}.living`);
       }
       for (const role of ['spouse', 'guardian'] as const) {
         if (!blank(fam[role].name)) requireChoice(errs, v, `evaluationSheet.family.${role}.living`);

@@ -1,11 +1,12 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { GrantSibling } from '../../types';
+import { GrantParentStatus, GrantSibling } from '../../types';
+import { Checkbox } from '../../pages/admin/AdminUI';
 import { ALUMNI_INSTITUTIONS, ALUMNI_RELATIONSHIPS } from '../../data/scholarships';
 import {
   CIVIL_STATUS_OPTIONS, FAMILY_INCOME_BRACKETS, GENDER_OPTIONS, MONTHLY_EXPENSE_BRACKETS,
-  VALUE_BRACKETS, YEAR_LEVEL_OPTIONS, YES_NO, calculateAge, certificationText, newRowId
+  VALUE_BRACKETS, YEAR_LEVEL_OPTIONS, YES_NO, calculateAge, certificationText, needsGuardian, newRowId, parentStatus
 } from '../../utils/grantForms';
 import { checkApplyEligibility } from '../../utils/eligibility';
 import {
@@ -69,19 +70,19 @@ export function EligibilitySection() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`p-4 rounded-xl border flex items-start gap-2.5 text-xs ${
-            reasons.length ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-brand-green-dark'
+          className={`flex items-start gap-2.5 rounded-card p-4 text-sm ring-1 ring-inset ${
+            reasons.length ? 'bg-danger-bg text-danger-fg ring-danger/20' : 'bg-accent-subtle text-accent ring-accent/20'
           }`}
         >
-          {reasons.length ? <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> : <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />}
+          {reasons.length ? <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />}
           <div className="space-y-1">
-            <p className="font-bold">{reasons.length ? 'You don’t meet the requirements for this scholarship yet' : 'You meet the application requirements'}</p>
+            <p className="font-medium">{reasons.length ? 'You don’t meet the requirements for this scholarship yet' : 'You meet the application requirements'}</p>
             {reasons.map(r => <p key={r}>{r}</p>)}
           </div>
         </motion.div>
       )}
       {errors.eligibility && !answered && (
-        <p className="text-xs font-semibold text-rose-600">{errors.eligibility}</p>
+        <p className="text-xs font-medium text-danger">{errors.eligibility}</p>
       )}
     </div>
   );
@@ -131,40 +132,85 @@ export function StudentDataSection() {
   );
 }
 
+function ParentRow({ who }: { who: 'father' | 'mother' }) {
+  const { values, setValue } = useGrantForm();
+  const parent = values.parentsGuardian[who];
+  const status = parentStatus(parent);
+  const title = who === 'father' ? 'Father' : 'Mother';
+  const base = `parentsGuardian.${who}`;
+  const setStatus = (next: string) => setValue(base, {
+    ...parent,
+    status: next as GrantParentStatus,
+    // Only a living parent has an occupation and income on the form.
+    ...(next !== 'Living' ? { occupation: '', monthlyIncome: 0 } : {}),
+    ...(next === 'Not applicable' ? { name: '' } : {}),
+  });
+  return (
+    <fieldset className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <legend className="text-sm font-medium text-ink">{title}</legend>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <Checkbox checked={status === 'Deceased'} onChange={v => setStatus(v ? 'Deceased' : 'Living')} label="Deceased" />
+          <Checkbox checked={status === 'Not applicable'} onChange={v => setStatus(v ? 'Not applicable' : 'Living')} label="Not applicable" />
+        </div>
+      </div>
+      {status === 'Living' && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
+          <TextField path={`${base}.name`} label="Full name" required />
+          <TextField path={`${base}.occupation`} label="Occupation" required />
+          <NumberField path={`${base}.monthlyIncome`} label="Monthly income" peso required />
+        </div>
+      )}
+      {status === 'Deceased' && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1.8fr)]">
+          <TextField path={`${base}.name`} label={<>Full name <span className="font-normal text-ink-subtle">(optional)</span></>} />
+        </div>
+      )}
+      {status === 'Not applicable' && (
+        <p className="rounded-control bg-surface-muted px-3 py-2 text-sm text-ink-muted">
+          No details needed, for example in a solo-parent household.
+        </p>
+      )}
+    </fieldset>
+  );
+}
+
 export function FamilyContactSection() {
+  const { values } = useGrantForm();
+  const guardianRequired = needsGuardian(values);
   return (
     <div className="space-y-6">
       <Block>
-        <SubHeading note={'Write "N/A" for a parent who is deceased or not in the picture, with a monthly income of 0.'}>Parents</SubHeading>
-        <div className="space-y-4">
-          {(['father', 'mother'] as const).map(who => (
-            <div key={who} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <TextField path={`parentsGuardian.${who}.name`} label={who === 'father' ? "Father's Name" : "Mother's Name"} required />
-              <TextField path={`parentsGuardian.${who}.occupation`} label="Occupation" required />
-              <NumberField path={`parentsGuardian.${who}.monthlyIncome`} label="Monthly Income" peso required />
-            </div>
-          ))}
+        <SubHeading note="Tick Deceased or Not applicable if it applies. Leave both unticked for a living parent.">Parents</SubHeading>
+        <div className="space-y-5">
+          <ParentRow who="father" />
+          <ParentRow who="mother" />
         </div>
       </Block>
       <Block>
-        <SubHeading>Contact Information</SubHeading>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <TextField path="contactSchool.streetAddress" label="Street Address" required className="sm:col-span-2" />
+        <SubHeading>Contact information</SubHeading>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <TextField path="contactSchool.streetAddress" label="Street address" required className="sm:col-span-2" />
           <TextField path="contactSchool.barangay" label="Barangay" required />
-          <TextField path="contactSchool.municipality" label="City / Municipality" required />
+          <TextField path="contactSchool.municipality" label="City / municipality" required />
           <TextField path="contactSchool.province" label="Province" required />
-          <TextField path="contactSchool.landlineNo" label="Landline No." type="tel" />
-          <TextField path="contactSchool.mobileNo" label="Mobile No." type="tel" required placeholder="09171234567" />
+          <TextField path="contactSchool.mobileNo" label="Mobile no." type="tel" required placeholder="09171234567" />
+          <TextField path="contactSchool.landlineNo" label={<>Landline no. <span className="font-normal text-ink-subtle">(optional)</span></>} type="tel" />
         </div>
       </Block>
       <Block>
-        <SubHeading note="Leave blank if you live with your parents.">Guardian</SubHeading>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <TextField path="parentsGuardian.guardian.name" label="Guardian's Name" />
-          <TextField path="parentsGuardian.guardian.relationship" label="Relationship" />
-          <TextField path="parentsGuardian.guardian.address" label="Address" className="sm:col-span-2" />
-          <TextField path="parentsGuardian.guardian.landlineNo" label="Landline No." type="tel" />
-          <TextField path="parentsGuardian.guardian.mobileNo" label="Mobile No." type="tel" placeholder="09171234567" />
+        <SubHeading note={guardianRequired
+          ? 'Required, since neither parent is listed as living. This is who the office contacts for you.'
+          : 'Optional. Fill this in if you don’t live with your parents.'}
+        >
+          Guardian
+        </SubHeading>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <TextField path="parentsGuardian.guardian.name" label="Guardian’s name" required={guardianRequired} className="sm:col-span-2" />
+          <TextField path="parentsGuardian.guardian.relationship" label="Relationship" required={guardianRequired} placeholder="e.g. Aunt, grandparent" />
+          <TextField path="parentsGuardian.guardian.mobileNo" label="Mobile no." type="tel" required={guardianRequired} placeholder="09171234567" />
+          <TextField path="parentsGuardian.guardian.address" label="Address" className="sm:col-span-2 lg:col-span-3" />
+          <TextField path="parentsGuardian.guardian.landlineNo" label={<>Landline no. <span className="font-normal text-ink-subtle">(optional)</span></>} type="tel" />
         </div>
       </Block>
     </div>
@@ -228,7 +274,7 @@ export function CertificationSection() {
   const hasError = !!errors['agreement.agreed'];
   return (
     <div className="space-y-5">
-      <div className={`border rounded-xl p-4 ${hasError ? 'border-rose-400 bg-rose-50/60' : 'border-amber-300 bg-amber-50/50'}`}>
+      <div className={`rounded-card bg-surface-muted p-4 ring-1 ring-inset ${hasError ? 'ring-danger' : 'ring-line'}`}>
         <CheckboxField path="agreement.agreed" label={certificationText(scholarship)} />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

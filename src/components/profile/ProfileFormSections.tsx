@@ -320,7 +320,6 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
 // --- Parents & guardian ------------------------------------------------------------
 
 type ParentStatus = 'living' | 'deceased' | 'absent';
-const PARENT_STATUSES: [ParentStatus, string][] = [['living', 'Living'], ['deceased', 'Deceased'], ['absent', 'Not applicable']];
 
 export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
   const parent = (who: 'father' | 'mother') => {
@@ -340,19 +339,9 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
       <fieldset className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <legend className="text-sm font-semibold text-ink">{title}</legend>
-          <div role="radiogroup" aria-label={`${title}: status`} className="inline-flex rounded-control bg-surface-muted p-0.5 ring-1 ring-inset ring-line">
-            {PARENT_STATUSES.map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={status === value}
-                onClick={() => setStatus(value)}
-                className={`rounded-[calc(var(--radius-control)-2px)] px-3 py-1 text-xs font-medium transition-colors ${status === value ? 'bg-surface text-ink shadow-sm ring-1 ring-line' : 'text-ink-subtle hover:text-ink'}`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <Checkbox checked={status === 'deceased'} onChange={v => setStatus(v ? 'deceased' : 'living')} label="Deceased" />
+            <Checkbox checked={status === 'absent'} onChange={v => setStatus(v ? 'absent' : 'living')} label="Not applicable" />
           </div>
         </div>
         {status === 'absent' ? (

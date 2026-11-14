@@ -4,6 +4,7 @@ import { Checkbox, Combobox, ComboboxOption, DatePicker, Field, Select, TextInpu
 import { PROGRAMS, YEAR_LEVELS, collegeName, findProgram } from '../../data/programs';
 import { CITIES_BY_PROVINCE, PROVINCES } from '../../data/phLocations';
 import { formatPhone, normalizePhMobile } from '../../utils/profile';
+import { phoneChars } from '../../utils/numericInput';
 import { CIVIL_STATUS_OPTIONS, DraftField, NAME_SUFFIXES, PHILIPPINES, ProfileDraft, parentPresent } from './profileForm';
 
 // The profile's form sections, shared by the first-time setup page and the
@@ -225,7 +226,7 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
               inputMode="tel"
               autoComplete="tel"
               value={draft.mobileNumber}
-              onChange={e => update({ mobileNumber: e.target.value })}
+              onChange={e => update({ mobileNumber: phoneChars(e.target.value) })}
               onBlur={e => { update({ mobileNumber: tidyPhone(e.currentTarget.value) }); touch('mobileNumber'); }}
               placeholder="0917 123 4567"
             />
@@ -233,7 +234,7 @@ export function ContactFields({ draft, update, errorFor, touch, email }: Section
         </Slot>
         <Slot name="telephoneNumber">
           <Field label="Telephone" optional error={errorFor('telephoneNumber')}>
-            <TextInput type="tel" inputMode="tel" value={draft.telephoneNumber} onChange={e => update({ telephoneNumber: e.target.value })} onBlur={() => touch('telephoneNumber')} placeholder="(046) 481 1900" />
+            <TextInput type="tel" inputMode="tel" value={draft.telephoneNumber} onChange={e => update({ telephoneNumber: phoneChars(e.target.value) })} onBlur={() => touch('telephoneNumber')} placeholder="(046) 481 1900" />
           </Field>
         </Slot>
       </div>
@@ -368,7 +369,7 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
             {status === 'living' && (
               <Slot name={contactKey}>
                 <Field label="Contact number" error={errorFor(contactKey)}>
-                  <TextInput type="tel" inputMode="tel" value={draft[contactKey]} onChange={e => update({ [contactKey]: e.target.value })} onBlur={e => { update({ [contactKey]: tidyPhone(e.currentTarget.value) }); touch(contactKey); }} placeholder="0917 123 4567" />
+                  <TextInput type="tel" inputMode="tel" value={draft[contactKey]} onChange={e => update({ [contactKey]: phoneChars(e.target.value) })} onBlur={e => { update({ [contactKey]: tidyPhone(e.currentTarget.value) }); touch(contactKey); }} placeholder="0917 123 4567" />
                 </Field>
               </Slot>
             )}
@@ -426,7 +427,7 @@ export function FamilyFields({ draft, update, errorFor, touch }: SectionProps) {
               </Slot>
               <Slot name="guardianContactNo">
                 <Field label="Contact number" error={errorFor('guardianContactNo')}>
-                  <TextInput type="tel" inputMode="tel" value={draft.guardianContactNo} onChange={e => update({ guardianContactNo: e.target.value })} onBlur={e => { update({ guardianContactNo: tidyPhone(e.currentTarget.value) }); touch('guardianContactNo'); }} />
+                  <TextInput type="tel" inputMode="tel" value={draft.guardianContactNo} onChange={e => update({ guardianContactNo: phoneChars(e.target.value) })} onBlur={e => { update({ guardianContactNo: tidyPhone(e.currentTarget.value) }); touch('guardianContactNo'); }} />
                 </Field>
               </Slot>
             </div>

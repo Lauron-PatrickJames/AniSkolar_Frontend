@@ -1,3 +1,4 @@
+import { phoneChars } from '../../utils/numericInput';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AlertCircle, FileText, Plus, Trash2, Upload, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -112,9 +113,9 @@ export function TextField({ path, label, required, hint, className, disabled, ty
       <input
         type={type}
         value={value ?? ''}
-        onChange={e => setValue(e.target.value)}
+        onChange={e => setValue(type === 'tel' ? phoneChars(e.target.value) : e.target.value)}
         placeholder={placeholder}
-        maxLength={maxLength}
+        maxLength={maxLength ?? (type === 'tel' ? 20 : undefined)}
         disabled={disabled}
         inputMode={type === 'tel' ? 'tel' : undefined}
         className={error ? errorInputClass : inputClass}

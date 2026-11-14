@@ -1,3 +1,4 @@
+import { decimalChars, phoneChars } from '../../utils/numericInput';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/react'; // match whatever package App.tsx imports useAuth from
 import {
@@ -245,7 +246,7 @@ function isValidAge(value: string): boolean {
   return Number.isInteger(n) && n >= 0 && n <= 120;
 }
 
-type FieldKind = 'text' | 'email' | 'phone' | 'gpa' | 'date';
+type FieldKind = 'text' | 'email' | 'phone' | 'gpa' | 'date' | 'amount';
 
 function messageForField(value: string, kind: FieldKind): string | undefined {
   if (isBlank(value)) return REQUIRED_MSG;
@@ -686,13 +687,11 @@ function StandardApplyScholarship({
         if (isBlank(parentsGuardian.father.fullName)) errs['father.fullName'] = REQUIRED_MSG;
         if (isBlank(parentsGuardian.father.occupation)) errs['father.occupation'] = REQUIRED_MSG;
         if (isBlank(parentsGuardian.father.company)) errs['father.company'] = REQUIRED_MSG;
-        if (isBlank(parentsGuardian.father.companyTel)) errs['father.companyTel'] = REQUIRED_MSG;
       }
       if (!motherIsNA) {
         if (isBlank(parentsGuardian.mother.fullName)) errs['mother.fullName'] = REQUIRED_MSG;
         if (isBlank(parentsGuardian.mother.occupation)) errs['mother.occupation'] = REQUIRED_MSG;
         if (isBlank(parentsGuardian.mother.company)) errs['mother.company'] = REQUIRED_MSG;
-        if (isBlank(parentsGuardian.mother.companyTel)) errs['mother.companyTel'] = REQUIRED_MSG;
       }
     }
     if (step === 5) {
@@ -972,7 +971,7 @@ function StandardApplyScholarship({
       <label className={labelClass}>{o.label} {o.required && !o.disabled && <Req />}</label>
       <input
         type={o.type ?? 'text'}
-        inputMode={o.type === 'tel' ? 'tel' : o.kind === 'gpa' ? 'decimal' : undefined}
+        inputMode={o.type === 'tel' ? 'tel' : o.kind === 'gpa' || o.kind === 'amount' ? 'decimal' : undefined}
         className={o.disabled ? inputClass : fieldClass(o.key)}
         value={o.value}
         max={o.max}
@@ -981,7 +980,8 @@ function StandardApplyScholarship({
         disabled={o.disabled}
         list={o.list}
         autoComplete={o.list ? 'off' : undefined}
-        onChange={e => { o.onChange(e.target.value); clearFieldError(o.key); }}
+        // Phone numbers, grades and amounts take numbers only.
+        onChange={e => { const v = e.target.value; o.onChange(o.type === 'tel' ? phoneChars(v) : o.kind === 'gpa' || o.kind === 'amount' ? decimalChars(v) : v); clearFieldError(o.key); }}
         onBlur={o.required && !o.disabled ? e => validateOnBlur(o.key, e.target.value, o.kind ?? 'text') : undefined}
         aria-invalid={!!fieldError(o.key)}
       />
@@ -1186,7 +1186,7 @@ function StandardApplyScholarship({
                 {textField({ key: fk('occupation'), label: 'Occupation', required: true, disabled: isDisabled, value: parent.occupation, onChange: v => setParent({ occupation: v }) })}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {textField({ key: fk('company'), label: 'Company', required: true, disabled: isDisabled, value: parent.company, onChange: v => setParent({ company: v }) })}
-                  {textField({ key: fk('companyTel'), label: 'Company Tel.', required: true, disabled: isDisabled, value: parent.companyTel, onChange: v => setParent({ companyTel: v }) })}
+                  {textField({ key: fk('companyTel'), label: 'Company Tel.', type: 'tel', hint: 'If employed',  disabled: isDisabled, value: parent.companyTel, onChange: v => setParent({ companyTel: v }) })}
                 </div>
                 {selectField({ label: 'Monthly Income', disabled: isDisabled, value: parent.monthlyIncome, onChange: v => setParent({ monthlyIncome: v }), options: INCOME_BRACKETS })}
                 <label className={`flex items-center gap-2 text-xs font-semibold ${isDisabled ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 cursor-pointer'}`}>
@@ -1249,7 +1249,7 @@ function StandardApplyScholarship({
                 <label className={labelClass}>School Type</label>
                 <ChoicePills value={sib.schoolType} onChange={v => updateSibling(sib.id, { schoolType: v as SfagSibling['schoolType'] })} options={['Public', 'Private', 'N/A']} />
               </div>
-              {textField({ key: `sib.${i}.tuitionOrIncome`, label: 'Tuition / Monthly Income', value: sib.tuitionOrIncome, onChange: v => updateSibling(sib.id, { tuitionOrIncome: v }) })}
+              {textField({ key: `sib.${i}.tuitionOrIncome`, label: 'Tuition / Monthly Income (₱)', kind: 'amount', placeholder: 'e.g. 5000', value: sib.tuitionOrIncome, onChange: v => updateSibling(sib.id, { tuitionOrIncome: v }) })}
               <div>
                 <label className={labelClass}>DLSU-D Scholar?</label>
                 <ChoicePills value={sib.isDlsudScholar ? 'Yes' : 'No'} onChange={v => updateSibling(sib.id, { isDlsudScholar: v === 'Yes' })} options={['Yes', 'No']} />

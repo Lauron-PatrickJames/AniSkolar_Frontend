@@ -15,6 +15,13 @@ import {
 import { relativeTime } from './history';
 import { collegeName, findProgram } from '../../data/programs';
 
+// Where an AdSO application under evaluation is in the approval chain
+// (ApprovalChain.tsx); nothing for partner office applications.
+const chainStageText = (app: AdminApplication) => {
+  if (app.status !== 'Under Evaluation' || isOfficeApp(app)) return '';
+  return { associate: 'With the Associate', head: 'With the Head', director: 'For the Director' }[app.approvalStage ?? 'associate'];
+};
+
 export { DEFAULT_FILTERS };
 export type { ListFilters };
 
@@ -218,7 +225,10 @@ export default function ApplicationsList({
                             : <span className="tabular-nums">{days === 0 ? 'Today' : `${days} ${days === 1 ? 'day' : 'days'}`}</span>}
                         </Td>
                       )}
-                      <Td><StatusBadge status={app.status} endReason={app.endReason} /></Td>
+                      <Td>
+                        <StatusBadge status={app.status} endReason={app.endReason} />
+                        {chainStageText(app) && <p className="mt-1 text-xs text-ink-subtle">{chainStageText(app)}</p>}
+                      </Td>
                       <Td><ChevronRight className="size-4 text-ink-subtle group-hover:text-ink" aria-hidden /></Td>
                     </Tr>
                   );

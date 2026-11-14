@@ -22,6 +22,8 @@ import { ResultDialog,
 } from './AdminUI';
 import HistoryList from './HistoryList';
 import OfficeAssessmentCard from './OfficeAssessmentCard';
+import ApprovalChain, { AdsoRole, canAct, stageOf } from './ApprovalChain';
+import { useUser } from '@clerk/react';
 import { OfficeAnswers, answerText, askedQuestions, officeFormFor } from '../../data/officeForms';
 import { buildApplicationHistory, latestDecision, partnerOfficeDecision, relativeTime } from './history';
 
@@ -218,6 +220,7 @@ export default function ApplicationReview({
               const sentToAdso = !!adminOffice && !app.forwardedAt && !!updated.forwardedAt;
               setToast(sentToAdso ? 'Approved. The AdSO now sees this scholar.' : `${DECISIONS[status].done}.`);
             }}
+            onStep={(updated, message) => { onUpdated(updated); setToast(message); }}
           />}
           {!adminOffice && app.scholarshipId === 's1' && app.status === 'Approved' && (
             <SfagGrantCard app={app} getToken={getToken} onSaved={updated => { onUpdated(updated); setToast('Saved the grant percentage.'); }} />
@@ -585,14 +588,24 @@ function PartnerDecision({ app, name }: { app: AdminApplication; name: string })
   );
 }
 
-function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
+function DecisionPanel({ app, name, adminOffice, getToken, onDecided, onStep }: {
   app: AdminApplication;
   name: string;
   adminOffice: string | null;
   getToken: () => Promise<string | null>;
   onDecided: (updated: AdminApplication, status: Decision) => void;
+  onStep: (updated: AdminApplication, message: string) => void;
 }) {
   const officeApp = isOfficeApp(app);
+  // The AdSO's own scholarships go through its approval chain
+  // (ApprovalChain.tsx); the role is publicMetadata.adsoRole in Clerk.
+  const { user } = useUser();
+  const rawRole = (user?.publicMetadata as { adsoRole?: string } | undefined)?.adsoRole;
+  const adsoRole: AdsoRole = rawRole === 'associate' || rawRole === 'head' || rawRole === 'director' ? rawRole : null;
+  const chain = !adminOffice && !officeApp;
+  const directorsCall = !chain || canAct(adsoRole, 'director');
+  // Approve and Reject wait for the Director's step; revision is open to all.
+  const finalOpen = !chain || (directorsCall && (app.status !== 'Under Evaluation' || stageOf(app) === 'director'));
   const lockedByOverride = !!adminOffice && app.decisionOffice === 'LSO';
   const decided = app.status !== 'Under Evaluation';
   const [changing, setChanging] = useState(false);
@@ -712,13 +725,18 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
             {app.endedAt ? (
               <p className="text-sm text-ink-muted">This scholarship has ended, so its decision can’t be changed. Undo the end first.</p>
             ) : (
-              <Button variant="ghost" size="sm" className="-ml-2.5" onClick={() => { setChanging(true); setNoteError(''); }}>
-                Change decision
-              </Button>
+              directorsCall ? (
+                <Button variant="ghost" size="sm" className="-ml-2.5" onClick={() => { setChanging(true); setNoteError(''); }}>
+                  Change decision
+                </Button>
+              ) : <p className="text-sm text-ink-muted">Only the Director can change this decision.</p>
             )}
           </>
         ) : (
           <>
+            {chain && app.status === 'Under Evaluation' && !changing && (
+              <ApprovalChain app={app} role={adsoRole} getToken={getToken} onChanged={onStep} />
+            )}
             {interviewBlock && (
               <Alert tone={app.officeAssessment?.interviewResult === 'failed' ? 'danger' : 'info'} title={app.officeAssessment?.interviewResult === 'failed' ? 'Did not pass the interview' : 'Interview first'}>
                 {interviewBlock}
@@ -765,7 +783,7 @@ function DecisionPanel({ app, name, adminOffice, getToken, onDecided }: {
               <p className="text-xs text-ink-subtle">The AdSO sees approved scholars.</p>
             )}
             <div className="space-y-2">
-              {DECISION_ORDER.filter(status => status !== app.status || !decided).map(status => {
+              {DECISION_ORDER.filter(status => status !== app.status || !decided).filter(status => status === 'Needs Revision' || finalOpen).map(status => {
                 const d = DECISIONS[status];
                 return (
                   <Button

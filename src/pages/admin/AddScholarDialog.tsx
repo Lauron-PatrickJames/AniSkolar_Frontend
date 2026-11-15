@@ -14,10 +14,110 @@ import { Alert, Button, Checkbox, Field, Modal, Select, TextInput, Textarea } fr
 // number, name and school email; it's theirs the first time they sign in,
 // and they're emailed either way. Backend: POST /api/applications/direct-award.
 
-interface FoundStudent { studentNumber: string; name: string; programCode?: string; college?: string; yearLevel?: string }
-interface NewStudent { studentNumber: string; firstName: string; lastName: string; email: string }
+export interface FoundStudent { studentNumber: string; name: string; programCode?: string; college?: string; yearLevel?: string }
+export interface NewStudent { studentNumber: string; firstName: string; lastName: string; email: string }
 
 const DISCOUNTS = [100, 75, 50, 25];
+
+// Step 1 of adding a scholar: search the students in AniSkolar, or enter
+// someone who hasn't signed in yet. Shared with ManualScholarDialog.
+export function StudentPicker({ who, student, newStudent, onStudent, onNewStudent, attempted, busy, getToken }: {
+  who: string;
+  student: FoundStudent | null;
+  newStudent: NewStudent | null;
+  onStudent: (s: FoundStudent | null) => void;
+  onNewStudent: (s: NewStudent | null) => void;
+  attempted: boolean;
+  busy: boolean;
+  getToken: () => Promise<string | null>;
+}) {
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState<FoundStudent[] | null>(null);
+
+  // Student search, a moment after typing.
+  useEffect(() => {
+    if (student || newStudent || query.trim().length < 2) { setFound(null); return; }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/applications/direct-award/students?q=${encodeURIComponent(query.trim())}`, { headers: await authHeaders(getToken) });
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setFound(body.students ?? []);
+      } catch {
+        // keep the last results
+      }
+    }, 300);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [query, student, newStudent, getToken]);
+
+  const startNew = () => {
+    const q = query.trim();
+    onNewStudent({ studentNumber: /^\d+$/.test(q) ? q.slice(0, 9) : '', firstName: '', lastName: '', email: '' });
+    setFound(null);
+  };
+  const setNew = (patch: Partial<NewStudent>) => onNewStudent(newStudent ? { ...newStudent, ...patch } : newStudent);
+
+  return (
+    <>
+          {student ? (
+            <div className="flex items-center justify-between gap-3 rounded-control bg-surface-muted px-3.5 py-3 ring-1 ring-line">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">{titleCaseName(student.name)}</p>
+                <p className="text-xs text-ink-muted">{[student.studentNumber, student.programCode, student.yearLevel].filter(Boolean).join(' · ')}</p>
+              </div>
+              <Button size="sm" variant="ghost" icon={X} onClick={() => { onStudent(null); setQuery(''); }} disabled={busy}>Change</Button>
+            </div>
+          ) : newStudent ? (
+            <div className="space-y-3 rounded-control p-3.5 ring-1 ring-line">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm text-ink-muted">Not in AniSkolar yet. The scholarship is theirs the first time they sign in with their DLSU-D account, and we’ll email them.</p>
+                <Button size="sm" variant="ghost" icon={X} onClick={() => onNewStudent(null)} disabled={busy}>Search instead</Button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Student number" error={attempted && !/^\d{9}$/.test(newStudent.studentNumber) ? '9 digits' : undefined}>
+                  <TextInput inputMode="numeric" maxLength={9} value={newStudent.studentNumber} onChange={e => setNew({ studentNumber: e.target.value.replace(/\D/g, '') })} placeholder="202312345" disabled={busy} />
+                </Field>
+                <Field label="DLSU-D email" error={attempted && !/^[^\s@]+@dlsud\.edu\.ph$/i.test(newStudent.email.trim()) ? 'Use their @dlsud.edu.ph email' : undefined}>
+                  <TextInput type="email" value={newStudent.email} onChange={e => setNew({ email: e.target.value })} placeholder="abc1234@dlsud.edu.ph" disabled={busy} />
+                </Field>
+                <Field label="First name"><TextInput value={newStudent.firstName} onChange={e => setNew({ firstName: e.target.value })} maxLength={100} disabled={busy} /></Field>
+                <Field label="Last name"><TextInput value={newStudent.lastName} onChange={e => setNew({ lastName: e.target.value })} maxLength={100} disabled={busy} /></Field>
+              </div>
+              <p className="text-xs text-ink-subtle">Check the student number: whoever signs in with it gets the scholarship.</p>
+            </div>
+          ) : (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-ink-subtle" aria-hidden />
+              <TextInput value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or student no." aria-label="Search students" className="pl-9" />
+              {found && (
+                <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-control bg-surface shadow-overlay ring-1 ring-line">
+                  <ul className="max-h-56 overflow-y-auto">
+                    {found.map(s => (
+                      <li key={s.studentNumber}>
+                        <button type="button" onClick={() => { onStudent(s); setFound(null); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-surface-muted">
+                          <span className="font-medium text-ink">{titleCaseName(s.name)}</span>
+                          <span className="block text-xs text-ink-subtle">{[s.studentNumber, s.programCode, s.yearLevel].filter(Boolean).join(' · ')}</span>
+                        </button>
+                      </li>
+                    ))}
+                    {found.length === 0 && <li className="px-3 py-2 text-sm text-ink-muted">No student found.</li>}
+                  </ul>
+                  <button type="button" onClick={startNew} className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm font-medium text-accent hover:bg-surface-muted">
+                    <UserPlus className="size-4" aria-hidden /> Not in AniSkolar yet? Add by student number
+                  </button>
+                </div>
+              )}
+              {!found && <button type="button" onClick={startNew} className="mt-1.5 text-xs font-medium text-accent hover:underline">{who[0].toUpperCase() + who.slice(1)} not in AniSkolar yet?</button>}
+            </div>
+          )}
+    </>
+  );
+}
+
+export const isNewStudentValid = (s: NewStudent | null) =>
+  !!s && /^\d{9}$/.test(s.studentNumber) && !!s.firstName.trim() && !!s.lastName.trim() && /^[^\s@]+@dlsud\.edu\.ph$/i.test(s.email.trim());
+
+
 
 function Step({ n, title, done, children }: { n: number; title: string; done: boolean; children: React.ReactNode }) {
   return (
@@ -69,8 +169,6 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
   onClose: () => void;
   onAdded: (name: string, pendingAccount: boolean) => void;
 }) {
-  const [query, setQuery] = useState('');
-  const [found, setFound] = useState<FoundStudent[] | null>(null);
   const [student, setStudent] = useState<FoundStudent | null>(null);
   const [newStudent, setNewStudent] = useState<NewStudent | null>(null);
   const [answers, setAnswers] = useState<OfficeAnswers>({});
@@ -85,22 +183,6 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
   const [error, setError] = useState('');
   const [holds, setHolds] = useState<string[] | null>(null);
   const [attempted, setAttempted] = useState(false);
-
-  // Student search, a moment after typing.
-  useEffect(() => {
-    if (student || newStudent || query.trim().length < 2) { setFound(null); return; }
-    let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/applications/direct-award/students?q=${encodeURIComponent(query.trim())}`, { headers: await authHeaders(getToken) });
-        const body = await res.json().catch(() => ({}));
-        if (!cancelled && res.ok) setFound(body.students ?? []);
-      } catch {
-        // keep the last results
-      }
-    }, 300);
-    return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [query, student, newStudent, getToken]);
 
   useEffect(() => {
     if (!file) { setPreview(null); return; }
@@ -125,7 +207,7 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
   const result = form.result(grant, answers);
   const grantDone = byDiscount ? discount !== null : amountFields.every(f => grant[f.key] !== undefined && grant[f.key] !== '');
 
-  const newStudentValid = !!newStudent && /^\d{9}$/.test(newStudent.studentNumber) && !!newStudent.firstName.trim() && !!newStudent.lastName.trim() && /^[^\s@]+@dlsud\.edu\.ph$/i.test(newStudent.email.trim());
+  const newStudentValid = isNewStudentValid(newStudent);
   const playerDone = !!student || newStudentValid;
   const detailsDone = questions.every(q => q.type === 'confirm' ? answers[q.key] === true : answers[q.key] !== undefined && String(answers[q.key]).trim() !== '');
   const missing = useMemo(() => [
@@ -142,12 +224,6 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
     if (f.size > 10 * 1024 * 1024) { setError('The file must be under 10MB.'); return; }
     setError('');
     setFile(f);
-  };
-
-  const startNew = () => {
-    const q = query.trim();
-    setNewStudent({ studentNumber: /^\d+$/.test(q) ? q.slice(0, 9) : '', firstName: '', lastName: '', email: '' });
-    setFound(null);
   };
 
   const submit = async (acknowledge = false) => {
@@ -183,8 +259,6 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
     }
   };
 
-  const setNew = (patch: Partial<NewStudent>) => setNewStudent(s => (s ? { ...s, ...patch } : s));
-
   return (
     <Modal
       size="lg"
@@ -209,57 +283,7 @@ export default function AddScholarDialog({ scholarship, form, getToken, onClose,
         )}
 
         <Step n={1} title={Who} done={playerDone}>
-          {student ? (
-            <div className="flex items-center justify-between gap-3 rounded-control bg-surface-muted px-3.5 py-3 ring-1 ring-line">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink">{titleCaseName(student.name)}</p>
-                <p className="text-xs text-ink-muted">{[student.studentNumber, student.programCode, student.yearLevel].filter(Boolean).join(' · ')}</p>
-              </div>
-              <Button size="sm" variant="ghost" icon={X} onClick={() => { setStudent(null); setQuery(''); }} disabled={busy}>Change</Button>
-            </div>
-          ) : newStudent ? (
-            <div className="space-y-3 rounded-control p-3.5 ring-1 ring-line">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm text-ink-muted">Not in AniSkolar yet. The scholarship is theirs the first time they sign in with their DLSU-D account, and we’ll email them.</p>
-                <Button size="sm" variant="ghost" icon={X} onClick={() => setNewStudent(null)} disabled={busy}>Search instead</Button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Student number" error={attempted && !/^\d{9}$/.test(newStudent.studentNumber) ? '9 digits' : undefined}>
-                  <TextInput inputMode="numeric" maxLength={9} value={newStudent.studentNumber} onChange={e => setNew({ studentNumber: e.target.value.replace(/\D/g, '') })} placeholder="202312345" disabled={busy} />
-                </Field>
-                <Field label="DLSU-D email" error={attempted && !/^[^\s@]+@dlsud\.edu\.ph$/i.test(newStudent.email.trim()) ? 'Use their @dlsud.edu.ph email' : undefined}>
-                  <TextInput type="email" value={newStudent.email} onChange={e => setNew({ email: e.target.value })} placeholder="abc1234@dlsud.edu.ph" disabled={busy} />
-                </Field>
-                <Field label="First name"><TextInput value={newStudent.firstName} onChange={e => setNew({ firstName: e.target.value })} maxLength={100} disabled={busy} /></Field>
-                <Field label="Last name"><TextInput value={newStudent.lastName} onChange={e => setNew({ lastName: e.target.value })} maxLength={100} disabled={busy} /></Field>
-              </div>
-              <p className="text-xs text-ink-subtle">Check the student number: whoever signs in with it gets the scholarship.</p>
-            </div>
-          ) : (
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-ink-subtle" aria-hidden />
-              <TextInput value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name or student no." aria-label="Search students" className="pl-9" />
-              {found && (
-                <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-control bg-surface shadow-overlay ring-1 ring-line">
-                  <ul className="max-h-56 overflow-y-auto">
-                    {found.map(s => (
-                      <li key={s.studentNumber}>
-                        <button type="button" onClick={() => { setStudent(s); setFound(null); }} className="block w-full px-3 py-2 text-left text-sm hover:bg-surface-muted">
-                          <span className="font-medium text-ink">{titleCaseName(s.name)}</span>
-                          <span className="block text-xs text-ink-subtle">{[s.studentNumber, s.programCode, s.yearLevel].filter(Boolean).join(' · ')}</span>
-                        </button>
-                      </li>
-                    ))}
-                    {found.length === 0 && <li className="px-3 py-2 text-sm text-ink-muted">No student found.</li>}
-                  </ul>
-                  <button type="button" onClick={startNew} className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm font-medium text-accent hover:bg-surface-muted">
-                    <UserPlus className="size-4" aria-hidden /> Not in AniSkolar yet? Add by student number
-                  </button>
-                </div>
-              )}
-              {!found && <button type="button" onClick={startNew} className="mt-1.5 text-xs font-medium text-accent hover:underline">{Who} not in AniSkolar yet?</button>}
-            </div>
-          )}
+          <StudentPicker who={award.who} student={student} newStudent={newStudent} onStudent={setStudent} onNewStudent={setNewStudent} attempted={attempted} busy={busy} getToken={getToken} />
         </Step>
 
         <Step n={2} title={award.detailsTitle} done={detailsDone}>

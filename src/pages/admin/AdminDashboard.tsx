@@ -17,6 +17,7 @@ import StudentsPage from './StudentsPage';
 import MessagesPage from './MessagesPage';
 import AccountSecurity from '../../components/AccountSecurity';
 import AddScholarDialog from './AddScholarDialog';
+import ManualScholarDialog from './ManualScholarDialog';
 import AdminHome from './AdminHome';
 import { TemplatesPage } from './ReplyTemplates';
 import { officeFormFor } from '../../data/officeForms';
@@ -66,6 +67,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   // Scholarships this office fills itself, without applications (the
   // SDO's, from its tryouts). An office with only those has no Applications page and starts on Scholars.
   const directAward = mockScholarships.filter(s => s.directAward && officeOf(s) === (adminOffice ?? 'LSO'));
+  // Every other scholarship of the office: added by hand when someone was
+  // awarded outside AniSkolar (a paper application).
+  const manualAward = mockScholarships.filter(s => !s.directAward && officeOf(s) === (adminOffice ?? 'LSO'));
   const onlyDirect = !!adminOffice && directAward.length > 0 && mockScholarships.filter(s => officeOf(s) === adminOffice).every(s => s.directAward);
   const hiddenViews: MainView[] = isAdso ? [] : [
     'analytics', 'automation', 'fse', 'dutyHours', 'students',
@@ -79,9 +83,17 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [loadError, setLoadError] = useState('');
 
   const [addScholarFor, setAddScholarFor] = useState<string | null>(null);
+  const [manualAddOpen, setManualAddOpen] = useState(false);
   const [addedNotice, setAddedNotice] = useState('');
   // Every office starts on its dashboard.
   const homeView: MainView = 'home';
+  const addScholar = directAward.length ? () => setAddScholarFor(directAward[0].id) : manualAward.length ? () => setManualAddOpen(true) : undefined;
+  const scholarAdded = (name: string, pending: boolean) => {
+    setAddScholarFor(null);
+    setManualAddOpen(false);
+    setAddedNotice(pending ? `${name} is now a scholar. They'll see it the first time they sign in to AniSkolar; we emailed them.` : `${name} is now a scholar. We emailed them.`);
+    fetchApplications();
+  };
   // The page open in this tab comes back after a refresh (not the Dashboard).
   const [mainView, setMainView] = useState<MainView>(() => {
     const saved = rememberedAdminView();
@@ -349,7 +361,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           openApplication(applicationId, []);
         }}
         onMessageStudent={messageStudent}
-        onAddScholar={directAward.length ? () => setAddScholarFor(directAward[0].id) : undefined}
+        onAddScholar={addScholar}
       />
     );
   } else if (mainView === 'students') {
@@ -377,7 +389,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onNavigate={navigate}
         onOpenStatus={status => { navigate('applications'); setListFilters({ ...DEFAULT_FILTERS, status }); }}
         onOpenApplication={id => { navigate('applications'); openApplication(id, []); }}
-        onAddScholar={directAward.length ? () => setAddScholarFor(directAward[0].id) : undefined}
+        onAddScholar={addScholar}
       />
     );
   } else if (mainView === 'templates') {
@@ -456,8 +468,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           form={officeFormFor(addScholarFor)!}
           getToken={getToken}
           onClose={() => setAddScholarFor(null)}
-          onAdded={(name, pending) => { setAddScholarFor(null); setAddedNotice(pending ? `${name} is now a scholar. They'll see it the first time they sign in to AniSkolar; we emailed them.` : `${name} is now a scholar. We emailed them.`); fetchApplications(); }}
+          onAdded={scholarAdded}
         />
+      )}
+      {manualAddOpen && (
+        <ManualScholarDialog scholarships={manualAward} getToken={getToken} onClose={() => setManualAddOpen(false)} onAdded={scholarAdded} />
       )}
       {addedNotice && <ResultDialog message={addedNotice} onClose={() => setAddedNotice('')} />}
     </AdminLayout>

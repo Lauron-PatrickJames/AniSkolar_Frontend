@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileImage, UserPlus, X } from 'lucide-react';
+import { Check, FileImage, UserPlus, X } from 'lucide-react';
 import { Scholarship } from '../../types';
 import { API_BASE_URL, authHeaders, titleCaseName } from './adminData';
-import { Alert, Button, Checkbox, Field, Modal, Select, Textarea } from './AdminUI';
+import { Alert, Button, Checkbox, Modal, Select, Textarea } from './AdminUI';
 import { FoundStudent, NewStudent, StudentPicker, isNewStudentValid } from './AddScholarDialog';
 
 // "Add scholar" for scholarships students normally apply for: someone the
@@ -14,6 +14,23 @@ import { FoundStudent, NewStudent, StudentPicker, isNewStudentValid } from './Ad
 // Backend: POST /api/applications/direct-award.
 
 const SFAG_PERCENTAGES = [100, 75, 50, 25];
+
+// A numbered step that turns into a check once it's filled in.
+function Step({ n, title, done, invalid, children }: { n: number; title: string; done: boolean; invalid?: boolean; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2.5">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+        <span className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+          done ? 'bg-accent text-white' : invalid ? 'bg-danger-bg text-danger-fg ring-1 ring-danger/30' : 'bg-surface-muted text-ink-muted ring-1 ring-line'
+        }`}>
+          {done ? <Check className="size-3.5" strokeWidth={3} aria-label="Done" /> : n}
+        </span>
+        {title}
+      </h3>
+      <div className="min-w-0 pl-8">{children}</div>
+    </section>
+  );
+}
 
 export default function ManualScholarDialog({ scholarships, getToken, onClose, onAdded }: {
   // The office's scholarships it can add scholars to.
@@ -93,7 +110,10 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
     }
   };
 
-  const sectionTitle = 'text-sm font-semibold text-ink';
+  const reasonDone = note.trim().length >= 5;
+  const steps = [!!scholarship && (!isSfag || percentage !== null), studentDone, reasonDone, approved];
+  const doneCount = steps.filter(Boolean).length;
+  const who = student ? titleCaseName(student.name) : newStudent && isNewStudentValid(newStudent) ? `${newStudent.firstName.trim()} ${newStudent.lastName.trim()}` : null;
 
   return (
     <Modal
@@ -103,14 +123,20 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
       onClose={onClose}
       dismissible={!busy}
       footer={
-        <div className="flex w-full flex-wrap items-center justify-end gap-2">
-          {attempted && missing.length > 0 && <span className="mr-auto text-sm text-danger-fg">Still needed: {missing.join(', ')}.</span>}
+        <div className="flex w-full flex-wrap items-center justify-end gap-x-3 gap-y-2">
+          <p className={`mr-auto min-w-0 text-sm ${attempted && missing.length ? 'text-danger-fg' : 'text-ink-muted'}`}>
+            {attempted && missing.length
+              ? `Still needed: ${missing.join(', ')}.`
+              : missing.length === 0 && who && scholarship
+                ? <>Adding <span className="font-medium text-ink">{who}</span> to the {scholarship.name}{isSfag && percentage ? ` (${percentage}%)` : ''}.</>
+                : <span className="tabular-nums">{doneCount} of 4 steps done</span>}
+          </p>
           <Button onClick={onClose} disabled={busy}>Cancel</Button>
           <Button variant="primary" icon={UserPlus} onClick={() => submit()} loading={busy}>Add scholar</Button>
         </div>
       }
     >
-      <div className="space-y-6">
+      <div className="space-y-5">
         {error && <Alert tone="danger">{error}</Alert>}
         {holds && (
           <Alert tone="warning" title={`Already holds the ${holds.join(' and the ')}`} action={<Button size="sm" variant="primary" onClick={() => { setHolds(null); submit(true); }} loading={busy}>Add anyway</Button>}>
@@ -118,76 +144,112 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
           </Alert>
         )}
 
-        {scholarships.length > 1 && (
-          <Field label="Scholarship" error={attempted && !scholarship ? 'Choose the scholarship' : undefined}>
-            <Select value={scholarshipId} onChange={v => { setScholarshipId(v); setPercentage(null); }} disabled={busy}>
-              <option value="">Choose a scholarship…</option>
-              {scholarships.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </Select>
-          </Field>
-        )}
-        {scholarships.length === 1 && <p className="text-sm text-ink-muted">Scholarship: <span className="font-medium text-ink">{scholarships[0].name}</span></p>}
+        <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-2">
+          {/* Left: what and who. */}
+          <div className="min-w-0 space-y-6">
+            <Step n={1} title="Scholarship" done={steps[0]} invalid={attempted && !steps[0]}>
+              {scholarships.length <= 6 ? (
+                <div role="radiogroup" aria-label="Scholarship" className="space-y-1.5">
+                  {scholarships.map(s => {
+                    const active = s.id === scholarshipId;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        disabled={busy}
+                        onClick={() => { setScholarshipId(s.id); setPercentage(null); }}
+                        className={`flex w-full items-center gap-2.5 rounded-control px-3 py-2 text-left text-sm ring-1 ring-inset transition-colors focus-visible:outline-2 focus-visible:outline-accent ${active ? 'bg-accent-subtle font-medium text-accent ring-accent' : 'text-ink ring-line hover:bg-surface-muted'}`}
+                      >
+                        <span aria-hidden className={`flex size-4 shrink-0 items-center justify-center rounded-full ring-1 ring-inset ${active ? 'bg-accent ring-accent' : 'ring-line-strong'}`}>
+                          {active && <span className="size-1.5 rounded-full bg-white" />}
+                        </span>
+                        <span className="min-w-0 truncate">{s.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Select value={scholarshipId} onChange={v => { setScholarshipId(v); setPercentage(null); }} disabled={busy} label="Scholarship">
+                  <option value="">Choose a scholarship…</option>
+                  {scholarships.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              )}
+              {isSfag && (
+                <div className="mt-3">
+                  <p className="mb-1.5 text-sm font-medium text-ink">Grant percentage</p>
+                  <div role="radiogroup" aria-label="Grant percentage" className="inline-flex rounded-control bg-surface-muted p-0.5 ring-1 ring-inset ring-line">
+                    {SFAG_PERCENTAGES.map(p => (
+                      <button
+                        key={p}
+                        type="button"
+                        role="radio"
+                        aria-checked={percentage === p}
+                        onClick={() => setPercentage(p)}
+                        disabled={busy}
+                        className={`min-w-14 rounded-[calc(var(--radius-control)-2px)] px-3 py-1.5 text-sm font-medium tabular-nums transition-colors ${percentage === p ? 'bg-surface text-ink shadow-sm ring-1 ring-line' : 'text-ink-subtle hover:text-ink'}`}
+                      >
+                        {p}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Step>
 
-        <section className="space-y-2">
-          <h3 className={sectionTitle}>Student</h3>
-          <StudentPicker who="student" student={student} newStudent={newStudent} onStudent={setStudent} onNewStudent={setNewStudent} attempted={attempted} busy={busy} getToken={getToken} />
-        </section>
+            <Step n={2} title="Student" done={steps[1]} invalid={attempted && !steps[1]}>
+              <StudentPicker who="student" student={student} newStudent={newStudent} onStudent={setStudent} onNewStudent={setNewStudent} attempted={attempted} busy={busy} getToken={getToken} />
+            </Step>
+          </div>
 
-        {isSfag && (
-          <Field label="Grant percentage" error={attempted && percentage === null ? 'Choose the percentage' : undefined}>
-            <div role="radiogroup" aria-label="Grant percentage" className="flex flex-wrap gap-2">
-              {SFAG_PERCENTAGES.map(p => (
-                <button
-                  key={p}
-                  type="button"
-                  role="radio"
-                  aria-checked={percentage === p}
-                  onClick={() => setPercentage(p)}
-                  disabled={busy}
-                  className={`rounded-control px-3.5 py-1.5 text-sm font-medium ring-1 ring-inset ${percentage === p ? 'bg-accent-subtle text-accent ring-accent' : 'text-ink ring-line hover:bg-surface-muted'}`}
-                >
-                  {p}%
-                </button>
-              ))}
-            </div>
-          </Field>
-        )}
-
-        <Field
-          label="Why they’re being added"
-          helper="Shown in the scholar’s history and in the email to them."
-          error={attempted && note.trim().length < 5 ? 'Add a short reason' : undefined}
-        >
-          <Textarea value={note} onChange={e => setNote(e.target.value)} rows={3} maxLength={2000} disabled={busy} placeholder="e.g. Approved on a paper application, 1st semester AY 2026–2027." />
-        </Field>
-
-        <section className="space-y-2">
-          <h3 className={sectionTitle}>Supporting document <span className="font-normal text-ink-subtle">(optional)</span></h3>
-          {file ? (
-            <div className="flex items-center gap-3 rounded-control p-2.5 ring-1 ring-line">
-              {preview ? <img src={preview} alt="" className="size-14 shrink-0 rounded-sm object-cover ring-1 ring-line" /> : <FileImage className="size-6 text-ink-subtle" aria-hidden />}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-ink">{file.name}</p>
-                <p className="text-xs text-ink-muted">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+          {/* Right: why, proof, approval. */}
+          <div className="min-w-0 space-y-6">
+            <Step n={3} title="Why they’re being added" done={reasonDone} invalid={attempted && !reasonDone}>
+              <Textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                rows={3}
+                maxLength={2000}
+                disabled={busy}
+                aria-label="Why they’re being added"
+                placeholder="e.g. Approved on a paper application, 1st semester AY 2026–2027."
+              />
+              <p className="mt-1.5 text-xs text-ink-subtle">Shown in their history and in the email we send them.</p>
+              <div className="mt-4">
+                <p className="mb-1.5 text-sm font-medium text-ink">Supporting document <span className="font-normal text-ink-subtle">(optional)</span></p>
+                {file ? (
+                  <div className="flex items-center gap-3 rounded-control p-2 ring-1 ring-line">
+                    {preview ? <img src={preview} alt="" className="size-10 shrink-0 rounded-sm object-cover ring-1 ring-line" /> : <FileImage className="size-5 text-ink-subtle" aria-hidden />}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-ink">{file.name}</p>
+                      <p className="text-xs text-ink-muted">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                    <Button size="sm" variant="ghost" icon={X} onClick={() => setFile(null)} disabled={busy}>Remove</Button>
+                  </div>
+                ) : (
+                  <label
+                    className="flex cursor-pointer items-center gap-3 rounded-control border border-dashed border-line-strong px-3 py-2.5 transition-colors hover:border-accent/50 hover:bg-accent-subtle/40 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent"
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); pickFile(e.dataTransfer.files?.[0]); }}
+                  >
+                    <FileImage className="size-5 shrink-0 text-ink-subtle" aria-hidden />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-ink">Attach the approval or paper form</span>
+                      <span className="block text-xs text-ink-muted">One JPG, up to 10 MB. Click or drop it here.</span>
+                    </span>
+                    <input type="file" accept=".jpg,.jpeg,image/jpeg" className="sr-only" onChange={e => pickFile(e.target.files?.[0])} disabled={busy} />
+                  </label>
+                )}
               </div>
-              <Button size="sm" variant="ghost" icon={X} onClick={() => setFile(null)} disabled={busy}>Remove</Button>
-            </div>
-          ) : (
-            <label
-              className="flex cursor-pointer items-center justify-center gap-2 rounded-control border border-dashed border-line-strong px-4 py-4 text-sm hover:bg-surface-muted has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent"
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); pickFile(e.dataTransfer.files?.[0]); }}
-            >
-              <FileImage className="size-5 text-ink-subtle" aria-hidden />
-              <span className="font-medium text-ink">Choose or drop the approval or paper form</span>
-              <span className="text-xs text-ink-muted">One JPG, up to 10 MB</span>
-              <input type="file" accept=".jpg,.jpeg,image/jpeg" className="sr-only" onChange={e => pickFile(e.target.files?.[0])} disabled={busy} />
-            </label>
-          )}
-        </section>
+            </Step>
 
-        <div className={`rounded-control p-3.5 ring-1 ring-inset ${approved ? 'bg-success-bg ring-success-fg/30' : attempted ? 'ring-danger-fg/40' : 'ring-line'}`}>
-          <Checkbox checked={approved} onChange={setApproved} label="This scholarship was approved by the office head" disabled={busy} />
+            <Step n={4} title="Approval" done={approved} invalid={attempted && !approved}>
+              <div className={`rounded-control p-3 ring-1 ring-inset transition-colors ${approved ? 'bg-success-bg ring-success-fg/30' : attempted ? 'ring-danger-fg/40' : 'ring-line'}`}>
+                <Checkbox checked={approved} onChange={setApproved} label="The office head approved this scholarship" disabled={busy} />
+              </div>
+            </Step>
+          </div>
         </div>
       </div>
     </Modal>

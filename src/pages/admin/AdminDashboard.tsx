@@ -398,7 +398,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         onNavigate={navigate}
         onOpenStatus={status => { navigate('applications'); setListFilters({ ...DEFAULT_FILTERS, status }); }}
         onOpenApplication={id => { navigate('applications'); openApplication(id, []); }}
-        onAddScholar={addScholar}
       />
     );
   } else if (mainView === 'templates') {

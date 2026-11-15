@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Award, Clock, GraduationCap, Hourglass, Megaphone, RefreshCw, UserPlus } from 'lucide-react';
+import { Award, Clock, GraduationCap, Hourglass, Megaphone, RefreshCw } from 'lucide-react';
 import { Scholarship, ScholarshipOverride } from '../../types';
 import { acceptsOnlineApplications, applyScholarshipOverrides, scholarshipDefaults } from '../../data/scholarships';
 import { DutySummary } from '../../utils/dutyHours';
@@ -45,7 +45,7 @@ const EVENT_BADGE: Record<string, { label: string; tone: Tone }> = {
 // "Student Financial Aid Grant (SFAG)" → "SFAG".
 const shortName = (name: string) => name.match(/\(([^)]+)\)\s*$/)?.[1] ?? name;
 
-export default function AdminHome({ applications, isLoading, getToken, isAdso, adminName, officeLabel, messageCount, hasRenewals, onlyDirect, onNavigate, onOpenStatus, onOpenApplication, onAddScholar }: {
+export default function AdminHome({ applications, isLoading, getToken, isAdso, adminName, officeLabel, messageCount, hasRenewals, onlyDirect, onNavigate, onOpenStatus, onOpenApplication }: {
   applications: AdminApplication[];
   isLoading: boolean;
   getToken: GetToken;
@@ -59,7 +59,6 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
   onNavigate: (view: MainView) => void;
   onOpenStatus: (status: AppStatus | 'All') => void;
   onOpenApplication: (id: string) => void;
-  onAddScholar?: () => void;
 }) {
   const [scholarships, setScholarships] = useState<(Scholarship & { counts: AdminScholarshipRow['applications'] })[] | null>(null);
   const [periods, setPeriods] = useState<PeriodRow[] | null>(null);
@@ -139,7 +138,6 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
           <h1 className="mt-1 text-title font-semibold tracking-tight text-ink">{greeting()}, <span className="capitalize">{adminName}</span></h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          {onAddScholar && <Button variant="primary" icon={UserPlus} onClick={onAddScholar}>Add scholar</Button>}
           <Button icon={Megaphone} onClick={() => onNavigate('announcements')}>Post an announcement</Button>
         </div>
       </div>

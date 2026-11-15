@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ChevronRight, Download, FileText, MessageSquare, Pencil, Printer, Trash2, UserPlus, Users } from 'lucide-react';
+import { ChevronRight, ClipboardList, Download, FileText, MessageSquare, Pencil, Printer, Trash2, UserPlus, Users } from 'lucide-react';
 import EditProfileDialog from '../../components/profile/EditProfileDialog';
 import { StudentProfile } from '../../types';
 import { downloadZip } from '../../utils/documents';
@@ -13,6 +13,7 @@ import {
   Toolbar, Tooltip, Tr, Truncate, usePagination
 } from './AdminUI';
 import HistoryList from './HistoryList';
+import LifecycleReportModal from './LifecycleReport';
 import { collegeName, findProgram } from '../../data/programs';
 import { buildApplicationHistory, buildCombinedHistory } from './history';
 import { ExcelColumn, ExcelValue, downloadExcel, excelDate, parseCsv } from '../../utils/excelExport';
@@ -369,6 +370,7 @@ export default function AdminScholars({
   const [exportError, setExportError] = useState('');
   const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set(DEFAULT_EXPORT_COLUMNS));
   const [pickerFor, setPickerFor] = useState<ExportKind | null>(null);
+  const [lifecycleOpen, setLifecycleOpen] = useState(false);
   const renewalFilter = SEGMENT_TO_RENEWAL[segment];
 
   // Applications are loaded by the dashboard; ask for fresh data when the
@@ -481,7 +483,8 @@ export default function AdminScholars({
             disabled={!hasData}
             items={[
               { key: 'csv', label: 'Export to Excel', icon: FileText, onSelect: () => setPickerFor('csv') },
-              { key: 'print', label: 'Print / save as PDF', icon: Printer, onSelect: () => setPickerFor('print') }
+              { key: 'print', label: 'Print / save as PDF', icon: Printer, onSelect: () => setPickerFor('print') },
+              { key: 'lifecycle', label: 'Scholar lifecycle report', icon: ClipboardList, onSelect: () => setLifecycleOpen(true) }
             ]}
           />
           </>
@@ -591,6 +594,10 @@ export default function AdminScholars({
           </>
         )}
       </Card>
+
+      {lifecycleOpen && (
+        <LifecycleReportModal applications={applications} getToken={getToken} apiBaseUrl={apiBaseUrl} onClose={() => setLifecycleOpen(false)} />
+      )}
 
       {pickerFor && (
         <ColumnPickerModal

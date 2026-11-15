@@ -68,22 +68,24 @@ export function StudentPicker({ who, student, newStudent, onStudent, onNewStuden
               <Button size="sm" variant="ghost" icon={X} onClick={() => { onStudent(null); setQuery(''); }} disabled={busy}>Change</Button>
             </div>
           ) : newStudent ? (
-            <div className="space-y-3 rounded-control p-3.5 ring-1 ring-line">
-              <div className="flex items-start justify-between gap-3">
-                <p className="text-sm text-ink-muted">Not in AniSkolar yet. The scholarship is theirs the first time they sign in with their DLSU-D account, and we’ll email them.</p>
-                <Button size="sm" variant="ghost" icon={X} onClick={() => onNewStudent(null)} disabled={busy}>Search instead</Button>
+            <div className="@container space-y-4 rounded-card bg-surface-muted/50 p-4 ring-1 ring-line">
+              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                <div className="min-w-0 max-w-prose">
+                  <p className="text-sm font-medium text-ink">New to AniSkolar</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">The scholarship is theirs the first time they sign in with their DLSU-D account, and we’ll email them. Check the student number: whoever signs in with it gets the scholarship.</p>
+                </div>
+                <Button size="sm" variant="ghost" icon={Search} onClick={() => onNewStudent(null)} disabled={busy}>Search instead</Button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @3xl:grid-cols-[10rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)]">
                 <Field label="Student number" error={attempted && !/^\d{9}$/.test(newStudent.studentNumber) ? '9 digits' : undefined}>
-                  <TextInput inputMode="numeric" maxLength={9} value={newStudent.studentNumber} onChange={e => setNew({ studentNumber: e.target.value.replace(/\D/g, '') })} placeholder="202312345" disabled={busy} />
+                  <TextInput inputMode="numeric" maxLength={9} value={newStudent.studentNumber} onChange={e => setNew({ studentNumber: e.target.value.replace(/\D/g, '') })} placeholder="202312345" className="tabular-nums" disabled={busy} />
                 </Field>
+                <Field label="First name"><TextInput value={newStudent.firstName} onChange={e => setNew({ firstName: e.target.value })} maxLength={100} placeholder="Juan" disabled={busy} /></Field>
+                <Field label="Last name"><TextInput value={newStudent.lastName} onChange={e => setNew({ lastName: e.target.value })} maxLength={100} placeholder="Dela Cruz" disabled={busy} /></Field>
                 <Field label="DLSU-D email" error={attempted && !/^[^\s@]+@dlsud\.edu\.ph$/i.test(newStudent.email.trim()) ? 'Use their @dlsud.edu.ph email' : undefined}>
                   <TextInput type="email" value={newStudent.email} onChange={e => setNew({ email: e.target.value })} placeholder="abc1234@dlsud.edu.ph" disabled={busy} />
                 </Field>
-                <Field label="First name"><TextInput value={newStudent.firstName} onChange={e => setNew({ firstName: e.target.value })} maxLength={100} disabled={busy} /></Field>
-                <Field label="Last name"><TextInput value={newStudent.lastName} onChange={e => setNew({ lastName: e.target.value })} maxLength={100} disabled={busy} /></Field>
               </div>
-              <p className="text-xs text-ink-subtle">Check the student number: whoever signs in with it gets the scholarship.</p>
             </div>
           ) : (
             <div className="relative">

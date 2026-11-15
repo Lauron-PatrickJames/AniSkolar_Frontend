@@ -117,7 +117,7 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
 
   return (
     <Modal
-      size="lg"
+      size="xl"
       title="Add a scholar"
       description="For someone awarded outside AniSkolar, like on a paper application. They’re a scholar right away and we email them."
       onClose={onClose}
@@ -144,12 +144,10 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-2">
-          {/* Left: what and who. */}
-          <div className="min-w-0 space-y-6">
+        <div className="space-y-6">
             <Step n={1} title="Scholarship" done={steps[0]} invalid={attempted && !steps[0]}>
               {scholarships.length <= 6 ? (
-                <div role="radiogroup" aria-label="Scholarship" className="space-y-1.5">
+                <div role="radiogroup" aria-label="Scholarship" className="grid gap-2 sm:grid-cols-2">
                   {scholarships.map(s => {
                     const active = s.id === scholarshipId;
                     return (
@@ -160,12 +158,12 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
                         aria-checked={active}
                         disabled={busy}
                         onClick={() => { setScholarshipId(s.id); setPercentage(null); }}
-                        className={`flex w-full items-center gap-2.5 rounded-control px-3 py-2 text-left text-sm ring-1 ring-inset transition-colors focus-visible:outline-2 focus-visible:outline-accent ${active ? 'bg-accent-subtle font-medium text-accent ring-accent' : 'text-ink ring-line hover:bg-surface-muted'}`}
+                        className={`flex w-full items-center gap-2.5 rounded-control px-3.5 py-2.5 text-left text-sm ring-1 ring-inset transition-colors focus-visible:outline-2 focus-visible:outline-accent ${active ? 'bg-accent-subtle font-medium text-accent ring-accent' : 'text-ink ring-line hover:bg-surface-muted'}`}
                       >
                         <span aria-hidden className={`flex size-4 shrink-0 items-center justify-center rounded-full ring-1 ring-inset ${active ? 'bg-accent ring-accent' : 'ring-line-strong'}`}>
                           {active && <span className="size-1.5 rounded-full bg-white" />}
                         </span>
-                        <span className="min-w-0 truncate">{s.name}</span>
+                        <span className="min-w-0">{s.name}</span>
                       </button>
                     );
                   })}
@@ -177,8 +175,8 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
                 </Select>
               )}
               {isSfag && (
-                <div className="mt-3">
-                  <p className="mb-1.5 text-sm font-medium text-ink">Grant percentage</p>
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <p className="text-sm font-medium text-ink">Grant percentage</p>
                   <div role="radiogroup" aria-label="Grant percentage" className="inline-flex rounded-control bg-surface-muted p-0.5 ring-1 ring-inset ring-line">
                     {SFAG_PERCENTAGES.map(p => (
                       <button
@@ -201,23 +199,27 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
             <Step n={2} title="Student" done={steps[1]} invalid={attempted && !steps[1]}>
               <StudentPicker who="student" student={student} newStudent={newStudent} onStudent={setStudent} onNewStudent={setNewStudent} attempted={attempted} busy={busy} getToken={getToken} />
             </Step>
-          </div>
 
-          {/* Right: why, proof, approval. */}
-          <div className="min-w-0 space-y-6">
+          <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-2">
+            <div className="min-w-0">
             <Step n={3} title="Why they’re being added" done={reasonDone} invalid={attempted && !reasonDone}>
-              <Textarea
-                value={note}
-                onChange={e => setNote(e.target.value)}
-                rows={3}
-                maxLength={2000}
-                disabled={busy}
-                aria-label="Why they’re being added"
-                placeholder="e.g. Approved on a paper application, 1st semester AY 2026–2027."
-              />
-              <p className="mt-1.5 text-xs text-ink-subtle">Shown in their history and in the email we send them.</p>
-              <div className="mt-4">
-                <p className="mb-1.5 text-sm font-medium text-ink">Supporting document <span className="font-normal text-ink-subtle">(optional)</span></p>
+                <Textarea
+                  value={note}
+                  onChange={e => setNote(e.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  disabled={busy}
+                  aria-label="Why they’re being added"
+                  placeholder="e.g. Approved on a paper application, 1st semester AY 2026–2027."
+                />
+                <p className="mt-1.5 text-xs text-ink-subtle">Shown in their history and in the email we send them.</p>
+              </Step>
+            </div>
+            <div className="min-w-0 space-y-6">
+              <section className="space-y-2.5">
+              <div>
+                <p className="mb-2.5 flex items-center gap-2 text-sm font-semibold text-ink"><span aria-hidden className="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-muted text-ink-subtle ring-1 ring-line"><FileImage className="size-3.5" /></span>Supporting document <span className="font-normal text-ink-subtle">(optional)</span></p>
+                <div className="pl-8">
                 {file ? (
                   <div className="flex items-center gap-3 rounded-control p-2 ring-1 ring-line">
                     {preview ? <img src={preview} alt="" className="size-10 shrink-0 rounded-sm object-cover ring-1 ring-line" /> : <FileImage className="size-5 text-ink-subtle" aria-hidden />}
@@ -241,14 +243,15 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
                     <input type="file" accept=".jpg,.jpeg,image/jpeg" className="sr-only" onChange={e => pickFile(e.target.files?.[0])} disabled={busy} />
                   </label>
                 )}
+                </div>
               </div>
-            </Step>
-
+              </section>
             <Step n={4} title="Approval" done={approved} invalid={attempted && !approved}>
-              <div className={`rounded-control p-3 ring-1 ring-inset transition-colors ${approved ? 'bg-success-bg ring-success-fg/30' : attempted ? 'ring-danger-fg/40' : 'ring-line'}`}>
-                <Checkbox checked={approved} onChange={setApproved} label="The office head approved this scholarship" disabled={busy} />
-              </div>
-            </Step>
+                <div className={`rounded-control p-3 ring-1 ring-inset transition-colors ${approved ? 'bg-success-bg ring-success-fg/30' : attempted ? 'ring-danger-fg/40' : 'ring-line'}`}>
+                  <Checkbox checked={approved} onChange={setApproved} label="The office head approved this scholarship" disabled={busy} />
+                </div>
+              </Step>
+            </div>
           </div>
         </div>
       </div>

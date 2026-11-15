@@ -87,7 +87,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [addedNotice, setAddedNotice] = useState('');
   // Every office starts on its dashboard.
   const homeView: MainView = 'home';
-  const addScholar = directAward.length ? () => setAddScholarFor(directAward[0].id) : manualAward.length ? () => setManualAddOpen(true) : undefined;
+  // "Add scholar" is only for the SDO and the ROTC Office (their
+  // scholarships have no application) and the AdSO's Scholarship
+  // Associate, Head and Director (publicMetadata.adsoRole in Clerk). The
+  // server enforces the same rule (routes/applications.js, canAddScholars).
+  const adsoRoleRaw = (user?.publicMetadata as { adsoRole?: string } | undefined)?.adsoRole;
+  const canAddScholars = adminOffice === 'SDO' || adminOffice === 'ROTC'
+    || (isAdso && (adsoRoleRaw === 'associate' || adsoRoleRaw === 'head' || adsoRoleRaw === 'director'));
+  const addScholar = !canAddScholars ? undefined
+    : directAward.length ? () => setAddScholarFor(directAward[0].id)
+    : manualAward.length ? () => setManualAddOpen(true) : undefined;
   const scholarAdded = (name: string, pending: boolean) => {
     setAddScholarFor(null);
     setManualAddOpen(false);

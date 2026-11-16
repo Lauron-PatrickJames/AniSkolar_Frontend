@@ -13,3 +13,6 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# Local editor/assistant settings
+.claude/

@@ -1,6 +1,14 @@
 import { StudentProfile, Application, Announcement } from '../types';
 import { formatDay, formatTime } from '../data/officeForms';
 
+// An application's date as the student reads it ("November 13, 2026",
+// Manila time). Already-readable text (e.g. "Just now") is kept as is.
+const readableDate = (value?: string) => {
+  if (!value) return '';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Manila' });
+};
+
 export interface NotificationItem {
   id: string;
   text: string;
@@ -101,7 +109,7 @@ export function buildNotifications(student: StudentProfile, applications: Applic
       id,
       title: app.scholarshipName,
       text: statusMessage(app.scholarshipName, app.status),
-      time: app.submittedAt,
+      time: readableDate(app.submittedAt),
       isRead: read.has(id),
       scholarshipId: app.scholarshipId,
       status: app.status,

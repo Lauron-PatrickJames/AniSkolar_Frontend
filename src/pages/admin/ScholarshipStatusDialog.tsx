@@ -23,13 +23,15 @@ export function announcementFor(s: Scholarship, status: ScholarshipStatus): Draf
   const online = acceptsOnlineApplications(s);
   const office = officeDisplayName(officeOf(s));
   const period = s.deadline?.trim();
+  // The deadline as a sentence, without doubling a period it already ends with.
+  const periodSentence = period ? ` ${period.replace(/\.+$/, '')}.` : '';
   const how = online
     ? `Apply in AniSkolar: go to Explore Grants and open the ${s.name}.`
     : `For how to apply, contact the ${office}.`;
   if (status === 'Open') {
     return {
       title: `${s.name}: applications are now open`,
-      description: `Applications for the ${s.name} are now open.${period ? ` ${period}.` : ''}`.replace('..', '.'),
+      description: `Applications for the ${s.name} are now open.${periodSentence}`,
       content: [
         `Applications for the ${s.name} are now open.`,
         period ? `Deadline / application period: ${period}` : '',
@@ -41,7 +43,7 @@ export function announcementFor(s: Scholarship, status: ScholarshipStatus): Draf
   if (status === 'Closing Soon') {
     return {
       title: `${s.name}: applications closing soon`,
-      description: `Applications for the ${s.name} are closing soon.${period ? ` ${period}.` : ''}`.replace('..', '.'),
+      description: `Applications for the ${s.name} are closing soon.${periodSentence}`,
       content: [
         `Applications for the ${s.name} are closing soon. Submit yours before the deadline.`,
         period ? `Deadline / application period: ${period}` : '',

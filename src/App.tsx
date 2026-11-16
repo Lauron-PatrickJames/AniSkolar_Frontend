@@ -637,10 +637,11 @@ export default function App() {
     // Drafts are keyed by studentNumber in localStorage (ApplyScholarship.tsx),
     // which persists across accounts/browsers regardless of Clerk/Mongo state.
     // Clear them on logout so a new account never inherits a previous
-    // student's in-progress draft.
+    // student's in-progress draft, and so personal details and grades don't
+    // stay on a shared computer (GPA Calculator drafts too).
     try {
       Object.keys(localStorage)
-        .filter(k => k.startsWith('aniskolar_draft_'))
+        .filter(k => k.startsWith('aniskolar_draft_') || k.startsWith('aniskolar_gpa_calculator_draft_'))
         .forEach(k => localStorage.removeItem(k));
     } catch {
       // ignore

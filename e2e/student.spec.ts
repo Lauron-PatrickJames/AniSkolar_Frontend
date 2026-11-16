@@ -14,7 +14,7 @@ async function signIn(page: Page) {
   await mockApi(page);
   await page.goto('/');
   await clerk.signIn({ page, emailAddress: EMAIL! });
-  await expect(page.getByRole('heading', { name: 'Juan Miguel' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('heading', { name: 'Juan Miguel' })).toBeVisible({ timeout: 45_000 });
 }
 
 // The sidebar is a drawer on phones: open it first.

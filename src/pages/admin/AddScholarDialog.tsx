@@ -78,7 +78,7 @@ export function StudentPicker({ who, student, newStudent, onStudent, onNewStuden
               </div>
               <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @3xl:grid-cols-[10rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)]">
                 <Field label="Student number" error={attempted && !/^\d{9}$/.test(newStudent.studentNumber) ? '9 digits' : undefined}>
-                  <TextInput inputMode="numeric" maxLength={9} value={newStudent.studentNumber} onChange={e => setNew({ studentNumber: e.target.value.replace(/\D/g, '') })} placeholder="202312345" className="tabular-nums" disabled={busy} />
+                  <TextInput inputMode="numeric" maxLength={9} value={newStudent.studentNumber} onChange={e => setNew({ studentNumber: e.target.value.replace(/\D/g, '') })} placeholder="202399001" className="tabular-nums" disabled={busy} />
                 </Field>
                 <Field label="First name"><TextInput value={newStudent.firstName} onChange={e => setNew({ firstName: e.target.value })} maxLength={100} placeholder="Juan" disabled={busy} /></Field>
                 <Field label="Last name"><TextInput value={newStudent.lastName} onChange={e => setNew({ lastName: e.target.value })} maxLength={100} placeholder="Dela Cruz" disabled={busy} /></Field>

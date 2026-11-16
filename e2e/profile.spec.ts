@@ -47,17 +47,17 @@ test('a new student can choose to complete the full profile, and skip the rest a
   await page.getByPlaceholder('Search your program').press('Enter');
   await page.getByLabel('Year level').selectOption('2nd Year');
   await page.getByLabel(/cumulative gpa/i).fill('3.25');
-  await page.getByRole('button', { name: 'Complete my full profile' }).click();
+  await page.getByRole('button', { name: 'Fill in full profile now' }).click();
 
   // The essentials are saved; the rest follows in steps.
   await expect(page.getByText('Step 1 of 3')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'About you' })).toBeVisible();
   // An empty step isn't saved.
-  await page.getByRole('button', { name: 'Save and continue' }).click();
+  await page.getByRole('button', { name: /^Save, next:/ }).click();
   await expect(page.getByText('Enter your section.')).toBeVisible();
   expect(patches).toHaveLength(0);
 
-  await page.getByRole('button', { name: 'Skip the rest for now' }).click();
+  await page.getByRole('button', { name: 'Skip, go to the portal' }).click();
   await expect(page.getByText(/good (morning|afternoon|evening),/i)).toBeVisible({ timeout: 15_000 });
 });
 

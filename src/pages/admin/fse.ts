@@ -62,6 +62,9 @@ export interface FseScholar {
 }
 
 export type AllowanceKind = 'meal' | 'monthly' | 'dorm' | 'other' | 'book';
+export const ALLOWANCE_LABELS: Record<AllowanceKind, string> = { meal: 'Meal', monthly: 'Monthly', dorm: 'Dorm', book: 'Book', other: 'Other assistance' };
+export type Allowances = Partial<Record<AllowanceKind, number>>;
+export const allowanceTotal = (a?: Allowances | null) => Object.values(a ?? {}).reduce((n, v) => n + (v ?? 0), 0);
 // Which allowance a column header is ("Meal allowance (SPOON / ATHLETE)",
 // "DORM ALLOWANCE for Student Athlete (5mos)", …); anything else is "other".
 function allowanceKind(header: string): AllowanceKind {
@@ -81,6 +84,9 @@ export interface FseScholarship {
   category: FseCategory | null;
   // Who funds a special program; the FSE sheet splits its headcount by it.
   specialFunding?: FseSpecialFunding | null;
+  // The allowances per scholar the AdSO entered for this scholarship;
+  // the server adds them to each grantee's discount.
+  allowances?: Allowances | null;
   scholars: FseScholar[];
   // Upload review only (not saved): which part of the export it came from
   // (the registrar's report runs several pages, each ending in a GRAND
@@ -101,8 +107,20 @@ export interface FseReport {
   asOf?: string | null;
   fileName?: string;
   scholarships: FseScholarship[];
+  createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;
+}
+
+// Each scholar with the scholarship's entered allowances added (what the
+// server computes on saving), for the preview.
+export function withAllowances(s: FseScholarship): FseScholarship {
+  const extra = allowanceTotal(s.allowances);
+  if (!extra) return s;
+  return { ...s, scholars: s.scholars.map(r => {
+    const totalDiscount = r.totalDiscount + extra;
+    return { ...r, allowances: r.allowances + extra, totalDiscount, fse: r.matriculation ? totalDiscount / r.matriculation : 0 };
+  }) };
 }
 
 // "Internally Funded" + "Non Academic Scholarship" → internalNonAcademic, etc.
@@ -133,14 +151,14 @@ export interface ParseResult {
 // What each scholarship was counted as in the reports saved before, newest
 // first: the registrar's report names almost no categories, so the office's
 // last choice is filled in.
-export type CategoryMemory = Map<string, { category: FseCategory; specialFunding?: FseSpecialFunding | null }>;
+export type CategoryMemory = Map<string, { category: FseCategory; specialFunding?: FseSpecialFunding | null; allowances?: Allowances | null }>;
 
-export function rememberCategories(saved: { updatedAt?: string; scholarships?: Pick<FseScholarship, 'code' | 'category' | 'specialFunding'>[] }[]): CategoryMemory {
+export function rememberCategories(saved: { updatedAt?: string; scholarships?: Pick<FseScholarship, 'code' | 'category' | 'specialFunding' | 'allowances'>[] }[]): CategoryMemory {
   const memory: CategoryMemory = new Map();
   [...saved]
     .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
     .forEach(r => (r.scholarships ?? []).forEach(s => {
-      if (s.category && !memory.has(s.code)) memory.set(s.code, { category: s.category, specialFunding: s.specialFunding });
+      if (s.category && !memory.has(s.code)) memory.set(s.code, { category: s.category, specialFunding: s.specialFunding, allowances: s.allowances });
     }));
   return memory;
 }
@@ -151,6 +169,43 @@ function classifyFromName(name: string): FseCategory | null {
   const m = /\((internally|externally)[^)]*\)/i.exec(name);
   if (!m) return null;
   return classify(m[1], /non[\s-]*academic/i.test(m[0]) ? 'non academic' : 'academic');
+}
+
+// How the AdSO counts each scholarship, from the "Raw" sheet of the office's
+// FSE template (fund source and category beside each code), for the
+// registrar's report, which names no category. Checked against the
+// template's FSE sheet: special programs split into internally funded
+// (Night College), externally funded (DOST) and co-funded (the city
+// scholarships). The codes are the registrar's and stay the same each term.
+const BY_CODE: Record<string, { category: FseCategory; funding?: FseSpecialFunding }> = {};
+const put = (codes: string, category: FseCategory, funding?: FseSpecialFunding) =>
+  codes.split(' ').forEach(code => { BY_CODE[code] = { category, funding }; });
+put('1002 1005 1009 1010 1036 1199 1230 1241 1249 1281 1555 1556 1608 1609 1638 1668 1669 1737 1765 1766', 'internalAcademic');
+put('1011 1012 1013 1060 1119 1208 1257 1284 1451 1615 1639 1736 1764 1767 1768 1769 1770', 'internalNonAcademic');
+put('1042 1043 1044 1050 1109 1203 1253 1607 1711 1744 1745 1746 1747 1748', 'external');
+put('1374', 'special', 'internal');
+put('1725', 'special', 'external');
+put('1137 1697 1741', 'special', 'coFunded');
+
+// For a code the template doesn't have yet: the same families by name.
+// Anything else is left for the AdSO to choose (and remembered after).
+const NAME_RULES: { re: RegExp; category: FseCategory; funding?: FseSpecialFunding }[] = [
+  { re: /night college/i, category: 'special', funding: 'internal' },
+  { re: /\bdost\b/i, category: 'special', funding: 'external' },
+  { re: /\bcity of\b|municipal|\bprovinc/i, category: 'special', funding: 'coFunded' },
+  // Another La Salle school's Br. President Scholarship hosted here is
+  // externally funded (counted in the host school's FSE); DLSU-D's own is
+  // internal non-academic.
+  { re: /(dlshsi|benilde|manila|zobel|dlsu-?m)\b.*(bpsp|enhanced br)|(bpsp|enhanced br).*(benilde|manila|zobel)/i, category: 'external' },
+  { re: /enhanced br\.?|\bbpsp\b|\bebpsp\b/i, category: 'internalNonAcademic' },
+  { re: /non[\s-]*academic/i, category: 'internalNonAcademic' },
+  { re: /academic scholarship|student financial aid grant|\bsfag\b|ceatsg/i, category: 'internalAcademic' },
+  { re: /varsity|performing arts|n?rotc|\bccti\b/i, category: 'internalNonAcademic' },
+  { re: /\bched\b|veterans/i, category: 'external' },
+];
+
+export function guessCategory(code: string, name: string): { category: FseCategory; funding?: FseSpecialFunding } | null {
+  return BY_CODE[code.trim()] ?? NAME_RULES.find(r => r.re.test(name)) ?? null;
 }
 
 // A category tab's category, from its name ("Internal Non Academic",

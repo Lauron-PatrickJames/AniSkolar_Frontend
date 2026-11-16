@@ -35,15 +35,15 @@ const CORE: FieldKey[] = ['studentNumber', 'programCode', 'yearLevel', 'gpa'];
 
 // DLSU-D student numbers are 9 digits: the year the student first enrolled
 // at DLSU-D (possibly in high school, kept into college), then
-// 5 digits, e.g. 202312345 (entered 2023). Same rule as the backend
+// 5 digits, e.g. 202399001 (entered 2023). Same rule as the backend
 // (routes/students.js).
 function studentNumberError(value: string): string | undefined {
   const v = value.trim();
   if (!v) return 'Enter your student number.';
-  if (!/^\d{9}$/.test(v)) return 'Student numbers have 9 digits, like 202312345.';
+  if (!/^\d{9}$/.test(v)) return 'Student numbers have 9 digits, like 202399001.';
   const year = Number(v.slice(0, 4));
   if (year < 1990 || year > new Date().getFullYear() + 1) {
-    return 'Student numbers start with the year you entered, like 2023 in 202312345.';
+    return 'Student numbers start with the year you entered, like 2023 in 202399001.';
   }
   return undefined;
 }
@@ -188,7 +188,7 @@ export default function CompleteProfilePage({ existing, onComplete }: CompletePr
                       inputMode="numeric"
                       autoComplete="off"
                       maxLength={9}
-                      placeholder="e.g. 202312345"
+                      placeholder="e.g. 202399001"
                       className="tabular-nums tracking-wide"
                       onChange={e => { setStudentNumber(e.target.value.replace(/\D/g, '')); setStudentNumberTaken(''); }}
                       onBlur={() => touch('studentNumber')}

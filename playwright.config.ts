@@ -24,10 +24,16 @@ const PORT = 3000;
 
 export default defineConfig({
   testDir: './e2e',
+  // A cold dev server compiles each page on first visit; give that time.
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
   globalSetup: './e2e/global.setup.ts',
   fullyParallel: true,
+  // At most 3 at once: more makes Clerk refuse sign-ins and overloads the dev server.
+  workers: 3,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // One retry: Clerk's test sign-in is occasionally slow.
+  retries: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: `http://localhost:${PORT}`,

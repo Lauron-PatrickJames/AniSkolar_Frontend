@@ -16,7 +16,8 @@ async function signIn(page: Page, emailAddress: string, options: Parameters<type
   await page.goto('/');
   await clerk.signIn({ page, emailAddress });
   // The sidebar (a hidden drawer on phones) is in the page once the console loads.
-  await expect(page.locator('#admin-sidebar')).toBeAttached({ timeout: 20_000 });
+  // Generous: the first run compiles the admin console on a cold dev server.
+  await expect(page.locator('#admin-sidebar')).toBeAttached({ timeout: 45_000 });
 }
 
 // A menu item by its name; counts are read out after a comma

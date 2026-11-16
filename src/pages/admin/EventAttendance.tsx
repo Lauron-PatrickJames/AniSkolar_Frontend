@@ -305,7 +305,7 @@ export default function AttendanceDialog({ event: initialEvent, term, getToken, 
           <section className="min-w-0 space-y-3">
             <h3 className="text-sm font-semibold text-ink">Who attended</h3>
             <div className="space-y-2">
-              <Textarea value={paste} onChange={e => { setPaste(e.target.value); setPasteNote(''); }} rows={2} placeholder="Type or paste student numbers from the sheet, e.g. 202312345 202398765" aria-label="Student numbers from the sheet" disabled={upcoming} />
+              <Textarea value={paste} onChange={e => { setPaste(e.target.value); setPasteNote(''); }} rows={2} placeholder="Type or paste student numbers from the sheet, e.g. 202399001 202398765" aria-label="Student numbers from the sheet" disabled={upcoming} />
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" onClick={addPasted} disabled={!paste.trim() || upcoming}>Tick these</Button>
                 {pasteNote && <span className="text-xs text-ink-muted">{pasteNote}</span>}

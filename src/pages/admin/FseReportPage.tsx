@@ -1,28 +1,30 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Calculator, Download, FileSpreadsheet, Trash2, Upload } from 'lucide-react';
+import { Calculator, ChevronDown, ChevronUp, Download, FileSpreadsheet, Trash2, Upload } from 'lucide-react';
 import { API_BASE_URL, academicYearOf, authHeaders, formatDate, formatDateTime } from './adminData';
 import { ResultDialog,
   Alert, Badge, Button, Card, Checkbox, ConfirmDialog, DropdownMenu, EmptyState, ErrorState, Field, Modal, PageHeader,
   SearchInput, Select, Table, TableSkeleton, Td, TextInput, Th, Toast, Tr
 } from './AdminUI';
 import {
-  CATEGORY_LABELS, FSE_TERMS, FseCategory, FseReport, FseScholarship, FseSpecialFunding, FseTerm, ParseResult, SPECIAL_FUNDING_LABELS, formatFse,
-  guessSpecialFunding,
+  ALLOWANCE_LABELS, AllowanceKind, Allowances, CATEGORY_LABELS, FSE_TERMS, FseCategory, FseReport, FseScholarship, FseSpecialFunding, FseTerm, ParseResult, SPECIAL_FUNDING_LABELS, allowanceTotal, formatFse,
+  guessCategory, guessSpecialFunding, withAllowances,
   formatPct, parseRegistrarWorkbook, rememberCategories, summarize
 } from './fse';
 import { exportAcademicYear } from './fseExport';
 
-// AdSO page for the Full Scholarship Equivalent: upload a term's registrar
-// export, review how each scholarship is counted, save it, and read or
-// export the FSE summary.
+// AdSO page for the Full Scholarship Equivalent: whenever a report is
+// needed, upload the registrar's raw scholarship assessment report, review
+// how each scholarship is counted and enter its allowances, and generate the
+// report. Every generation is kept, newest first, to read or export.
 
-// A saved term from GET /api/fse: its scholarships come without their scholar rows.
+// A generated report from GET /api/fse: its scholarships come without their scholar rows.
 interface SavedSummary {
-  id: string; academicYear: string; term: FseTerm; population: number; updatedAt?: string; updatedBy?: string;
-  scholarships?: Pick<FseScholarship, 'code' | 'category' | 'specialFunding'>[];
+  id: string; academicYear: string; term: FseTerm; population: number; createdAt?: string; updatedAt?: string; updatedBy?: string;
+  scholarships?: Pick<FseScholarship, 'code' | 'category' | 'specialFunding' | 'allowances'>[];
 }
 
-const termLabel = (r: { academicYear: string; term: string }) => `${r.academicYear} · ${r.term}`;
+const termLabel = (r: { academicYear: string; term: string; createdAt?: string }) =>
+  `${r.academicYear} · ${r.term}${r.createdAt ? ` · generated ${formatDateTime(r.createdAt)}` : ''}`;
 
 export default function FseReportPage({ getToken }: { getToken: () => Promise<string | null> }) {
   const [list, setList] = useState<SavedSummary[]>([]);
@@ -72,20 +74,12 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
     return () => { cancelled = true; };
   }, [selectedId, getToken]);
 
-  // The export covers the whole academic year: both semesters side by side.
+  // Exports the report shown, in the office's FSE workbook layout.
   const exportYear = async () => {
     if (!report) return;
     setReportError('');
     try {
-      const terms = list.filter(r => r.academicYear === report.academicYear && r.term !== 'Midyear');
-      const reports = await Promise.all(terms.map(async t => {
-        if (t.id === report.id) return report;
-        const res = await fetch(`${API_BASE_URL}/api/fse/${t.id}`, { headers: await authHeaders(getToken) });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.error || 'Failed to load the other semester.');
-        return body.report as FseReport;
-      }));
-      await exportAcademicYear(report.academicYear, reports.length ? reports : [report]);
+      await exportAcademicYear(report.academicYear, [report]);
     } catch (err) {
       setReportError(err instanceof Error ? err.message : 'Export failed.');
     }
@@ -121,12 +115,12 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
               <DropdownMenu
                 label="More actions"
                 items={[
-                  { key: 'export', label: 'Export academic year to Excel', icon: Download, onSelect: exportYear },
-                  { key: 'delete', label: 'Delete this term', icon: Trash2, tone: 'danger', onSelect: () => setDeleting(true) }
+                  { key: 'export', label: 'Export to Excel', icon: Download, onSelect: exportYear },
+                  { key: 'delete', label: 'Delete this report', icon: Trash2, tone: 'danger', onSelect: () => setDeleting(true) }
                 ]}
               />
             )}
-            <Button variant="primary" icon={Upload} onClick={() => setUploading(true)}>Upload term</Button>
+            <Button variant="primary" icon={Upload} onClick={() => setUploading(true)}>Generate report</Button>
           </>
         }
       />
@@ -140,14 +134,14 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
           <EmptyState
             icon={Calculator}
             title="No FSE reports yet"
-            description="Upload the registrar's scholarship export or the office's FSE workbook (.xls, .xlsx)."
-            action={<Button variant="primary" icon={Upload} onClick={() => setUploading(true)}>Upload term</Button>}
+            description="Generate one whenever it's needed, from the registrar's raw scholarship assessment report (.xls, .xlsx)."
+            action={<Button variant="primary" icon={Upload} onClick={() => setUploading(true)}>Generate report</Button>}
           />
         </Card>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <Select value={selectedId ?? ''} onChange={setSelectedId} label="Term" className="w-72">
+            <Select value={selectedId ?? ''} onChange={setSelectedId} label="Report" className="w-full sm:w-[28rem]">
               {list.map(r => <option key={r.id} value={r.id}>{termLabel(r)}</option>)}
             </Select>
             {report && (
@@ -155,7 +149,7 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
                 Population {report.population.toLocaleString()}
                 {report.spoonRecipients != null ? ` · SPOON recipients ${report.spoonRecipients.toLocaleString()}` : ''}
                 {report.asOf ? ` · as of ${formatDate(report.asOf)}` : ''}
-                {report.updatedAt ? ` · saved ${formatDateTime(report.updatedAt)}${report.updatedBy ? ` by ${report.updatedBy}` : ''}` : ''}
+                {report.updatedBy ? ` · generated by ${report.updatedBy}` : ''}
               </span>
             )}
           </div>
@@ -171,7 +165,7 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
           onClose={() => setUploading(false)}
           onSaved={saved => {
             setUploading(false);
-            setToast(`Saved ${termLabel(saved)}.`);
+            setToast(`Generated the FSE report for ${saved.academicYear} · ${saved.term}.`);
             loadList(saved.id);
           }}
         />
@@ -244,6 +238,7 @@ function ReportView({ report }: { report: FseReport }) {
               <Th sticky={false}>Scholarship</Th>
               <Th sticky={false} className="w-56">Category</Th>
               <Th sticky={false} numeric className="w-24">Scholars</Th>
+              <Th sticky={false} numeric className="w-36">Allowances / scholar</Th>
               <Th sticky={false} numeric className="w-24">FSE</Th>
             </tr>
           </thead>
@@ -257,6 +252,7 @@ function ReportView({ report }: { report: FseReport }) {
                   {s.category === 'special' && <span className="text-ink-subtle"> · {SPECIAL_FUNDING_LABELS[s.specialFunding ?? 'internal']}</span>}
                 </span></Td>
                 <Td numeric>{s.scholars.length}</Td>
+                <Td numeric>{allowanceTotal(s.allowances) ? `₱${allowanceTotal(s.allowances).toLocaleString()}` : '—'}</Td>
                 <Td numeric><span className="text-ink">{formatFse(s.fse)}</span></Td>
               </Tr>
             ))}
@@ -295,11 +291,13 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
   const [saveError, setSaveError] = useState('');
   // Categories filled in from the reports saved before.
   const [remembered, setRemembered] = useState(0);
+  const [guessed, setGuessed] = useState(0);
 
   const onFile = async (file: File | undefined) => {
     setParseError('');
     setParsed(null);
     setRemembered(0);
+    setGuessed(0);
     if (!file) return;
     setFileName(file.name);
     try {
@@ -307,16 +305,23 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
       // Where the file names no category (the registrar's report), use what
       // the scholarship was counted as last time. A category in the file wins.
       const memory = rememberCategories(existing);
+      // Then how the office's FSE template counts it.
       let filled = 0;
+      let guessed = 0;
       setRows(result.scholarships.map(s => {
         const last = memory.get(s.code);
-        const category = s.category ?? last?.category ?? null;
-        if (!s.category && category) filled++;
-        const specialFunding = guessSpecialFunding(s.subcategory) ?? (category === 'special' ? last?.specialFunding ?? null : null);
-        return { ...s, category, include: true, specialFunding };
+        const byName = guessCategory(s.code, s.name);
+        const category = s.category ?? last?.category ?? byName?.category ?? null;
+        if (!s.category && last?.category) filled++;
+        else if (!s.category && category) guessed++;
+        const specialFunding = guessSpecialFunding(s.subcategory)
+          ?? (category === 'special' ? last?.specialFunding ?? (byName?.category === 'special' ? byName.funding : undefined) ?? null : null);
+        // The allowances entered for this scholarship last time.
+        return { ...s, category, include: true, specialFunding, allowances: last?.allowances ?? null };
       }));
       setParsed(result);
       setRemembered(filled);
+      setGuessed(guessed);
     } catch (err) {
       setParseError(err instanceof Error ? err.message : "Couldn't read that file.");
     }
@@ -337,8 +342,17 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
     spoon: spoonCount !== null && (!Number.isInteger(spoonCount) || spoonCount < 0) ? 'Enter a whole number, or leave it blank.' : '',
     empty: included.length === 0 ? 'Include at least one scholarship.' : ''
   };
-  const replacing = existing.find(r => r.academicYear === academicYear && r.term === term);
-  const preview = parsed && !errors.population ? summarize({ scholarships: included, population: pop }) : null;
+  const preview = parsed && !errors.population ? summarize({ scholarships: included.map(withAllowances), population: pop }) : null;
+  // Which scholarships have their allowance fields open.
+  const [openAllowances, setOpenAllowances] = useState<Set<string>>(new Set());
+  const toggleAllowances = (code: string) => setOpenAllowances(p => { const n = new Set(p); if (n.has(code)) n.delete(code); else n.add(code); return n; });
+  const setAllowance = (code: string, kind: AllowanceKind, raw: string) => setRows(prev => prev.map(r => {
+    if (r.code !== code) return r;
+    const n = Number(raw);
+    const next: Allowances = { ...(r.allowances ?? {}) };
+    if (raw.trim() === '' || !Number.isFinite(n) || n <= 0) delete next[kind]; else next[kind] = n;
+    return { ...r, allowances: Object.keys(next).length ? next : null };
+  }));
 
   // Scrolls to the first thing that's missing and puts the cursor on it.
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -361,7 +375,7 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
     setSaveError('');
     try {
       const res = await fetch(`${API_BASE_URL}/api/fse`, {
-        method: 'PUT',
+        method: 'POST',
         headers: await authHeaders(getToken, true),
         body: JSON.stringify({
           academicYear, term, population: pop, spoonRecipients: spoonCount, asOf: asOf || undefined, fileName,
@@ -381,20 +395,20 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
   return (
     <Modal
       size="lg"
-      title="Upload a term"
+      title="Generate an FSE report"
       onClose={onClose}
       dismissible={!saving}
       footer={
         <>
           <Button onClick={onClose} disabled={saving}>Cancel</Button>
           <Button variant="primary" onClick={save} loading={saving} disabled={!parsed || saving}>
-            {replacing ? 'Replace saved term' : 'Save term'}
+            Generate report
           </Button>
         </>
       }
     >
       <div ref={bodyRef} className="space-y-5">
-        <Field label="Registrar export or FSE workbook" helper={!parseError && !parsed ? 'A workbook with the tabs Internal Academic, Internal Non Academic, Externally Funded and Special Program is read tab by tab.' : undefined} error={parseError || undefined}>
+        <Field label="Raw scholarship assessment report (from ICTC)" helper={!parseError && !parsed ? 'The registrar’s scholarship report as exported (.xls or .xlsx). An FSE workbook with category tabs is also read tab by tab.' : undefined} error={parseError || undefined}>
           <input
             type="file"
             accept=".xls,.xlsx"
@@ -411,6 +425,7 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
             </p>
             {parsed.fromTabs && <p className="text-xs text-ink-subtle">Each scholarship is counted under its tab’s category. Change one below if needed.</p>}
             {remembered > 0 && <p className="text-xs text-ink-subtle">{remembered} {remembered === 1 ? 'category was' : 'categories were'} filled in from the last saved report. Check them below.</p>}
+            {guessed > 0 && <p className="text-xs text-ink-subtle">{guessed} {guessed === 1 ? 'category was' : 'categories were'} set from how the office’s FSE template counts that scholarship. Check them below; your choices are remembered for next time.</p>}
             {parsed.warnings.length > 0 && (
               <Alert tone="warning"><ul className="list-disc space-y-0.5 pl-4">{parsed.warnings.map(w => <li key={w}>{w}</li>)}</ul></Alert>
             )}
@@ -436,12 +451,11 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
                 <TextInput data-missing={attempted && !!errors.spoon} type="number" min={0} inputMode="numeric" value={spoon} onChange={e => setSpoon(e.target.value)} placeholder="e.g. 18" />
               </Field>
             </div>
-            {replacing && <Alert tone="warning">A report for {termLabel(replacing)} is already saved. Saving replaces it.</Alert>}
 
             <div>
               <p className="mb-1 text-sm font-medium text-ink">Scholarships</p>
               <p className="mb-2 text-xs text-ink-subtle">
-                Leave out any the office doesn't count in the FSE, and set a category where the export has none.
+                Leave out any the office doesn't count in the FSE, set a category where the export has none, and enter each scholarship’s allowances per scholar (from its donor or sponsoring office) under Allowances.
                 {parts.length > 1 && (parsed.fromTabs
                   ? ' Grouped by tab; “Set all to” changes a whole tab at once.'
                   : ' The export comes in parts (one per report page); “Set all to” classifies a whole part at once.')}
@@ -484,6 +498,9 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
                       {r.discountRule && <span className="block truncate text-xs text-ink-subtle" title={r.discountRule}>{r.discountRule}</span>}
                     </span>
                     <span className="text-xs text-ink-subtle tabular-nums">{r.scholars.length}</span>
+                    <Button size="sm" variant="ghost" iconRight={openAllowances.has(r.code) ? ChevronUp : ChevronDown} onClick={() => toggleAllowances(r.code)} disabled={!r.include} aria-expanded={openAllowances.has(r.code)}>
+                      {allowanceTotal(r.allowances) ? `₱${allowanceTotal(r.allowances).toLocaleString()}` : 'Allowances'}
+                    </Button>
                     <Select
                       value={r.category ?? ''}
                       onChange={v => set(r.code, { category: (v || null) as FseCategory | null })}
@@ -508,6 +525,15 @@ function UploadModal({ getToken, existing, onClose, onSaved }: {
                     )}
                     {r.include && !r.category && <Badge tone="warning">Needs category</Badge>}
                     {r.include && r.category === 'special' && !r.specialFunding && <Badge tone="warning">Needs funding</Badge>}
+                    {openAllowances.has(r.code) && r.include && (
+                      <div className="grid w-full grid-cols-2 gap-2 pt-1 sm:grid-cols-5">
+                        {(Object.keys(ALLOWANCE_LABELS) as AllowanceKind[]).map(k => (
+                          <Field key={k} label={`${ALLOWANCE_LABELS[k]} (₱ per scholar)`}>
+                            <TextInput type="number" min={0} inputMode="decimal" value={r.allowances?.[k] ?? ''} onChange={e => setAllowance(r.code, k, e.target.value)} placeholder="0" />
+                          </Field>
+                        ))}
+                      </div>
+                    )}
                   </li>
                   );
                 })}

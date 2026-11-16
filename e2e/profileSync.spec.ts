@@ -7,12 +7,12 @@ import type { GrantApplicationDetails, StudentProfile } from '../src/types';
 test.beforeEach(({}, info) => { test.skip(info.project.name !== 'desktop', 'Logic only: once is enough.'); });
 
 const newStudent = (extra: Partial<StudentProfile> = {}): StudentProfile => ({
-  studentNumber: '202312345', name: 'Juan Dela Cruz', firstName: 'Juan', lastName: 'Dela Cruz',
+  studentNumber: '202399001', name: 'Juan Dela Cruz', firstName: 'Juan', lastName: 'Dela Cruz',
   course: 'BSIT', college: 'CICS', yearLevel: '2nd Year', email: 'dja1234@dlsud.edu.ph', gpa: '3.25', ...extra,
 } as StudentProfile);
 
 const sfagForm = (over: Record<string, unknown> = {}) => ({
-  personalInfo: { firstName: 'JUAN', lastName: 'DELA CRUZ', middleInitial: 'S', suffix: '', studentNumber: '202312345', course: 'BSIT', yearLevel: '2nd Year', placeOfBirth: 'DASMARIÑAS', dateOfBirth: '2005-03-01', age: '21', civilStatus: 'SINGLE', gender: 'Male', nationality: 'FILIPINO', isPwd: false, religion: 'ROMAN CATHOLIC', specifyReligion: '' },
+  personalInfo: { firstName: 'JUAN', lastName: 'DELA CRUZ', middleInitial: 'S', suffix: '', studentNumber: '202399001', course: 'BSIT', yearLevel: '2nd Year', placeOfBirth: 'DASMARIÑAS', dateOfBirth: '2005-03-01', age: '21', civilStatus: 'SINGLE', gender: 'Male', nationality: 'FILIPINO', isPwd: false, religion: 'ROMAN CATHOLIC', specifyReligion: '' },
   contactSchool: { streetAddress: '12 Rizal St.', municipality: 'DASMARIÑAS CITY', province: 'CAVITE', country: 'PHILIPPINES', mobileNo: '0917 123 4567', landlineNo: '', email: '', secondarySchool: '', schoolAddress: '', schoolType: 'Public' as const },
   parentsGuardian: {
     father: { fullName: 'JOSE DELA CRUZ', occupation: '', company: '', companyTel: '', monthlyIncome: '', isSoloParent: false },

@@ -1,5 +1,5 @@
 import type { Borders, Cell, Workbook, Worksheet } from 'exceljs';
-import { FseCategory, FseReport, FseScholar, FseScholarship, FseSpecialFunding, SPECIAL_FUNDING_LABELS } from './fse';
+import { FseCategory, FseReport, FseScholar, FseScholarship, FseSpecialFunding, SPECIAL_FUNDING_LABELS, adjustmentFse, allowanceTotal, scholarCount, scholarshipFse } from './fse';
 
 // The Excel export, laid out and styled like the AdSO's own FSE workbook:
 //   - "FSE": the 1st / 2nd semester table (rows 12–13), then a block per
@@ -32,8 +32,8 @@ function semesterFigures(report: FseReport) {
   const of = (pick: (s: FseScholarship) => boolean): Totals => {
     const list = report.scholarships.filter(pick);
     return {
-      count: list.reduce((n, s) => n + s.scholars.length, 0),
-      fse: list.reduce((n, s) => n + s.scholars.reduce((m, r) => m + r.fse, 0), 0)
+      count: list.reduce((n, s) => n + scholarCount(s), 0),
+      fse: list.reduce((n, s) => n + scholarshipFse(s), 0)
     };
   };
   const special = (f: FseSpecialFunding) => of(s => s.category === 'special' && (s.specialFunding ?? 'internal') === f).count;
@@ -334,11 +334,23 @@ function categorySheet(wb: Workbook, name: string, scholarships: FseScholarship[
       calc(ws, `P${row}`, `N${row}/L${row}`, r.fse, { align: top, fmt: '0.0000' });
       row++;
     });
-    const subtotal = sc.scholars.reduce((m, r) => m + r.fse, 0);
-    put(ws, `O${row}`, sc.scholars.length, { font: ARIAL_BOLD, align: top, fmt: COUNT });
+    // Scholars the AdSO added by hand, on one row with where they come from.
+    const adj = sc.adjustment;
+    if (adj) {
+      const extra = allowanceTotal(sc.allowances) * adj.scholars;
+      put(ws, `D${row}`, `+${adj.scholars} added`, { align: top });
+      put(ws, `E${row}`, `Adjustment: ${adj.note}`, { align: top });
+      put(ws, `L${row}`, adj.assessment, { align: top, fmt: MONEY });
+      put(ws, `M${row}`, adj.discount, { align: top, fmt: MONEY });
+      put(ws, `N${row}`, adj.discount + extra, { align: top, fmt: MONEY });
+      calc(ws, `P${row}`, `N${row}/L${row}*${adj.scholars}`, adjustmentFse(sc), { align: top, fmt: '0.0000' });
+      row++;
+    }
+    const subtotal = scholarshipFse(sc);
+    put(ws, `O${row}`, scholarCount(sc), { font: ARIAL_BOLD, align: top, fmt: COUNT });
     calc(ws, `P${row}`, `SUM(P${firstRow}:P${row - 1})`, subtotal, { font: ARIAL_BOLD, align: top, fmt: FSE_FMT });
     headCells.push(`O${row}`); fseCells.push(`P${row}`);
-    scholars += sc.scholars.length; fse += subtotal;
+    scholars += scholarCount(sc); fse += subtotal;
     row += 2;
   }
   const totalStyle = { font: ARIAL_BOLD, align: CENTER };

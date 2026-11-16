@@ -57,12 +57,16 @@ export interface FseScholar {
   // monthly, dorm, other financial assistance, book); the export writes
   // them back to the same columns.
   allowanceDetail?: Partial<Record<AllowanceKind, number>>;
+  // What the AdSO entered for this scholar (already in the amounts above,
+  // in a saved report).
+  entered?: Partial<Record<AllowanceKind, number>> | null;
   totalDiscount: number;
   fse: number;
 }
 
 export type AllowanceKind = 'meal' | 'monthly' | 'dorm' | 'other' | 'book';
-export const ALLOWANCE_LABELS: Record<AllowanceKind, string> = { meal: 'Meal', monthly: 'Monthly', dorm: 'Dorm', book: 'Book', other: 'Other assistance' };
+// In the office template's column order (G–K).
+export const ALLOWANCE_LABELS: Record<AllowanceKind, string> = { meal: 'Meal', monthly: 'Monthly', dorm: 'Dorm', other: 'Other financial assistance', book: 'Book' };
 export type Allowances = Partial<Record<AllowanceKind, number>>;
 export const allowanceTotal = (a?: Allowances | null) => Object.values(a ?? {}).reduce((n, v) => n + (v ?? 0), 0);
 // Which allowance a column header is ("Meal allowance (SPOON / ATHLETE)",
@@ -87,7 +91,13 @@ export interface FseScholarship {
   // The allowances per scholar the AdSO entered for this scholarship;
   // the server adds them to each grantee's discount.
   allowances?: Allowances | null;
+  // Scholars the AdSO adds by hand when the file is missing some (e.g. rows
+  // lost from the registrar's export), with where the numbers come from.
+  adjustment?: FseAdjustment | null;
   scholars: FseScholar[];
+  // Upload review only: how far the listed rows fall short of the file's
+  // SUB TOTAL, to fill in an adjustment.
+  subTotalGap?: { scholars: number; assessment: number; discount: number };
   // Upload review only (not saved): which part of the export it came from
   // (the registrar's report runs several pages, each ending in a GRAND
   // TOTAL) and its discount rule, e.g. "TUITION: 50%/LAB: 0%/…".
@@ -106,6 +116,8 @@ export interface FseReport {
   spoonRecipients?: number | null;
   asOf?: string | null;
   fileName?: string;
+  // Other grants the AdSO added to listed scholars (see FseGrant).
+  grants?: FseGrant[];
   scholarships: FseScholarship[];
   createdAt?: string;
   updatedAt?: string;
@@ -133,6 +145,82 @@ export function withoutAllowances(s: FseScholarship): FseScholarship {
     return { ...r, allowances: Math.max(0, r.allowances - extra), totalDiscount, fse: r.matriculation ? totalDiscount / r.matriculation : 0 };
   }) };
 }
+
+// A grant some listed students also hold that the registrar's file shows
+// only under their other scholarship (each student is listed once), e.g.
+// DOST: added to the student's row as other financial assistance, so they
+// still count once.
+export interface FseGrant { label: string; amount: number; studentIds: string[] }
+
+// Student numbers in pasted text (one per line, or separated by anything).
+export const parseStudentIds = (text: string) => [...new Set(text.match(/\d{8,10}/g) ?? [])];
+
+// Adds (sign 1) or takes back out (sign -1) each student's grants, on
+// their first row, as the server does.
+export function applyGrants(scholarships: FseScholarship[], grants: FseGrant[] | undefined, sign: 1 | -1 = 1): FseScholarship[] {
+  const left = new Map<string, number>();
+  for (const g of grants ?? []) for (const id of g.studentIds) left.set(id, (left.get(id) ?? 0) + g.amount);
+  if (!left.size) return scholarships;
+  return scholarships.map(s => ({ ...s, scholars: s.scholars.map(r => {
+    const amount = left.get(r.studentId);
+    if (!amount) return r;
+    left.delete(r.studentId);
+    const d = sign * amount;
+    const other = Math.max(0, (r.allowanceDetail?.other ?? 0) + d);
+    const allowanceDetail = { ...(r.allowanceDetail ?? {}), other };
+    if (!other) delete allowanceDetail.other;
+    const totalDiscount = r.totalDiscount + d;
+    return { ...r, allowances: Math.max(0, r.allowances + d), allowanceDetail, totalDiscount, fse: r.matriculation ? totalDiscount / r.matriculation : 0 };
+  }) }));
+}
+
+// Each scholar's entered allowances (by student number) added to their
+// row, as the server does: for the preview.
+export function withEntered(s: FseScholarship, entered: Record<string, Allowances>): FseScholarship {
+  return { ...s, scholars: s.scholars.map(r => {
+    const a = entered[r.studentId];
+    const add = allowanceTotal(a);
+    if (!add) return r;
+    const allowanceDetail = { ...(r.allowanceDetail ?? {}) };
+    for (const [k, v] of Object.entries(a!) as [AllowanceKind, number][]) allowanceDetail[k] = (allowanceDetail[k] ?? 0) + v;
+    const totalDiscount = r.totalDiscount + add;
+    return { ...r, allowances: r.allowances + add, allowanceDetail, totalDiscount, fse: r.matriculation ? totalDiscount / r.matriculation : 0 };
+  }) };
+}
+
+// A saved scholarship's rows without the entered allowances, and those
+// allowances by student number: for editing.
+export function withoutEntered(s: FseScholarship): { scholarship: FseScholarship; entered: Record<string, Allowances> } {
+  const entered: Record<string, Allowances> = {};
+  const scholars = s.scholars.map(r => {
+    const sub = allowanceTotal(r.entered);
+    if (!sub || !r.entered) return r;
+    entered[r.studentId] = { ...r.entered };
+    const allowanceDetail = { ...(r.allowanceDetail ?? {}) };
+    for (const [k, v] of Object.entries(r.entered) as [AllowanceKind, number][]) {
+      allowanceDetail[k] = (allowanceDetail[k] ?? 0) - v;
+      if (!(allowanceDetail[k]! > 0)) delete allowanceDetail[k];
+    }
+    const totalDiscount = r.totalDiscount - sub;
+    return { ...r, entered: null, allowances: Math.max(0, r.allowances - sub), allowanceDetail, totalDiscount, fse: r.matriculation ? totalDiscount / r.matriculation : 0 };
+  });
+  return { scholarship: { ...s, scholars }, entered };
+}
+
+export interface FseAdjustment { scholars: number; assessment: number; discount: number; note: string }
+
+// The added scholars' FSE count: their total discount (plus the entered
+// allowances for each) over their total assessment, times how many they
+// are (each one's FSE at the group's average).
+export function adjustmentFse(s: Pick<FseScholarship, 'adjustment' | 'allowances'>): number {
+  const a = s.adjustment;
+  if (!a || !a.scholars || !(a.assessment > 0)) return 0;
+  return a.scholars * (a.discount + allowanceTotal(s.allowances) * a.scholars) / a.assessment;
+}
+// A scholarship's head count and FSE count, with any adjustment.
+export const scholarCount = (s: Pick<FseScholarship, 'scholars' | 'adjustment'>) => s.scholars.length + (s.adjustment?.scholars ?? 0);
+export const scholarshipFse = (s: Pick<FseScholarship, 'scholars' | 'adjustment' | 'allowances'>) =>
+  s.scholars.reduce((n, r) => n + r.fse, 0) + adjustmentFse(s);
 
 // "Internally Funded" + "Non Academic Scholarship" → internalNonAcademic, etc.
 export function classify(fundSource: string, subcategory: string): FseCategory | null {
@@ -330,6 +418,9 @@ function parseRows(rows: unknown[][]): Omit<ParseResult, 'sheetName'> | null {
   let blockAssessment = 0;
   let blockDiscount = 0;
   const offTotals: string[] = [];
+  // This block's row count and distinct discounts.
+  let blockRows = 0;
+  const blockDiscounts = new Set<number>();
 
   for (const row of rows.slice(headerIndex + 1)) {
     const first = norm(row[0]);
@@ -341,8 +432,31 @@ function parseRows(rows: unknown[][]): Omit<ParseResult, 'sheetName'> | null {
       if (current && (blockAssessment || blockDiscount)) {
         const amounts = row.map(num);
         const has = (v: number) => amounts.some(a => Math.abs(a - v) < 0.05);
-        if (!has(blockAssessment) || !has(blockDiscount)) offTotals.push(current.code);
+        if (!has(blockAssessment) || !has(blockDiscount)) {
+          offTotals.push(current.code);
+          // The SUB TOTAL's own assessment and discount: its last two
+          // amounts (its columns don't line up with the scholar rows').
+          const filled = amounts.filter(v => v !== 0);
+          const subA = filled.length >= 2 ? filled[filled.length - 2] : 0;
+          const subD = filled.length >= 2 ? filled[filled.length - 1] : 0;
+          const gapA = subA - blockAssessment;
+          const gapD = subD - blockDiscount;
+          if (gapA > 0.05 && gapD >= 0) {
+            // A flat grant (every row the same discount): the gap in grants;
+            // otherwise the gap at the block's average assessment.
+            const flat = blockDiscounts.size === 1 ? [...blockDiscounts][0] : 0;
+            const n = flat > 0 ? Math.round(gapD / flat) : Math.round(gapA / (blockAssessment / Math.max(1, blockRows)));
+            const prev = current.subTotalGap;
+            current.subTotalGap = {
+              scholars: (prev?.scholars ?? 0) + Math.max(1, n),
+              assessment: Math.round(((prev?.assessment ?? 0) + gapA) * 100) / 100,
+              discount: Math.round(((prev?.discount ?? 0) + gapD) * 100) / 100
+            };
+          }
+        }
       }
+      blockRows = 0;
+      blockDiscounts.clear();
       blockAssessment = 0;
       blockDiscount = 0;
       continue;
@@ -351,6 +465,8 @@ function parseRows(rows: unknown[][]): Omit<ParseResult, 'sheetName'> | null {
     if (codeAt >= 0) {
       blockAssessment = 0;
       blockDiscount = 0;
+      blockRows = 0;
+      blockDiscounts.clear();
       const code = text(row[codeAt + 1]);
       current = byCode.get(code) ?? null;
       if (!current) {
@@ -395,6 +511,8 @@ function parseRows(rows: unknown[][]): Omit<ParseResult, 'sheetName'> | null {
     const totalDiscount = totalCol >= 0 && num(at(totalCol)) > 0 ? num(at(totalCol)) : discount + allowances;
     blockAssessment += matriculation;
     blockDiscount += totalDiscount;
+    blockRows++;
+    if (totalDiscount > 0) blockDiscounts.add(totalDiscount);
     // The same student with the same amounts under the same code is a
     // repeated row in the export, not a second scholarship.
     const key = `${current.code}|${studentId}|${matriculation}|${totalDiscount}`;
@@ -427,11 +545,14 @@ function parseRows(rows: unknown[][]): Omit<ParseResult, 'sheetName'> | null {
   if (conflicting) {
     warnings.push(`${conflicting} student(s) appear twice under the same code with different amounts (code${conflictCodes.size > 1 ? 's' : ''} ${[...conflictCodes].join(', ')}), so they're counted twice. The file may contain two versions of that list — keep only the registrar's.`);
   }
-  if (offTotals.length) {
-    warnings.push(`Code${offTotals.length > 1 ? 's' : ''} ${offTotals.join(', ')}: the scholars listed add up to less than the file’s SUB TOTAL, so some are missing from this export and the FSE will be too low. Ask the registrar for the complete list.`);
-  }
   // Allowed: the FSE manual counts more than 1 when the subsidy is more than the cost.
   const notes: string[] = [];
+  // Usually students the file lists under another scholarship (each student
+  // is listed once): the grant goes on their row under Other grants.
+  for (const code of offTotals) {
+    const gap = byCode.get(code)?.subTotalGap;
+    notes.push(`Code ${code}: the SUB TOTAL counts ${gap ? `about ${gap.scholars} more scholar${gap.scholars === 1 ? '' : 's'}` : 'more'} than are listed. They’re usually listed under another scholarship: add this grant to them under Other grants in the next step. Use Add missing only for any who aren’t in the file at all.`);
+  }
   if (overOneCount) {
     notes.push(`${overOneCount} scholar${overOneCount === 1 ? ' has' : 's have'} an FSE above 1.00 (code${overOne.size > 1 ? 's' : ''} ${[...overOne].join(', ')}): the grant is more than the assessment. This is allowed and counted as is.`);
   }
@@ -445,8 +566,8 @@ function parseRows(rows: unknown[][]): Omit<ParseResult, 'sheetName'> | null {
 export interface FseLine { label: string; scholars: number; fse: number; headcountPct: number; fsePct: number; total?: boolean }
 
 function line(label: string, scholarships: FseScholarship[], population: number, total = false): FseLine {
-  const scholars = scholarships.reduce((n, s) => n + s.scholars.length, 0);
-  const fse = scholarships.reduce((n, s) => n + s.scholars.reduce((m, r) => m + r.fse, 0), 0);
+  const scholars = scholarships.reduce((n, s) => n + scholarCount(s), 0);
+  const fse = scholarships.reduce((n, s) => n + scholarshipFse(s), 0);
   return { label, scholars, fse, headcountPct: population ? scholars / population : 0, fsePct: population ? fse / population : 0, total };
 }
 

@@ -4,6 +4,23 @@ import './index.css';
 import App from './App.tsx';
 import SsoCallbackPage from './pages/SsoCallBackPage.tsx';
 import { ClerkProvider } from '@clerk/react';
+import { Sentry, initSentry } from './sentry';
+
+// Error reporting (src/sentry.ts), before anything else can fail.
+initSentry();
+
+// Shown instead of a blank page if a screen crashes; the error is reported.
+function CrashScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-canvas p-6 text-center">
+      <div className="max-w-sm space-y-3">
+        <h1 className="text-lg font-semibold text-ink">Something went wrong</h1>
+        <p className="text-sm text-ink-muted">This page ran into a problem. Reload to try again; if it keeps happening, message the Admissions and Scholarship Office.</p>
+        <button type="button" onClick={() => window.location.reload()} className="rounded-control bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover">Reload</button>
+      </div>
+    </div>
+  );
+}
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -34,8 +51,10 @@ document.addEventListener('paste', e => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
-      {isSsoCallback ? <SsoCallbackPage /> : <App />}
-    </ClerkProvider>
+    <Sentry.ErrorBoundary fallback={<CrashScreen />}>
+      <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+        {isSsoCallback ? <SsoCallbackPage /> : <App />}
+      </ClerkProvider>
+    </Sentry.ErrorBoundary>
   </StrictMode>
 );

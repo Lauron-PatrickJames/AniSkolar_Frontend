@@ -123,6 +123,17 @@ export function withAllowances(s: FseScholarship): FseScholarship {
   }) };
 }
 
+// A saved scholarship's rows without its entered allowances (as they came
+// from the registrar's file), for editing a generated report.
+export function withoutAllowances(s: FseScholarship): FseScholarship {
+  const extra = allowanceTotal(s.allowances);
+  if (!extra) return s;
+  return { ...s, scholars: s.scholars.map(r => {
+    const totalDiscount = r.totalDiscount - extra;
+    return { ...r, allowances: Math.max(0, r.allowances - extra), totalDiscount, fse: r.matriculation ? totalDiscount / r.matriculation : 0 };
+  }) };
+}
+
 // "Internally Funded" + "Non Academic Scholarship" → internalNonAcademic, etc.
 export function classify(fundSource: string, subcategory: string): FseCategory | null {
   const fund = fundSource.toLowerCase();
@@ -143,6 +154,8 @@ export interface ParseResult {
   sheetName: string;
   scholarships: FseScholarship[];
   warnings: string[];
+  // For information only (nothing to fix).
+  notes?: string[];
   // Read from the workbook's category tabs (each scholarship's category
   // comes from its tab).
   fromTabs?: boolean;
@@ -415,14 +428,16 @@ function parseRows(rows: unknown[][]): Omit<ParseResult, 'sheetName'> | null {
     warnings.push(`${conflicting} student(s) appear twice under the same code with different amounts (code${conflictCodes.size > 1 ? 's' : ''} ${[...conflictCodes].join(', ')}), so they're counted twice. The file may contain two versions of that list — keep only the registrar's.`);
   }
   if (offTotals.length) {
-    warnings.push(`The rows under code${offTotals.length > 1 ? 's' : ''} ${offTotals.join(', ')} don’t add up to the SUB TOTAL in the file, so some scholars may be missing from the export. Ask the registrar for a complete export before saving.`);
+    warnings.push(`Code${offTotals.length > 1 ? 's' : ''} ${offTotals.join(', ')}: the scholars listed add up to less than the file’s SUB TOTAL, so some are missing from this export and the FSE will be too low. Ask the registrar for the complete list.`);
   }
+  // Allowed: the FSE manual counts more than 1 when the subsidy is more than the cost.
+  const notes: string[] = [];
   if (overOneCount) {
-    warnings.push(`${overOneCount} scholar(s) have a total discount above their total assessment, so their FSE is above 1.00 (codes ${[...overOne].join(', ')}). Check these with the registrar before saving.`);
+    notes.push(`${overOneCount} scholar${overOneCount === 1 ? ' has' : 's have'} an FSE above 1.00 (code${overOne.size > 1 ? 's' : ''} ${[...overOne].join(', ')}): the grant is more than the assessment. This is allowed and counted as is.`);
   }
   const empty = scholarships.filter(s => s.scholars.length === 0).length;
   if (empty) warnings.push(`${empty} scholarship(s) have no scholars this term.`);
-  return { scholarships: scholarships.filter(s => s.scholars.length > 0), warnings };
+  return { scholarships: scholarships.filter(s => s.scholars.length > 0), warnings, notes };
 }
 
 // --- Summary ---------------------------------------------------------------------

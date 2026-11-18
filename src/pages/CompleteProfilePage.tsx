@@ -10,6 +10,7 @@ import { AcademicFields, ContactFields, FamilyFields, LockedValue, PersonalField
 import { DraftField, DraftSection, ProfileDraft, SECTION_FIELDS, draftFromStudent, draftToPayload, emptyDraft, validateDraft } from '../components/profile/profileForm';
 import { nameInitials, splitDirectoryName, titleCaseName } from '../utils/names';
 import { programDetails } from '../utils/profile';
+import { DeclaredScholarshipsFields, declaredFromStudent, declaredPayload, hasDeclaredErrors, validateDeclared } from '../components/profile/DeclaredScholarships';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -247,7 +248,7 @@ function Hero({ eyebrow, title, description, wide, children }: { eyebrow?: strin
 }
 
 // --- "Complete my full profile" ------------------------------------------------
-// After the essentials, the rest of the profile in three short steps, each
+// After the essentials, the rest of the profile in four short steps, each
 // saved on its own (PATCH /me takes partial updates), so stopping halfway
 // keeps what's done. "Skip the rest" goes to the dashboard at any point.
 
@@ -270,13 +271,22 @@ const MORE_STEPS: { title: string; description: string; sections: DraftSection[]
     sections: ['family'],
     fields: SECTION_FIELDS.family,
   },
+  // Not a profile section: saved as declaredScholarships (DeclaredScholarships.tsx).
+  {
+    title: 'Scholarships you hold',
+    description: 'Any scholarship or grant you have now, including ones from outside DLSU-D.',
+    sections: [],
+    fields: [],
+  },
 ];
+const SCHOLARSHIPS_STEP = MORE_STEPS.length - 1;
 
 function MoreDetailsSteps({ student, onDone }: { student: StudentProfile; onDone: (student: StudentProfile) => void }) {
   const { getToken } = useAuth();
   const reduceMotion = useReducedMotion();
   const [latest, setLatest] = useState(student);
   const [draft, setDraft] = useState<ProfileDraft>(() => draftFromStudent(student));
+  const [declared, setDeclared] = useState(() => declaredFromStudent(student));
   const [step, setStep] = useState(0);
   const [touched, setTouched] = useState<Set<DraftField>>(new Set());
   const [attempted, setAttempted] = useState(false);
@@ -291,6 +301,7 @@ function MoreDetailsSteps({ student, onDone }: { student: StudentProfile; onDone
   const errorFor = (f: DraftField) => (attempted || touched.has(f) ? errors[f] : undefined);
   const touch = (f: DraftField) => setTouched(prev => (prev.has(f) ? prev : new Set(prev).add(f)));
   const update = (patch: Partial<ProfileDraft>) => { setDraft(prev => ({ ...prev, ...patch })); setServerError(''); };
+  const declaredErrors = validateDeclared(declared);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
@@ -300,6 +311,11 @@ function MoreDetailsSteps({ student, onDone }: { student: StudentProfile; onDone
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setAttempted(true);
+    const isScholarships = step === SCHOLARSHIPS_STEP;
+    if (isScholarships && hasDeclaredErrors(declaredErrors)) {
+      panelRef.current?.querySelector<HTMLElement>('[aria-invalid="true"], [data-field="holds"] button')?.focus();
+      return;
+    }
     const bad = current.fields.find(f => errors[f]);
     if (bad) {
       panelRef.current?.querySelector<HTMLElement>(`[data-field="${bad}"] input, [data-field="${bad}"] button, [data-field="${bad}"] select`)?.focus();
@@ -307,7 +323,9 @@ function MoreDetailsSteps({ student, onDone }: { student: StudentProfile; onDone
     }
     // This step's fields only.
     const full = draftToPayload(draft, current.sections) as Record<string, unknown>;
-    const payload = Object.fromEntries(current.fields.filter(f => f in full).map(f => [f, full[f]]));
+    const payload = isScholarships
+      ? { declaredScholarships: declaredPayload(declared) }
+      : Object.fromEntries(current.fields.filter(f => f in full).map(f => [f, full[f]]));
     setSaving(true);
     setServerError('');
     try {
@@ -339,7 +357,7 @@ function MoreDetailsSteps({ student, onDone }: { student: StudentProfile; onDone
       title={current.title}
       description={`${current.description} Saved as you go.`}
     >
-      <ol className="mt-4 grid max-w-2xl grid-cols-3 gap-2" aria-label="Steps">
+      <ol className="mt-4 grid max-w-2xl grid-cols-4 gap-2" aria-label="Steps">
         {MORE_STEPS.map((s, i) => (
           <li key={s.title} className="space-y-1.5">
             <span aria-hidden className={`block h-1 rounded-full transition-colors duration-300 ${i <= step ? 'bg-white' : 'bg-white/20'}`} />
@@ -375,6 +393,9 @@ function MoreDetailsSteps({ student, onDone }: { student: StudentProfile; onDone
           )}
           {step === 1 && <ContactFields draft={draft} update={update} errorFor={errorFor} touch={touch} email={latest.email} />}
           {step === 2 && <FamilyFields draft={draft} update={update} errorFor={errorFor} touch={touch} />}
+          {step === SCHOLARSHIPS_STEP && (
+            <DeclaredScholarshipsFields draft={declared} onChange={d => { setDeclared(d); setServerError(''); }} errors={declaredErrors} showErrors={attempted} />
+          )}
         </div>
         <div className="flex flex-col-reverse items-stretch gap-3 border-t border-line bg-surface-muted/60 px-5 py-4 sm:flex-row sm:items-center sm:px-7">
           <div className="flex items-center justify-between gap-2 sm:justify-start">

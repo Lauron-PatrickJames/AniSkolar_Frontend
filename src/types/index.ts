@@ -641,7 +641,7 @@ export interface Application {
 export type GuardianType = 'father' | 'mother' | 'other';
 
 // A partial profile update for PATCH /api/students/me (values as sent).
-export type ProfileChanges = Record<string, string | number | boolean | undefined>;
+export type ProfileChanges = Record<string, string | number | boolean | undefined | DeclaredScholarship[]>;
 export interface SaveResult { ok: boolean; error?: string }
 
 // Groups of academic details verified together (Student.verification):
@@ -729,6 +729,12 @@ export interface StudentProfile {
   guardianAddressSameAsHome?: boolean;
   guardianContactNo?: string;
 
+  // Scholarships the student says they hold (incl. from before AniSkolar
+  // and outside grants). Self-declared; declaredScholarshipsAt is when they
+  // answered, so an empty list then means "none".
+  declaredScholarships?: DeclaredScholarship[];
+  declaredScholarshipsAt?: string;
+
   // Academic details are self-reported until an office verifies them,
   // per group; a verified group can't be edited by the student.
   verification?: Partial<Record<VerificationGroup, FieldVerification>>;
@@ -742,6 +748,14 @@ export interface StudentProfile {
   // Computed by the backend on every read (utils/profileCompletion.js),
   // never stored. Missing from older backends: treat as unknown.
   completion?: ProfileCompletion;
+}
+
+// Who funds a declared scholarship: DLSU-D or its benefactors, or an
+// outside grantor (DOST, CHED, LGU, company).
+export type DeclaredFunding = 'internal' | 'external';
+export interface DeclaredScholarship {
+  name: string;
+  funding: DeclaredFunding;
 }
 
 // Profile sections that fill in over time (Profile page, or saved from an

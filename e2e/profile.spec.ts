@@ -50,7 +50,7 @@ test('a new student can choose to complete the full profile, and skip the rest a
   await page.getByRole('button', { name: 'Fill in full profile now' }).click();
 
   // The essentials are saved; the rest follows in steps.
-  await expect(page.getByText('Step 1 of 3')).toBeVisible();
+  await expect(page.getByText('Step 1 of 4')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'About you' })).toBeVisible();
   // An empty step isn't saved.
   await page.getByRole('button', { name: /^Save, next:/ }).click();
@@ -91,4 +91,29 @@ test('saving one section sends only that section, with the others still empty', 
   for (const field of ['firstName', 'dateOfBirth', 'homeAddress', 'mobileNumber', 'fatherName', 'guardianType']) {
     expect(patches[0]).not.toHaveProperty(field);
   }
+});
+
+test('the student lists the scholarships they hold, from the Profile page', async ({ page }) => {
+  const patches: Record<string, unknown>[] = [];
+  await signIn(page, { patches });
+  // The completion card opens the Profile page (with its edit dialog).
+  await page.getByRole('region', { name: /profile 45% complete/i }).getByRole('button', { name: /academic/i }).click({ timeout: 20_000 });
+  const editProfile = page.getByRole('dialog', { name: /edit profile/i });
+  await editProfile.getByRole('button', { name: 'Cancel' }).click();
+  await expect(editProfile).toBeHidden();
+
+  await page.getByRole('button', { name: 'Edit scholarships you hold' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Scholarships you hold' });
+  // Yes needs a name and who funds it.
+  await dialog.getByRole('button', { name: 'Yes' }).click();
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.getByText('Enter the scholarship’s name.')).toBeVisible();
+  expect(patches).toHaveLength(0);
+
+  await dialog.getByLabel('Scholarship', { exact: true }).fill('DOST-SEI Merit Scholarship');
+  await dialog.getByLabel('Funded by').selectOption('external');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog).toBeHidden();
+  expect(patches).toEqual([{ declaredScholarships: [{ name: 'DOST-SEI Merit Scholarship', funding: 'external' }] }]);
+  await expect(page.getByText('DOST-SEI Merit Scholarship')).toBeVisible();
 });

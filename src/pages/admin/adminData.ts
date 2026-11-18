@@ -1,5 +1,5 @@
 import { OFFICE_LABELS, OFFICE_SHORT_LABELS } from '../../data/scholarships';
-import { PolcaAdminFields } from '../../types';
+import { DeclaredScholarship, PolcaAdminFields } from '../../types';
 
 // Types and pure helpers shared by every admin page. Shapes mirror
 // models/Application.js as returned by GET /api/applications.
@@ -108,6 +108,9 @@ export interface CurrentProfile {
   yearLevel?: string;
   section?: string;
   gpa?: number;
+  // What the student says they hold (not verified).
+  declaredScholarships?: DeclaredScholarship[];
+  declaredScholarshipsAt?: string;
   updatedAt?: string;
 }
 

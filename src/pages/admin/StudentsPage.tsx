@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, MessageSquare, Trash2, UserCheck, UserRound, Users } from 'lucide-react';
+import { Award, ChevronRight, MessageSquare, Trash2, UserCheck, UserRound, Users } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatDate, titleCaseName } from './adminData';
 import {
   Alert, Avatar, Badge, Button, Card, ConfirmDialog, EmptyState, ErrorState, IconButton, KpiCard, KpiGrid, MobileList, PageHeader, Pagination,
   RowLink, SearchInput, Select, Table, TableSkeleton, Td, Th, Toast, Toolbar, Tooltip, Tr, Truncate, usePagination
 } from './AdminUI';
 import { COLLEGES, collegeName } from '../../data/programs';
+import { DeclaredScholarship } from '../../types';
 
 // Every student who finished setting up a profile, and whether they've
 // applied (AdSO only; GET /api/students). For seeing who signed up but
@@ -13,6 +14,10 @@ import { COLLEGES, collegeName } from '../../data/programs';
 // Students the office no longer needs (rejected, graduated, stopped) can be
 // deleted with their records: they go to the Trash for 30 days
 // (POST /api/students/delete; anyone with something active is skipped).
+// "Holding 2+" finds students who hold more than one scholarship by
+// AniSkolar's records (they choose which to keep); the "Declared" filter
+// finds the ones who listed scholarships themselves (Profile → Scholarships
+// you hold), e.g. outside grants or ones from before AniSkolar.
 
 interface StudentRow {
   studentNumber: string;
@@ -32,6 +37,29 @@ interface StudentRow {
   // active: an application being decided or a current scholarship;
   // ended: a scholarship that ended (graduated, stopped, declined).
   outcome: 'active' | 'ended' | 'rejected' | 'none';
+  // Scholarships held now by AniSkolar's records (utils/exclusivity.js).
+  held?: { scholarshipId: string; scholarshipName: string }[];
+  // The student's own list (not verified); declaredScholarshipsAt is when
+  // they answered.
+  declaredScholarships?: DeclaredScholarship[];
+  declaredScholarshipsAt?: string | null;
+}
+
+type Declared = '' | 'any' | 'internal' | 'external' | 'none';
+const DECLARED: { value: Declared; label: string }[] = [
+  { value: '', label: 'Any declaration' },
+  { value: 'any', label: 'Declared scholarships' },
+  { value: 'internal', label: 'Declared DLSU-D funded' },
+  { value: 'external', label: 'Declared outside grants' },
+  { value: 'none', label: 'Declared none' },
+];
+const heldCount = (s: StudentRow) => s.held?.length ?? 0;
+function matchesDeclared(s: StudentRow, d: Declared) {
+  const list = s.declaredScholarships ?? [];
+  if (d === 'any') return list.length > 0;
+  if (d === 'internal' || d === 'external') return list.some(x => x.funding === d);
+  if (d === 'none') return !!s.declaredScholarshipsAt && list.length === 0;
+  return true;
 }
 
 type Outcome = '' | StudentRow['outcome'];
@@ -43,7 +71,7 @@ const OUTCOMES: { value: Outcome; label: string }[] = [
   { value: 'active', label: 'Active' },
 ];
 
-type Show = 'not-applied' | 'applied' | 'all';
+type Show = 'not-applied' | 'applied' | 'all' | 'multiple';
 
 const fullName = (s: StudentRow) =>
   titleCaseName([s.firstName, s.middleName, s.lastName].filter(Boolean).join(' ') || s.name || s.studentNumber);
@@ -61,6 +89,7 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
   const [search, setSearch] = useState('');
   const [college, setCollege] = useState('');
   const [outcome, setOutcome] = useState<Outcome>('');
+  const [declared, setDeclared] = useState<Declared>('');
   // Students picked for deleting (not active ones).
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -89,7 +118,7 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
   const counts = useMemo(() => {
     const all = rows ?? [];
     const applied = all.filter(s => s.applications > 0).length;
-    return { all: all.length, applied, notApplied: all.length - applied };
+    return { all: all.length, applied, notApplied: all.length - applied, multiple: all.filter(s => heldCount(s) >= 2).length };
   }, [rows]);
 
   const filtered = useMemo(() => {
@@ -97,16 +126,18 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
     return (rows ?? []).filter(s => {
       if (show === 'not-applied' && s.applications > 0) return false;
       if (show === 'applied' && s.applications === 0) return false;
+      if (show === 'multiple' && heldCount(s) < 2) return false;
       if (college && s.college !== college) return false;
       if (outcome && s.outcome !== outcome) return false;
+      if (!matchesDeclared(s, declared)) return false;
       if (!q) return true;
       return [fullName(s), s.studentNumber, s.email, s.course, s.programCode, s.college]
         .some(v => (v ?? '').toLowerCase().includes(q));
     });
-  }, [rows, show, search, college, outcome]);
+  }, [rows, show, search, college, outcome, declared]);
 
-  const pager = usePagination(filtered, 20, `${show}|${search}|${college}|${outcome}`);
-  const filtersActive = !!search.trim() || !!college || !!outcome;
+  const pager = usePagination(filtered, 20, `${show}|${search}|${college}|${outcome}|${declared}`);
+  const filtersActive = !!search.trim() || !!college || !!outcome || !!declared;
 
   const canPick = (s: StudentRow) => s.outcome !== 'active';
   const togglePick = (sn: string) => setPicked(p => { const n = new Set(p); if (n.has(sn)) n.delete(sn); else n.add(sn); return n; });
@@ -158,18 +189,24 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
 
   const open = (s: StudentRow) => { if (s.applications > 0) onOpenScholar(s.studentNumber); };
   const program = (s: StudentRow) => s.course || s.programCode || '';
-  const statusOf = (s: StudentRow) => s.applications > 0
-    ? <Badge tone="success">{s.applications} application{s.applications === 1 ? '' : 's'}</Badge>
-    : <Badge tone="warning">Not applied yet</Badge>;
+  const statusOf = (s: StudentRow) => (
+    <span className="flex flex-wrap gap-1">
+      {s.applications > 0
+        ? <Badge tone="success">{s.applications} application{s.applications === 1 ? '' : 's'}</Badge>
+        : <Badge tone="warning">Not applied yet</Badge>}
+      <Holdings s={s} />
+    </span>
+  );
 
   return (
     <>
       <PageHeader title="Students" description="Everyone who has set up an AniSkolar profile, and whether they've applied." />
 
-      <KpiGrid columns={3}>
+      <KpiGrid columns={4}>
         <KpiCard label="Signed up" value={counts.all} icon={Users} loading={!rows && loading} active={show === 'all'} onClick={() => setShow('all')} />
         <KpiCard label="Applied" value={counts.applied} icon={UserCheck} tone="success" loading={!rows && loading} active={show === 'applied'} onClick={() => setShow('applied')} />
         <KpiCard label="Not applied yet" value={counts.notApplied} icon={UserRound} tone={counts.notApplied ? 'warning' : 'neutral'} loading={!rows && loading} active={show === 'not-applied'} onClick={() => setShow('not-applied')} />
+        <KpiCard label="Holding 2+ scholarships" value={counts.multiple} icon={Award} tone={counts.multiple ? 'danger' : 'neutral'} hint="By AniSkolar's records" loading={!rows && loading} active={show === 'multiple'} onClick={() => setShow('multiple')} />
       </KpiGrid>
 
       <Card
@@ -184,6 +221,9 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
             <Select value={outcome} onChange={v => setOutcome(v as Outcome)} label="Status" className="w-full sm:w-48">
               {OUTCOMES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </Select>
+            <Select value={declared} onChange={v => setDeclared(v as Declared)} label="Scholarships the student declared" className="w-full sm:w-56">
+              {DECLARED.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </Select>
           </Toolbar>
         }
       >
@@ -193,8 +233,8 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
           <ErrorState title="Couldn't load students" message={error} onRetry={load} retrying={loading} />
         ) : filtered.length === 0 ? (
           filtersActive
-            ? <EmptyState icon={Users} title="No students match" action={<Button onClick={() => { setSearch(''); setCollege(''); }}>Clear filters</Button>} />
-            : <EmptyState icon={Users} title={show === 'not-applied' ? 'Everyone who signed up has applied' : show === 'applied' ? 'No one has applied yet' : 'No students yet'} />
+            ? <EmptyState icon={Users} title="No students match" action={<Button onClick={() => { setSearch(''); setCollege(''); setOutcome(''); setDeclared(''); }}>Clear filters</Button>} />
+            : <EmptyState icon={Users} title={show === 'not-applied' ? 'Everyone who signed up has applied' : show === 'applied' ? 'No one has applied yet' : show === 'multiple' ? 'No one holds more than one scholarship' : 'No students yet'} />
         ) : (
           <>
             {skipped.length > 0 && (
@@ -313,6 +353,30 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
         </ConfirmDialog>
       )}
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
+    </>
+  );
+}
+
+// Badges for what a student holds: "Holds 2" (AniSkolar's records: they
+// choose which to keep) and "Declared …" (their own list, not verified).
+// Hover or focus for the names.
+function Holdings({ s }: { s: StudentRow }) {
+  const held = s.held ?? [];
+  const declared = s.declaredScholarships ?? [];
+  return (
+    <>
+      {held.length >= 2 && (
+        <Tooltip content={<>Holds by AniSkolar's records: {held.map(h => h.scholarshipName).join(', ')}. The student chooses which to keep.</>}>
+          <Badge tone="danger">Holds {held.length}</Badge>
+        </Tooltip>
+      )}
+      {declared.length > 0 && (
+        <Tooltip content={<>Self-declared: {declared.map(d => `${d.name} (${d.funding === 'internal' ? 'DLSU-D' : 'outside'})`).join(', ')}</>}>
+          <Badge tone={declared.some(d => d.funding === 'internal') ? 'warning' : 'neutral'}>
+            Declared {declared.length === 1 ? (declared[0].funding === 'internal' ? 'DLSU-D' : 'outside') : declared.length}
+          </Badge>
+        </Tooltip>
+      )}
     </>
   );
 }

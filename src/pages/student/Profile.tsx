@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { BadgeCheck, GraduationCap, Info, MapPin, Pencil, User, Users } from 'lucide-react';
+import { Award, BadgeCheck, GraduationCap, Info, MapPin, Pencil, User, Users } from 'lucide-react';
 import { ProfileChanges, SaveResult, StudentProfile, VerificationGroup } from '../../types';
 import { ResultDialog, Badge, Button, Toast } from '../admin/AdminUI';
 import EditProfileDialog from '../../components/profile/EditProfileDialog';
 import { DraftField, DraftSection } from '../../components/profile/profileForm';
+import { DeclaredScholarshipsDialog, DeclaredScholarshipsList } from '../../components/profile/DeclaredScholarships';
 import { displayName, nameInitials, titleCaseName } from '../../utils/names';
 import {
   addressLines, formatGpa, formatLongDate, formatPhone, guardianTypeOf, openCorrectionRequest, programDetails,
@@ -12,7 +13,8 @@ import {
 
 // The student's profile: a header with who they are, then Academic,
 // Personal, Contact and Parents & guardian as label / value lists. Every
-// section opens the edit dialog on its own tab.
+// section opens the edit dialog on its own tab. Scholarships you hold (the
+// student's own list) has its own small dialog.
 
 interface ProfileProps {
   student: StudentProfile;
@@ -29,6 +31,7 @@ const GROUPS: VerificationGroup[] = ['program', 'enrollment', 'gpa'];
 export default function Profile({ student, onUpdateProfile, onStudentUpdated, initialEdit, id }: ProfileProps) {
   const [editing, setEditing] = useState<{ section: DraftSection; field?: DraftField } | null>(initialEdit ? { section: initialEdit } : null);
   const [toast, setToast] = useState<string | null>(null);
+  const [editingHeld, setEditingHeld] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
   const name = displayName(student);
@@ -108,7 +111,25 @@ export default function Profile({ student, onUpdateProfile, onStudentUpdated, in
           <Row label="Mother" value={person(student.motherName, student.motherContactNo)} onAdd={() => edit('family', 'motherName')} />
           <Row label="Guardian" value={<Guardian student={student} />} empty={!guardianTypeOf(student)} onAdd={() => edit('family', 'guardianType')} />
         </Section>
+
+        <Section title="Scholarships you hold" icon={Award} onEdit={() => setEditingHeld(true)}>
+          <Row
+            label="Currently holding"
+            value={student.declaredScholarships?.length
+              ? <DeclaredScholarshipsList list={student.declaredScholarships} />
+              : student.declaredScholarshipsAt ? 'None' : null}
+            onAdd={() => setEditingHeld(true)}
+          />
+        </Section>
       </div>
+
+      {editingHeld && (
+        <DeclaredScholarshipsDialog
+          student={student}
+          onSave={async list => { const r = await onUpdateProfile({ declaredScholarships: list }); return r.ok ? null : (r.error ?? 'Couldn’t save.'); }}
+          onClose={saved => { setEditingHeld(false); if (saved) setToast('Saved.'); }}
+        />
+      )}
 
       {editing && (
         <EditProfileDialog

@@ -26,6 +26,7 @@ import ApprovalChain, { AdsoRole, canAct, stageOf } from './ApprovalChain';
 import { useUser } from '@clerk/react';
 import { OfficeAnswers, answerText, askedQuestions, officeFormFor } from '../../data/officeForms';
 import { buildApplicationHistory, latestDecision, partnerOfficeDecision, relativeTime } from './history';
+import { DeclaredScholarshipsList } from '../../components/profile/DeclaredScholarships';
 
 type ReviewTab = 'form' | 'documents' | 'activity';
 type Decision = Exclude<AppStatus, 'Under Evaluation'>;
@@ -188,6 +189,15 @@ export default function ApplicationReview({
             </div>
           ))}
         </dl>
+        {/* The student's own word (Profile → Scholarships you hold), not AniSkolar's records. */}
+        {!!now?.declaredScholarshipsAt && (
+          <div className="mt-3 text-sm">
+            <p className="text-xs text-ink-subtle">Says they currently hold <span className="text-ink-subtle">(self-declared)</span></p>
+            {now.declaredScholarships?.length
+              ? <DeclaredScholarshipsList list={now.declaredScholarships} className="mt-0.5 text-ink" />
+              : <p className="mt-0.5 text-ink">None</p>}
+          </div>
+        )}
       </section>
 
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-3">

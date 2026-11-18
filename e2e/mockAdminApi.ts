@@ -39,6 +39,22 @@ export const PENDING_ANNOUNCEMENT = {
   emailEnabled: true, emailAudience: 'scholars', emailStatus: 'not_sent', emailTotal: 0, emailSent: 0,
 };
 
+// Fictional students for the Students page: one holding two scholarships
+// by AniSkolar's records, one who declared an outside grant.
+const student = (studentNumber: string, firstName: string, extra: Record<string, unknown> = {}) => ({
+  studentNumber, firstName, middleName: null, lastName: 'Dela Cruz', name: null, email: `${firstName.toLowerCase()}@dlsud.edu.ph`, avatarUrl: null,
+  programCode: 'BSIT', course: null, college: 'CICS', yearLevel: '2nd Year', joinedAt: '2026-08-01T00:00:00Z',
+  applications: 0, lastAppliedAt: null, outcome: 'none', held: [], declaredScholarships: [], declaredScholarshipsAt: null, ...extra,
+});
+const STUDENTS = [
+  student('202399001', 'Juan', {
+    applications: 2, outcome: 'active',
+    held: [{ scholarshipId: 's1', scholarshipName: 'Student Financial Aid Grant (SFAG)' }, { scholarshipId: 's3', scholarshipName: 'POLCA Scholarship' }],
+  }),
+  student('202399002', 'Maria', { declaredScholarships: [{ name: 'DOST-SEI Merit Scholarship', funding: 'external' }], declaredScholarshipsAt: '2026-08-02T00:00:00Z' }),
+  student('202399003', 'Jose'),
+];
+
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
@@ -62,7 +78,7 @@ export async function mockAdminApi(page: Page, { decisions = [] as string[] } = 
       case '/api/messages/admin/unread': return json(route, { unread: 0 });
       case '/api/messages/admin/threads': return json(route, { threads: [] });
       case '/api/reply-templates': return json(route, { templates: [] });
-      case '/api/students': return json(route, { students: [], total: 0 });
+      case '/api/students': return json(route, { students: STUDENTS, total: STUDENTS.length });
       case '/api/renewals/admin/periods': return json(route, { periods: [] });
       case '/api/fse': return json(route, { reports: [] });
       case '/api/automation':

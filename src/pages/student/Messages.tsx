@@ -222,7 +222,9 @@ export default function Messages({ applications: _applications }: { applications
           <ul className="min-h-0 flex-1 overflow-y-auto p-2" aria-label="Your conversations">
             {listed.map(o => {
               const active = o.code === office;
-              const preview = o.last ? (o.last.unsentAt ? 'Message deleted' : o.last.body || (o.last.attachments.length ? '📎 Attachment' : '')) : 'Start the conversation';
+              // A deleted message is gone: it's never the preview.
+              const last = o.last && !o.last.unsentAt ? o.last : null;
+              const preview = last ? last.body || (last.attachments.length ? '📎 Attachment' : '') : 'Start the conversation';
               return (
                 <li key={o.code}>
                   <button
@@ -238,11 +240,11 @@ export default function Messages({ applications: _applications }: { applications
                     <span className="min-w-0 flex-1">
                       <span className="flex items-baseline gap-2">
                         <span className={`truncate text-sm ${o.unread ? 'font-bold text-slate-900' : 'font-semibold text-slate-800'}`}>{o.short}</span>
-                        {o.last && <span className="ml-auto shrink-0 text-[11px] text-slate-400 tabular-nums">{timeLabel(o.last.createdAt)}</span>}
+                        {last && <span className="ml-auto shrink-0 text-[11px] text-slate-400 tabular-nums">{timeLabel(last.createdAt)}</span>}
                       </span>
                       <span className="mt-0.5 flex items-center gap-2">
-                        <span className={`truncate text-xs ${o.unread ? 'font-semibold text-slate-700' : o.last ? 'text-slate-500' : 'italic text-slate-400'}`}>
-                          {o.last?.from === 'student' ? 'You: ' : ''}{preview}
+                        <span className={`truncate text-xs ${o.unread ? 'font-semibold text-slate-700' : last ? 'text-slate-500' : 'italic text-slate-400'}`}>
+                          {last?.from === 'student' ? 'You: ' : ''}{preview}
                         </span>
                         {o.unread > 0 && (
                           <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand-green px-1.5 text-[11px] font-bold text-white tabular-nums" aria-label={`${o.unread} unread`}>

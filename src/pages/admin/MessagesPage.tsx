@@ -202,7 +202,7 @@ export default function MessagesPage({ getToken, isAdso = true, selectedStudent,
             const key = keyOf(t);
             const active = key === selectedStudent;
             const unread = isUnread(t);
-            const preview = t.last.unsentAt ? 'Message deleted' : t.last.body || (t.last.attachments.length ? `📎 ${t.last.attachments.length} attachment${t.last.attachments.length === 1 ? '' : 's'}` : '');
+            const preview = t.last.unsentAt ? '' : t.last.body || (t.last.attachments.length ? `📎 ${t.last.attachments.length} attachment${t.last.attachments.length === 1 ? '' : 's'}` : '');
             return (
               <li key={key} className="group relative">
                 <button

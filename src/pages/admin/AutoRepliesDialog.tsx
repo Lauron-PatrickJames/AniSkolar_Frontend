@@ -17,6 +17,11 @@ interface Settings {
   faqs: Faq[];
 }
 const MAX_FAQS = 10;
+// Ready-to-use messages, filled in so the office only has to tick the box
+// (and can edit them).
+const DEFAULT_WELCOME = 'Hi! Thank you for messaging us. We’ve received your message and will reply within 1–2 working days. You can also tap one of the quick questions below for an instant answer.';
+const DEFAULT_AWAY = 'Thank you for your message! Our office is closed right now. We’ll reply on the next working day (Monday to Friday, 8:00 AM to 5:00 PM).';
+const DEFAULT_AWAY_NOW = 'Thank you for your message! Our office is away right now, so replies may take a little longer. We’ll get back to you as soon as we can.';
 
 export default function AutoRepliesDialog({ getToken, onClose, onSaved }: {
   getToken: () => Promise<string | null>;
@@ -34,7 +39,14 @@ export default function AutoRepliesDialog({ getToken, onClose, onSaved }: {
         const res = await fetch(`${API_BASE_URL}/api/messages/admin/auto-replies`, { headers: await authHeaders(getToken) });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body.error || 'Failed to load the automatic replies.');
-        if (live) setSettings(body.settings);
+        if (live) {
+          const loaded: Settings = body.settings;
+          setSettings({
+            ...loaded,
+            welcome: { ...loaded.welcome, text: loaded.welcome.text || DEFAULT_WELCOME },
+            away: { ...loaded.away, text: loaded.away.text || (loaded.away.mode === 'always' ? DEFAULT_AWAY_NOW : DEFAULT_AWAY) },
+          });
+        }
       } catch (err) {
         if (live) setError(err instanceof Error ? err.message : 'Failed to load the automatic replies.');
       }
@@ -102,7 +114,8 @@ export default function AutoRepliesDialog({ getToken, onClose, onSaved }: {
                   label="When"
                   options={['outsideHours', 'always']}
                   value={settings.away.mode}
-                  onChange={v => v && patch({ away: { ...settings.away, mode: v } })}
+                  // Switching swaps in that mode's message, unless it was edited.
+                  onChange={v => v && patch({ away: { ...settings.away, mode: v, text: [DEFAULT_AWAY, DEFAULT_AWAY_NOW, ''].includes(settings.away.text.trim()) ? (v === 'always' ? DEFAULT_AWAY_NOW : DEFAULT_AWAY) : settings.away.text } })}
                   renderLabel={o => (o === 'outsideHours' ? 'Outside office hours' : 'Away now')}
                 />
                 <p className="-mt-1 text-xs text-ink-subtle">{settings.away.mode === 'outsideHours' ? 'Office hours: Monday to Friday, 8:00 AM to 5:00 PM.' : 'Every new message gets it until you switch back.'}</p>

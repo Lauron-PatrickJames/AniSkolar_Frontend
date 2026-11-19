@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Sparkles, Trash2 } from 'lucide-react';
 import { Alert, Button, Checkbox, Field, Modal, SegmentedControl, TableSkeleton, TextInput, Textarea } from './AdminUI';
 import { API_BASE_URL, authHeaders } from './adminData';
 
@@ -19,6 +19,20 @@ interface Settings {
 const MAX_FAQS = 10;
 // Ready-to-use messages, filled in so the office only has to tick the box
 // (and can edit them).
+// Common questions with answers from how AniSkolar works, to add in one
+// tap and edit (panel, Nov 2026). Students get the answer when they tap
+// one, or when they type nearly the same question.
+const SUGGESTED_FAQS: Faq[] = [
+  { question: 'How do I apply for a scholarship?', answer: 'Go to Explore Grants, open the scholarship and tap Apply. Fill out the form and upload the documents it asks for, then submit. You can follow your application in My Applications.' },
+  { question: 'How do I check the status of my application?', answer: 'Open My Applications. Each application shows its status: Under evaluation, Needs revision, Approved or Not approved. You also get a notification whenever it changes.' },
+  { question: 'My application needs revision. What do I do?', answer: 'Open My Applications and read the office’s message on that application. Tap “Revise and resubmit”, fix what was asked, and submit it again.' },
+  { question: 'Can I have two scholarships at the same time?', answer: 'Only one internally funded scholarship can be credited at a time. If two of your scholarships are approved, choose which one to keep in My Scholarship (usually the bigger grant).' },
+  { question: 'How many duty hours do SFAG scholars need?', answer: 'It depends on your grant percentage and year level. Your required hours and deadline are on your Duty Hours page. Log each duty on the day you render it; your office head confirms it within 48 hours.' },
+  { question: 'How do I renew my scholarship?', answer: 'When the renewal period opens, you’ll get a notification. Go to Renewal, upload your grades and the other requirements, and submit before the deadline.' },
+  { question: 'How do I join the ROTC, varsity, Heraldo or Vicissitude scholarship?', answer: 'Those scholarships are for members only, so there’s no application. Their offices add their members as scholars. Join the group first, then ask that office about the scholarship.' },
+  { question: 'What are your office hours?', answer: 'We’re open Monday to Friday, 8:00 AM to 5:00 PM. Messages sent outside these hours are answered on the next working day.' },
+];
+
 const DEFAULT_WELCOME = 'Hi! Thank you for messaging us. We’ve received your message and will reply within 1–2 working days. You can also tap one of the quick questions below for an instant answer.';
 const DEFAULT_AWAY = 'Thank you for your message! Our office is closed right now. We’ll reply on the next working day (Monday to Friday, 8:00 AM to 5:00 PM).';
 const DEFAULT_AWAY_NOW = 'Thank you for your message! Our office is away right now, so replies may take a little longer. We’ll get back to you as soon as we can.';
@@ -127,7 +141,7 @@ export default function AutoRepliesDialog({ getToken, onClose, onSaved }: {
           <section className="space-y-3 border-t border-line pt-5">
             <div>
               <p className="text-sm font-medium text-ink">Quick questions</p>
-              <p className="text-xs text-ink-muted">Students tap one above the message box and get your answer at once. Up to {MAX_FAQS}.</p>
+              <p className="text-xs text-ink-muted">Students tap one above the message box, or type nearly the same question, and get your answer at once. Up to {MAX_FAQS}.</p>
             </div>
             {settings.faqs.map((f, i) => (
               <div key={f._id ?? `new-${i}`} className="space-y-2 rounded-control p-3 ring-1 ring-line">
@@ -142,6 +156,19 @@ export default function AutoRepliesDialog({ getToken, onClose, onSaved }: {
                 </Field>
               </div>
             ))}
+            {settings.faqs.length < MAX_FAQS && SUGGESTED_FAQS.some(f => !settings.faqs.some(x => x.question.trim().toLowerCase() === f.question.toLowerCase())) && (
+              <Button
+                size="sm"
+                icon={Sparkles}
+                onClick={() => {
+                  const have = new Set(settings.faqs.map(f => f.question.trim().toLowerCase()));
+                  const add = SUGGESTED_FAQS.filter(f => !have.has(f.question.toLowerCase())).slice(0, MAX_FAQS - settings.faqs.length);
+                  patch({ faqs: [...settings.faqs.filter(f => f.question.trim() || f.answer.trim()), ...add] });
+                }}
+              >
+                Add suggested questions
+              </Button>
+            )}
             {settings.faqs.length < MAX_FAQS && (
               <button
                 type="button"

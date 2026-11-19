@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Building2, CalendarCheck, CalendarClock, Check, CheckCircle2, Clock, Plus, Printer, Search, Download, Hourglass, Inbox, Pencil, Shuffle, SlidersHorizontal, Trash2, Users } from 'lucide-react';
+import { AlertTriangle, Building2, CalendarCheck, CalendarClock, Check, CheckCircle2, Clock, Plus, Printer, Search, Download, Hourglass, Inbox, Palmtree, Pencil, Shuffle, SlidersHorizontal, Trash2, Users } from 'lucide-react';
 import {
   ClaimStatus, CreditedEvent, DutyLog, DutySummary, DutyTerm, EVENT_ORGANIZERS, EventOrganizer, GRANT_PERCENTAGES, YEAR_GROUPS, YearGroup, entryHours, format12h, formatDutyDate, formatHours, sortEntries, termLabel,
   todayInManila, weekday, weeklyTotals
@@ -58,6 +58,8 @@ function rowState(row: ScholarRow, today: string): State {
 const termKey = (t: TermKey) => `${t.academicYear}|${t.term}`;
 
 export default function DutyHoursPage({ getToken }: { getToken: () => Promise<string | null> }) {
+  // Offices whose head is on leave (normalized name → return date).
+  const [headsOnLeave, setHeadsOnLeave] = useState<Record<string, { returnsOn?: string | null }>>({});
   const [term, setTerm] = useState<TermKey | null>(null);
   const [current, setCurrent] = useState<TermKey | null>(null);
   const [rows, setRows] = useState<ScholarRow[]>([]);
@@ -90,6 +92,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
       if (!res.ok) throw new Error(body.error || 'Failed to load duty hours.');
       setRows(body.scholars ?? []);
       setOffices(body.offices ?? []);
+      setHeadsOnLeave(body.headsOnLeave ?? {});
       setDeadline(body.deadline ?? null);
       setTerm(body.term);
       setCurrent(body.current);
@@ -355,7 +358,10 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
                             </div>
                           </div>
                         </Td>
-                        <Td><OfficeButton row={row} onClick={() => setAssigning([row])} /></Td>
+                        <Td>
+                          <OfficeButton row={row} onClick={() => setAssigning([row])} />
+                          <HeadLeaveTag leave={row.officeAssigned ? headsOnLeave[normOffice(row.officeAssigned)] : undefined} />
+                        </Td>
                         <Td numeric>
                           {s ? `${formatHours(s.completed)}${s.required !== null ? ` / ${formatHours(s.required)}` : ''}` : '—'}
                           {s?.required ? (
@@ -382,7 +388,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
                       <Avatar name={row.name || row.studentNumber} avatarUrl={row.avatarUrl} size="sm" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium text-ink">{row.name ? titleCaseName(row.name) : 'Unknown student'}</span>
-                        <span className="block truncate text-xs text-ink-subtle">{formatHours(row.summary?.completed ?? 0)}{row.summary?.required != null ? ` / ${formatHours(row.summary.required)}` : ''} hours · {row.officeAssigned || 'No office yet'}</span>
+                        <span className="block truncate text-xs text-ink-subtle">{formatHours(row.summary?.completed ?? 0)}{row.summary?.required != null ? ` / ${formatHours(row.summary.required)}` : ''} hours · {row.officeAssigned || 'No office yet'}{row.officeAssigned && headsOnLeave[normOffice(row.officeAssigned)] ? ' · head on leave' : ''}</span>
                       </span>
                       <Badge tone={STATE_TONE[state]} dot>{state}</Badge>
                     </button>
@@ -1152,6 +1158,20 @@ function OfficesDialog({ getToken, offices, onClose, onSaved }: {
         </div>
       )}
     </Modal>
+  );
+}
+
+const normOffice = (name: string) => name.replace(/\s+/g, ' ').trim().toLowerCase();
+
+// "Head on leave" under an office whose head marked it in the office portal:
+// its duties wait instead of being removed after 48 hours.
+function HeadLeaveTag({ leave }: { leave?: { returnsOn?: string | null } }) {
+  if (!leave) return null;
+  const until = leave.returnsOn ? new Date(`${leave.returnsOn}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : null;
+  return (
+    <span className="mt-1 inline-flex items-center gap-1 rounded-badge bg-warning-bg px-1.5 py-0.5 text-xs font-medium text-warning-fg" title="The office head is on leave: their scholars' duties wait for them instead of being removed after 48 hours.">
+      <Palmtree className="size-3" aria-hidden /> Head on leave{until ? ` until ${until}` : ''}
+    </span>
   );
 }
 

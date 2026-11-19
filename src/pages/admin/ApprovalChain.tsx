@@ -35,18 +35,18 @@ const ACTION_TEXT: Record<string, string> = {
   revision: 'Sent back to the student for revision',
 };
 
-type Step = { action: string; label: string; icon: React.ElementType; variant: 'primary' | 'secondary' | 'danger-secondary' | 'ghost'; needsNote?: string; done: string; confirm: string; next: string };
+type Step = { action: string; label: string; icon: React.ElementType; variant: 'primary' | 'secondary' | 'danger-secondary' | 'ghost'; needsNote?: string; done: string; confirm: string };
 const STEP_ACTIONS: Record<ChainStage, Step[]> = {
   associate: [
-    { action: 'endorse', label: 'Endorse to the Head', icon: Send, variant: 'primary', done: 'Endorsed to the Head.', confirm: 'Endorse {name}’s application to the Head?', next: 'It goes to the Head of the Recruitment and Scholarship Unit, who recommends approval or rejection. You can’t change it unless the Head returns it.' },
+    { action: 'endorse', label: 'Endorse to the Head', icon: Send, variant: 'primary', done: 'Endorsed to the Head.', confirm: 'Endorse {name}’s application to the Head?' },
   ],
   head: [
-    { action: 'recommendApproval', label: 'Recommend approval', icon: ThumbsUp, variant: 'primary', done: 'Recommended approval to the Director.', confirm: 'Recommend approving {name}’s application?', next: 'It goes to the Director with your recommendation. The Director makes the final decision.' },
-    { action: 'recommendRejection', label: 'Recommend rejection', icon: ThumbsDown, variant: 'danger-secondary', needsNote: 'Say why you recommend rejecting it.', done: 'Recommended rejection to the Director.', confirm: 'Recommend rejecting {name}’s application?', next: 'It goes to the Director with your recommendation and note. The Director makes the final decision.' },
-    { action: 'returnToAssociate', label: 'Return to the Associate', icon: CornerUpLeft, variant: 'ghost', needsNote: 'Say what the Associate should check.', done: 'Returned to the Associate.', confirm: 'Return {name}’s application to the Associate?', next: 'The Associate sees your note, checks it again and endorses it back to you.' },
+    { action: 'recommendApproval', label: 'Recommend approval', icon: ThumbsUp, variant: 'primary', done: 'Recommended approval to the Director.', confirm: 'Recommend approving {name}’s application?' },
+    { action: 'recommendRejection', label: 'Recommend rejection', icon: ThumbsDown, variant: 'danger-secondary', needsNote: 'Say why you recommend rejecting it.', done: 'Recommended rejection to the Director.', confirm: 'Recommend rejecting {name}’s application?' },
+    { action: 'returnToAssociate', label: 'Return to the Associate', icon: CornerUpLeft, variant: 'ghost', needsNote: 'Say what the Associate should check.', done: 'Returned to the Associate.', confirm: 'Return {name}’s application to the Associate?' },
   ],
   director: [
-    { action: 'returnToHead', label: 'Return to the Head', icon: CornerUpLeft, variant: 'ghost', needsNote: 'Say what the Head should look at again.', done: 'Returned to the Head.', confirm: 'Return {name}’s application to the Head?', next: 'The Head sees your note and recommends again.' },
+    { action: 'returnToHead', label: 'Return to the Head', icon: CornerUpLeft, variant: 'ghost', needsNote: 'Say what the Head should look at again.', done: 'Returned to the Head.', confirm: 'Return {name}’s application to the Head?' },
   ],
 };
 
@@ -153,8 +153,7 @@ export default function ApprovalChain({ app, role, getToken, onChanged }: {
           onConfirm={() => take(confirming)}
           onCancel={() => { if (!busy) { setConfirming(null); setError(''); } }}
         >
-          <p className="text-sm text-ink-muted">{confirming.next}</p>
-          {note.trim() && <Quote className="mt-3">{note.trim()}</Quote>}
+          {note.trim() && <Quote>{note.trim()}</Quote>}
         </ConfirmDialog>
       )}
 

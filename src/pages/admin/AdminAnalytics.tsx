@@ -76,13 +76,15 @@ function bucketLabel(first: Date, last: Date): string {
 
 // --- Ranges ----------------------------------------------------------------------
 
-type RangeKey = '7d' | '30d' | 'semester' | 'schoolYear' | 'custom';
+type RangeKey = '7d' | '30d' | 'semester' | 'lastSemester' | 'schoolYear' | 'lastSchoolYear' | 'custom';
 
 const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
   { key: '7d', label: 'Last 7 days' },
   { key: '30d', label: 'Last 30 days' },
   { key: 'semester', label: 'This semester' },
+  { key: 'lastSemester', label: 'Last semester' },
   { key: 'schoolYear', label: 'This school year' },
+  { key: 'lastSchoolYear', label: 'Last school year' },
   { key: 'custom', label: 'Custom' }
 ];
 
@@ -100,6 +102,39 @@ const TERMS: { startMonth: number; endMonth: number }[] = [
 // A range is [start, endExclusive) in local time.
 interface DateRange { start: Date; endExclusive: Date }
 
+// The regular semester before today's (1st Aug–Dec, 2nd Jan–May; midyear
+// is skipped): its range and name.
+function lastSemester(today: Date): { range: DateRange; name: string } {
+  const m = today.getMonth();
+  const y = today.getFullYear();
+  // In Jan–May the last one is the 1st semester (Aug–Dec of last year);
+  // otherwise it's the 2nd semester (Jan–May of this year).
+  if (m <= 4) return { range: { start: new Date(y - 1, 7, 1), endExclusive: new Date(y, 0, 1) }, name: `1st Semester, A.Y. ${y - 1}–${y}` };
+  return { range: { start: new Date(y, 0, 1), endExclusive: new Date(y, 5, 1) }, name: `2nd Semester, A.Y. ${y - 1}–${y}` };
+}
+
+// "1st Semester, A.Y. 2026–2027" for the semester today is in.
+function semesterName(today: Date): string {
+  const m = today.getMonth();
+  const y = today.getFullYear();
+  if (m >= 7) return `1st Semester, A.Y. ${y}–${y + 1}`;
+  if (m <= 4) return `2nd Semester, A.Y. ${y - 1}–${y}`;
+  return `Midyear, A.Y. ${y - 1}–${y}`;
+}
+
+const schoolYearStart = (today: Date) => (today.getMonth() >= SCHOOL_YEAR_START_MONTH ? today.getFullYear() : today.getFullYear() - 1);
+
+// The period's name for the header, for the semester and school-year presets.
+function periodName(key: RangeKey, now = new Date()): string | null {
+  const today = startOfDay(now);
+  const y = schoolYearStart(today);
+  if (key === 'semester') return semesterName(today);
+  if (key === 'lastSemester') return lastSemester(today).name;
+  if (key === 'schoolYear') return `A.Y. ${y}–${y + 1}`;
+  if (key === 'lastSchoolYear') return `A.Y. ${y - 1}–${y}`;
+  return null;
+}
+
 function resolveRange(key: RangeKey, custom: { from: string; to: string }, now = new Date()): DateRange {
   const today = startOfDay(now);
   const tomorrow = addDays(today, 1);
@@ -113,9 +148,13 @@ function resolveRange(key: RangeKey, custom: { from: string; to: string }, now =
       const term = TERMS.find(t => month >= t.startMonth && month <= t.endMonth) ?? TERMS[0];
       return { start: new Date(today.getFullYear(), term.startMonth, 1), endExclusive: tomorrow };
     }
-    case 'schoolYear': {
-      const year = today.getMonth() >= SCHOOL_YEAR_START_MONTH ? today.getFullYear() : today.getFullYear() - 1;
-      return { start: new Date(year, SCHOOL_YEAR_START_MONTH, 1), endExclusive: tomorrow };
+    case 'lastSemester':
+      return lastSemester(today).range;
+    case 'schoolYear':
+      return { start: new Date(schoolYearStart(today), SCHOOL_YEAR_START_MONTH, 1), endExclusive: tomorrow };
+    case 'lastSchoolYear': {
+      const year = schoolYearStart(today) - 1;
+      return { start: new Date(year, SCHOOL_YEAR_START_MONTH, 1), endExclusive: new Date(year + 1, SCHOOL_YEAR_START_MONTH, 1) };
     }
     case 'custom': {
       const from = parseDayKey(custom.from) ?? addDays(today, -29);
@@ -126,15 +165,26 @@ function resolveRange(key: RangeKey, custom: { from: string; to: string }, now =
   }
 }
 
-// The same number of days just before `range`, for "vs previous" changes.
-function previousRange(range: DateRange): DateRange {
+// What the cards compare with. Semesters and school years follow a yearly
+// cycle (the SFAG opens in June, renewals each semester), so they're
+// compared with the same period a year earlier; other ranges with the same
+// number of days just before.
+const addYears = (d: Date, years: number) => new Date(d.getFullYear() + years, d.getMonth(), d.getDate());
+const YEARLY_LABELS: Partial<Record<RangeKey, string>> = {
+  semester: 'same point last year',
+  lastSemester: 'same semester last year',
+  schoolYear: 'same point last school year',
+  lastSchoolYear: 'the school year before',
+};
+function previousRange(range: DateRange, key: RangeKey): DateRange & { label: string } {
+  const yearly = YEARLY_LABELS[key];
+  if (yearly) return { start: addYears(range.start, -1), endExclusive: addYears(range.endExclusive, -1), label: yearly };
   const days = daysBetween(range.start, range.endExclusive);
-  return { start: addDays(range.start, -days), endExclusive: range.start };
+  return { start: addDays(range.start, -days), endExclusive: range.start, label: `previous ${days} ${days === 1 ? 'day' : 'days'}` };
 }
 
 // "+3 vs previous 30 days", "no change vs …", or null when there's nothing to compare.
-function deltaText(now: number, before: number, days: number, unit = ''): React.ReactNode {
-  const span = `previous ${days} ${days === 1 ? 'day' : 'days'}`;
+function deltaText(now: number, before: number, span: string, unit = ''): React.ReactNode {
   if (now === 0 && before === 0) return null;
   const diff = Math.round((now - before) * 10) / 10;
   if (diff === 0) return <span>No change vs {span}</span>;
@@ -169,8 +219,8 @@ function inRange(iso: string, range: DateRange): boolean {
 }
 
 // --- Submissions series ------------------------------------------------------------
-// Ranges over 14 days are bucketed by week (Monday start), shorter ones by
-// day. Every bucket in the range is created up front so empty weeks/days
+// Ranges over 120 days (a school year) are bucketed by month, over 14 days
+// by week (Monday start), shorter ones by day. Every bucket in the range is created up front so empty weeks/days
 // show as zero, and edge weeks are clipped to the range (their label says so).
 
 interface Bucket { key: string; label: string; count: number; approved: number; rejected: number }
@@ -178,16 +228,21 @@ interface Bucket { key: string; label: string; count: number; approved: number; 
 // A dated event for the chart; `kind` splits decisions into approved / rejected.
 interface ChartEvent { at: string; kind?: 'approved' | 'rejected' }
 
-function buildSeries(events: ChartEvent[], range: DateRange): { buckets: Bucket[]; unit: 'day' | 'week' } {
-  const unit = daysBetween(range.start, range.endExclusive) > 14 ? 'week' : 'day';
+const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1);
+const fmtMonth = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+
+function buildSeries(events: ChartEvent[], range: DateRange): { buckets: Bucket[]; unit: 'day' | 'week' | 'month' } {
+  const days = daysBetween(range.start, range.endExclusive);
+  const unit = days > 120 ? 'month' : days > 14 ? 'week' : 'day';
+  const startOf = (d: Date) => (unit === 'month' ? startOfMonth(d) : unit === 'week' ? startOfWeek(d) : startOfDay(d));
   const buckets: Bucket[] = [];
   const byKey = new Map<string, Bucket>();
-  let cursor = unit === 'week' ? startOfWeek(range.start) : range.start;
+  let cursor = startOf(range.start);
   while (cursor < range.endExclusive) {
-    const next = addDays(cursor, unit === 'week' ? 7 : 1);
+    const next = unit === 'month' ? new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1) : addDays(cursor, unit === 'week' ? 7 : 1);
     const first = cursor < range.start ? range.start : cursor;
     const last = addDays(next > range.endExclusive ? range.endExclusive : next, -1);
-    const bucket = { key: dayKey(cursor), label: bucketLabel(first, last), count: 0, approved: 0, rejected: 0 };
+    const bucket = { key: dayKey(cursor), label: unit === 'month' ? fmtMonth(cursor) : bucketLabel(first, last), count: 0, approved: 0, rejected: 0 };
     buckets.push(bucket);
     byKey.set(bucket.key, bucket);
     cursor = next;
@@ -195,7 +250,7 @@ function buildSeries(events: ChartEvent[], range: DateRange): { buckets: Bucket[
   events.forEach(e => {
     const at = new Date(e.at);
     if (Number.isNaN(at.getTime()) || !inRange(e.at, range)) return;
-    const bucket = byKey.get(dayKey(unit === 'week' ? startOfWeek(at) : startOfDay(at)));
+    const bucket = byKey.get(dayKey(startOf(at)));
     if (!bucket) return;
     bucket.count += 1;
     if (e.kind) bucket[e.kind] += 1;
@@ -467,12 +522,12 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
 
   // The same length of time just before, for the changes on the cards.
   const prev = useMemo(() => {
-    const r = previousRange(range);
+    const r = previousRange(range, rangeKey);
     const apps = applications.filter(a => !a.awardedDirectly && inRange(a.createdAt, r));
     const c = countStatuses(apps);
     const dec = c.Approved + c.Rejected;
-    return { submissions: apps.length, decided: dec, rate: dec ? Math.round((c.Approved / dec) * 100) : null, days: daysBetween(r.start, r.endExclusive) };
-  }, [applications, range]);
+    return { submissions: apps.length, decided: dec, rate: dec ? Math.round((c.Approved / dec) * 100) : null, label: r.label };
+  }, [applications, range, rangeKey]);
 
   // Approved SFAG scholars in the range, by grant percentage.
   const sfagLevels = useMemo(() => {
@@ -556,33 +611,36 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
   const header = (
     <PageHeader
       title="Statistics"
-      meta={!firstLoad && <span className="text-xs text-ink-subtle">Showing {rangeText}</span>}
+      meta={!firstLoad && <span className="text-xs text-ink-subtle">Showing {periodName(rangeKey) ? `${periodName(rangeKey)} (${rangeText})` : rangeText}</span>}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {rangeKey === 'custom' && (
-            <>
-              <TextInput
-                type="date"
-                aria-label="From"
-                value={custom.from}
-                max={custom.to}
-                onChange={e => e.target.value && setCustom(c => ({ ...c, from: e.target.value }))}
-                className="w-40"
-              />
-              <span className="text-sm text-ink-subtle" aria-hidden>to</span>
-              <TextInput
-                type="date"
-                aria-label="To"
-                value={custom.to}
-                min={custom.from}
-                onChange={e => e.target.value && setCustom(c => ({ ...c, to: e.target.value }))}
-                className="w-40"
-              />
-            </>
-          )}
           <Select value={rangeKey} onChange={v => changeRange(v as RangeKey)} className="w-44" label="Date range" disabled={firstLoad}>
             {RANGE_OPTIONS.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
           </Select>
+          {/* From – to on one row; each field keeps its width (TextInput is full width by itself). */}
+          {rangeKey === 'custom' && (
+            <div className="flex items-center gap-2">
+              <div className="w-40">
+                <TextInput
+                  type="date"
+                  aria-label="From"
+                  value={custom.from}
+                  max={custom.to}
+                  onChange={e => e.target.value && setCustom(c => ({ ...c, from: e.target.value }))}
+                />
+              </div>
+              <span className="text-sm text-ink-subtle" aria-hidden>to</span>
+              <div className="w-40">
+                <TextInput
+                  type="date"
+                  aria-label="To"
+                  value={custom.to}
+                  min={custom.from}
+                  onChange={e => e.target.value && setCustom(c => ({ ...c, to: e.target.value }))}
+                />
+              </div>
+            </div>
+          )}
         </div>
       }
     />
@@ -626,7 +684,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
           <KpiCard
             label="Submissions"
             value={scoped.length}
-            hint={<>{deltaText(scoped.length, prev.submissions, prev.days) ?? rangeText}{directAwards ? <span className="block">Plus {directAwards} added directly by an office</span> : null}</>}
+            hint={<>{deltaText(scoped.length, prev.submissions, prev.label) ?? rangeText}{directAwards ? <span className="block">Plus {directAwards} added directly by an office</span> : null}</>}
           />
           <KpiCard label="Decided" value={decided} hint={`approved ${counts.Approved} · rejected ${counts.Rejected}${declined ? ` · ${declined} declined by the student` : ''}`} />
           <KpiCard
@@ -639,7 +697,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
             )}
             hint={decided === 0 ? 'No decisions yet' : (
               <>
-                {approvalRate !== null && prev.rate !== null && deltaText(approvalRate, prev.rate, prev.days, ' pts')}
+                {approvalRate !== null && prev.rate !== null && deltaText(approvalRate, prev.rate, prev.label, ' pts')}
                 {decided < SMALL_SAMPLE && <span className="block">Small sample — read with care</span>}
               </>
             )}
@@ -692,7 +750,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
           <Card
             title={metric}
-            description={`${METRIC_TEXT[metric].about} · ${series.unit === 'week' ? 'per week (Monday to Sunday)' : 'per day'}`}
+            description={`${METRIC_TEXT[metric].about} · ${series.unit === 'month' ? 'per month' : series.unit === 'week' ? 'per week (Monday to Sunday)' : 'per day'}`}
             className="lg:col-span-2"
             actions={
               <SegmentedControl

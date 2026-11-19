@@ -100,7 +100,7 @@ export default function Conversation({ messages: given, viewer, filesPath, getTo
       const { message, emailSent } = await unsendMessage(unsendPath, m._id, getToken);
       setUnsent(u => ({ ...u, [m._id]: { ...m, ...message } }));
       if (undoFor === m._id) setUndoFor(null);
-      setNotice(emailSent ? 'Unsent. Its email alert had already gone out, so they may have seen the text there.' : 'Message unsent.');
+      setNotice(emailSent ? 'Deleted. Its email alert had already gone out, so they may have seen the text there.' : 'Message deleted.');
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't delete the message.");
     } finally {

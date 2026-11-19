@@ -15,6 +15,8 @@ import { ChatMessage, MESSAGES_API_BASE, MESSAGES_READ_EVENT, MessageOffice, pos
 // refreshes every 20 seconds while open.
 
 const ADSO = 'LSO';
+// Quick questions shown before "More questions".
+const QUICK_SHOWN = 3;
 const ADSO_FALLBACK: MessageOffice = { code: ADSO, name: 'Admissions and Scholarship Office (AdSO)', short: 'AdSO', started: true, unread: 0, last: null };
 
 const timeLabel = (iso: string) => {
@@ -117,6 +119,7 @@ export default function Messages({ applications: _applications }: { applications
   // saved answer at once.
   const [questions, setQuestions] = useState<{ _id: string; question: string }[]>([]);
   const [asking, setAsking] = useState<string | null>(null);
+  const [allQuestions, setAllQuestions] = useState(false);
   useEffect(() => {
     let live = true;
     setQuestions([]);
@@ -151,18 +154,25 @@ export default function Messages({ applications: _applications }: { applications
     }
   };
   const quickQuestions = questions.length ? () => (
-    <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Quick questions">
-      {questions.map(q => (
+    // Wrapping rows, nothing cut off: the first three, and "More questions"
+    // for the rest.
+    <div className="flex flex-wrap gap-1.5 p-0.5" role="group" aria-label="Quick questions">
+      {(allQuestions ? questions : questions.slice(0, QUICK_SHOWN)).map(q => (
         <button
           key={q._id}
           type="button"
           onClick={() => ask(q._id)}
           disabled={!!asking}
-          className="shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-brand-green ring-1 ring-brand-green/30 hover:bg-brand-green/5 disabled:opacity-60"
+          className="rounded-full bg-white px-3 py-1.5 text-left text-xs font-semibold text-brand-green ring-1 ring-brand-green/30 hover:bg-brand-green/5 disabled:opacity-60"
         >
           {asking === q._id ? 'Asking…' : q.question}
         </button>
       ))}
+      {questions.length > QUICK_SHOWN && (
+        <button type="button" onClick={() => setAllQuestions(v => !v)} aria-expanded={allQuestions} className="rounded-full px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700">
+          {allQuestions ? 'Fewer questions' : `More questions (${questions.length - QUICK_SHOWN})`}
+        </button>
+      )}
     </div>
   ) : undefined;
 
@@ -212,7 +222,7 @@ export default function Messages({ applications: _applications }: { applications
           <ul className="min-h-0 flex-1 overflow-y-auto p-2" aria-label="Your conversations">
             {listed.map(o => {
               const active = o.code === office;
-              const preview = o.last ? (o.last.unsentAt ? 'Message unsent' : o.last.body || (o.last.attachments.length ? '📎 Attachment' : '')) : 'Start the conversation';
+              const preview = o.last ? (o.last.unsentAt ? 'Message deleted' : o.last.body || (o.last.attachments.length ? '📎 Attachment' : '')) : 'Start the conversation';
               return (
                 <li key={o.code}>
                   <button

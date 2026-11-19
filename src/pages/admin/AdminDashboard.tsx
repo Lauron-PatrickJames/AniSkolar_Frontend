@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth, useUser } from '@clerk/react';
-import { OFFICE_LABELS, OFFICE_SHORT_LABELS, acceptsOnlineApplications, mockScholarships, officeOf } from '../../data/scholarships';
+import { MEMBER_OFFICES, OFFICE_LABELS, OFFICE_SHORT_LABELS, acceptsOnlineApplications, mockScholarships, officeOf } from '../../data/scholarships';
 import { ScholarshipOffice } from '../../types';
 import AdminAnalytics from './AdminAnalytics';
 import AdminAnnouncements from './AdminAnnouncements';
@@ -87,12 +87,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [addedNotice, setAddedNotice] = useState('');
   // Every office starts on its dashboard.
   const homeView: MainView = 'home';
-  // "Add scholar" is only for the SDO and the ROTC Office (their
-  // scholarships have no application) and the AdSO's Scholarship
+  // "Add scholar" is only for the members-only offices (SDO, ROTC,
+  // Vicissitude, Heraldo: no application) and the AdSO's Scholarship
   // Associate, Head and Director (publicMetadata.adsoRole in Clerk). The
   // server enforces the same rule (routes/applications.js, canAddScholars).
   const adsoRoleRaw = (user?.publicMetadata as { adsoRole?: string } | undefined)?.adsoRole;
-  const canAddScholars = adminOffice === 'SDO' || adminOffice === 'ROTC'
+  const canAddScholars = MEMBER_OFFICES.includes(adminOffice ?? '')
     || (isAdso && (adsoRoleRaw === 'associate' || adsoRoleRaw === 'head' || adsoRoleRaw === 'director'));
   const addScholar = !canAddScholars ? undefined
     : directAward.length ? () => setAddScholarFor(directAward[0].id)
@@ -371,6 +371,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         }}
         onMessageStudent={messageStudent}
         onAddScholar={addScholar}
+        memberScholarships={adminOffice && MEMBER_OFFICES.includes(adminOffice) ? directAward.map(s => ({ id: s.id, name: s.name })) : undefined}
       />
     );
   } else if (mainView === 'students') {

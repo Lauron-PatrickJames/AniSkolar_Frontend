@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Scholarship, Announcement, Application, ProfileSectionKey, StudentProfile } from '../../types';
 import ProfileCompletionCard from '../../components/ProfileCompletionCard';
-import { Holdings, getAvailableScholarships, isCurrentApplication, isSfagScholar } from '../../utils/eligibility';
+import { Holdings, getAvailableScholarships, isCurrentApplication, isCurrentScholarship, isSfagScholar } from '../../utils/eligibility';
 import { DutySummary, formatDutyDate } from '../../utils/dutyHours';
 import { Renewal, RenewalPeriod, deadlineLabel, periodLabel } from '../../utils/renewals';
 import { titleCaseName } from '../../utils/names';
@@ -73,7 +73,7 @@ export default function Dashboard({
   const unread = useUnreadMessages('dashboard');
   const needsRevision = applications.filter(a => a.status === 'Needs Revision').length;
   const held = holdings?.held ?? [];
-  const isScholar = applications.some(a => a.status === 'Approved');
+  const isScholar = applications.some(isCurrentScholarship);
   const sfag = isSfagScholar(applications);
   const [duty, setDuty] = useState<DutyView | null>(null);
   const [renewals, setRenewals] = useState<RenewalsView | null>(null);

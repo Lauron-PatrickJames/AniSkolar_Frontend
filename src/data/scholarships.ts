@@ -37,6 +37,11 @@ export const OFFICES: { code: ScholarshipOffice; name: string; short: string }[]
 export const OFFICE_LABELS = Object.fromEntries(OFFICES.map(o => [o.code, o.name])) as Record<ScholarshipOffice, string>;
 export const OFFICE_SHORT_LABELS = Object.fromEntries(OFFICES.map(o => [o.code, o.short])) as Record<ScholarshipOffice, string>;
 
+// Members-only offices: their scholarships have no application; the office
+// adds its members (one at a time or from an uploaded list). Same as the
+// backend's MEMBER_OFFICES (routes/applications.js).
+export const MEMBER_OFFICES: string[] = ['SDO', 'ROTC', 'VICISSITUDE', 'HERALDO'];
+
 // Info-only scholarships are listed but can't be applied for online.
 export function acceptsOnlineApplications(scholarship: Pick<Scholarship, 'applicationMode'>): boolean {
   return (scholarship.applicationMode ?? 'online') === 'online';
@@ -454,10 +459,14 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     name: 'Vicissitude Scholarship Program',
     category: 'Leadership',
     office: 'VICISSITUDE',
-    // One semester at a time: members apply each term with that term's
-    // evaluation and duty hours record.
+    // Members only (Nov 2026): no application. Vicissitude adds its members
+    // each semester with that term's evaluation and duty hours record.
+    applicationMode: 'info',
+    directAward: true,
     noRenewal: true,
     oneSemester: true,
+    handledBy: 'Vicissitude',
+    availNote: 'There’s no application: it’s for members only. Vicissitude adds its Editorial Board and Staff as scholars each semester, from their evaluation and duty hours. You’ll get an email and see it under My Scholarship.',
     provider: officeProvider('Vicissitude'),
     targetApplicants: 'Vicissitude Editorial Board and Staff',
     description: 'The Vicissitude Scholarship Program supports the students who produce the university yearbook: members of the Vicissitude Editorial Board (EB) and Editorial Staff (ES). Discounts cover tuition only and depend on available funds.',
@@ -468,7 +477,7 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Editorial Board, rating 4.24 and below: 25% tuition discount (EB members are guaranteed at least 25%)',
       'Editorial Staff: one 25% scholarship reserved for each department',
       'Free skills training (writing, editing, photography, graphics, layout), a free pictorial, and for graduating members a free graduation picture and yearbook copy',
-      'For one semester: no renewals, so apply again each term with that term’s evaluation and duty hours'
+      'For one semester: no renewals. Vicissitude adds you again each term from that term’s evaluation and duty hours'
     ],
     eligibilityCriteria: { applicantType: 'any' },
     rules: { applicantType: 'any', minGpa: 1.5, noFailingGrade: true },
@@ -482,9 +491,9 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     ],
     process: [
       'Step 1: Join the Vicissitude Editorial Board or Staff and complete your duty hours (200 for the Editorial Board, 125 for the Editorial Staff).',
-      'Step 2: Apply here with your performance evaluation and duty hours record.',
-      'Step 3: Vicissitude rates your performance and sets your discount for the term.',
-      'Step 4: Apply again next term with that term’s evaluation and duty hours record.'
+      'Step 2: Vicissitude rates your performance and sets your discount for the term.',
+      'Step 3: Vicissitude adds you as a scholar. You’ll get an email and see it under My Scholarship.',
+      'Step 4: Next term, Vicissitude adds you again from that term’s evaluation and duty hours.'
     ],
     deadline: 'Set by Vicissitude',
     status: 'Closed',
@@ -598,9 +607,14 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
     name: 'Heraldo Filipino Scholarship',
     category: 'Leadership',
     office: 'HERALDO',
+    // Members only (Nov 2026): no application; the office adds its staff.
     // No renewals: kept while on the Editorial Staff (the office marks
     // them Stopped when they leave, or Graduated).
+    applicationMode: 'info',
+    directAward: true,
     noRenewal: true,
+    handledBy: 'Heraldo Filipino',
+    availNote: 'There’s no application: it’s for members only. The Heraldo Filipino adds its Editorial Staff as scholars, with the discount computed from each one’s scholarship points. You’ll get an email and see it under My Scholarship.',
     provider: officeProvider('Heraldo Filipino'),
     targetApplicants: 'Heraldo Filipino Editorial Staff, from Junior Staff to Editor in Chief',
     // From the Heraldo Filipino's scholarship guidelines (Nov 2026).
@@ -624,7 +638,7 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Step 1: Complete all your requirements as a member of the Editorial Staff.',
       'Step 2: The Managing Director computes your scholarship points from the table of qualifications.',
       'Step 3: The Editor in Chief and the Publication Adviser validate the computation.',
-      'Step 4: The Managing Director releases the list of qualified scholars and each one\'s discount.'
+      'Step 4: The Managing Director releases the list of qualified scholars and each one\'s discount, and the office adds them as scholars in AniSkolar.'
     ],
     deadline: 'To be announced by the Heraldo Filipino',
     status: 'Closed',

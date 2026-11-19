@@ -797,6 +797,8 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
   onChanged: () => void;
 }) {
   const [events, setEvents] = useState<AdminEvent[] | null>(null);
+  // Which events show: the ones needing attendance first by default.
+  const [eventFilter, setEventFilter] = useState<'all' | 'check' | 'upcoming' | 'done'>('all');
   const [pending, setPending] = useState<PendingClaim[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -867,7 +869,7 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
 
   return (
     <Modal
-      size="lg"
+      size="xl"
       title="Events"
       description={termLabel(term)}
       onClose={close}
@@ -952,11 +954,30 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
             </div>
           )}
 
-          {/* The term's events, newest first */}
-          {events.length > 0 && (
-            <ul className="space-y-2.5">
-              {[...events].sort((x, y) => y.date.localeCompare(x.date)).map(ev => {
-                const upcoming = ev.date > todayInManila();
+          {/* The term's events, newest first, in big cards (panel, Nov 2026),
+              filtered by what needs doing. */}
+          {events.length > 0 && (() => {
+            const today = todayInManila();
+            const kind = (ev: AdminEvent) => (ev.date > today ? 'upcoming' : ev.attendanceSavedAt ? 'done' : 'check');
+            const n = (k: string) => events.filter(ev => kind(ev) === k).length;
+            const shown = [...events].filter(ev => eventFilter === 'all' || kind(ev) === eventFilter).sort((x, y) => y.date.localeCompare(x.date));
+            return (
+            <div className="space-y-3">
+            <Tabs<'all' | 'check' | 'upcoming' | 'done'>
+              label="Show events"
+              value={eventFilter}
+              onChange={setEventFilter}
+              tabs={[
+                { key: 'all', label: 'All', count: events.length },
+                { key: 'check', label: 'Attendance to check', count: n('check') },
+                { key: 'upcoming', label: 'Upcoming', count: n('upcoming') },
+                { key: 'done', label: 'Checked', count: n('done') },
+              ]}
+            />
+            {shown.length === 0 ? <p className="py-8 text-center text-sm text-ink-muted">No events here.</p> : (
+            <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {shown.map(ev => {
+                const upcoming = ev.date > today;
                 const done = !!ev.attendanceSavedAt;
                 const d = new Date(`${ev.date}T00:00:00Z`);
                 const status = upcoming
@@ -965,29 +986,28 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
                     ? <Badge tone="success" dot>Attendance checked · {ev.claims.Approved} credited</Badge>
                     : <Badge tone="warning" dot>Attendance to check</Badge>;
                 return (
-                  <li key={ev._id} className={`flex flex-col gap-3 rounded-card bg-surface p-3.5 ring-1 sm:flex-row sm:items-center ${draft.id === ev._id ? 'ring-accent' : 'ring-line'}`}>
-                    <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                  <li key={ev._id} className={`flex flex-col gap-4 rounded-card bg-surface p-5 ring-1 ${draft.id === ev._id ? 'ring-accent' : 'ring-line'}`}>
+                    <div className="flex min-w-0 items-start gap-4">
                       {/* Date tile */}
-                      <div className="flex w-12 shrink-0 flex-col items-center overflow-hidden rounded-control ring-1 ring-line" aria-hidden>
-                        <span className="w-full bg-surface-muted py-0.5 text-center text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                      <div className="flex w-16 shrink-0 flex-col items-center overflow-hidden rounded-control ring-1 ring-line" aria-hidden>
+                        <span className="w-full bg-surface-muted py-1 text-center text-xs font-semibold uppercase tracking-wide text-ink-muted">
                           {d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })}
                         </span>
-                        <span className="py-1 text-base font-semibold leading-none tabular-nums text-ink">{d.getUTCDate()}</span>
+                        <span className="py-2 text-2xl font-semibold leading-none tabular-nums text-ink">{d.getUTCDate()}</span>
                       </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-ink">{ev.name}</p>
-                        <p className="mt-0.5 text-xs text-ink-muted">
-                          {weekday(ev.date)}, {formatDutyDate(ev.date, true)} · {ev.organizer} · <span className="font-medium text-ink">{formatHours(ev.creditHours)} h credit</span>
-                        </p>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          {status}
-                          {ev.claims.Pending > 0 && <Badge tone="info">{ev.claims.Pending} waiting</Badge>}
-                          <span className="text-xs text-ink-subtle">{ev.sheets.length ? `${ev.sheets.length} sheet${ev.sheets.length === 1 ? '' : 's'} uploaded` : 'No sheet uploaded'}</span>
-                        </div>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-base font-semibold leading-snug text-ink">{ev.name}</p>
+                        <p className="text-sm text-ink-muted">{weekday(ev.date)}, {formatDutyDate(ev.date, true)}</p>
+                        <p className="text-sm text-ink-muted">{ev.organizer} · <span className="font-medium text-ink">{formatHours(ev.creditHours)} hours credit</span></p>
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-auto">
-                      <Button size="sm" variant={!upcoming && !done ? 'primary' : 'secondary'} onClick={() => setAttendanceFor(ev)} disabled={!!busy}>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {status}
+                      {ev.claims.Pending > 0 && <Badge tone="info">{ev.claims.Pending} waiting</Badge>}
+                      <span className="text-xs text-ink-subtle">{ev.sheets.length ? `${ev.sheets.length} sheet${ev.sheets.length === 1 ? '' : 's'} uploaded` : 'No sheet uploaded'}</span>
+                    </div>
+                    <div className="mt-auto flex items-center gap-1.5 border-t border-line pt-3">
+                      <Button className="flex-1" variant={!upcoming && !done ? 'primary' : 'secondary'} onClick={() => setAttendanceFor(ev)} disabled={!!busy}>
                         {upcoming ? 'Attendance' : done ? 'Edit attendance' : 'Check attendance'}
                       </Button>
                       <DropdownMenu
@@ -1003,7 +1023,10 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
                 );
               })}
             </ul>
-          )}
+            )}
+            </div>
+            );
+          })()}
         </div>
       )}
       {deleting && (
@@ -1035,7 +1058,7 @@ function EventsDialog({ term, getToken, onClose, onChanged }: {
 // The duty offices: how many scholars each takes (Random assign) and its
 // head, who signs in with that school email to the office portal to
 // confirm duties, evaluate scholars and message the AdSO.
-interface OfficeRow { id: number; office: string; slots: string; headName: string; headEmail: string }
+interface OfficeRow { id: number; office: string; slots: string; headName: string; headEmail: string; headOnLeave?: { returnsOn?: string | null } | null }
 
 function OfficesDialog({ getToken, offices, onClose, onSaved }: {
   getToken: () => Promise<string | null>;
@@ -1058,7 +1081,7 @@ function OfficesDialog({ getToken, offices, onClose, onSaved }: {
         const saved: { office: string; slots: number; headName?: string; headEmail?: string }[] = body.officeSlots ?? [];
         const known = new Set(saved.map(o => o.office.toLowerCase()));
         const extra = offices.filter(o => !known.has(o.toLowerCase())).map(o => ({ office: o, slots: BIG_OFFICES.test(o) ? 5 : 2 }));
-        if (!cancelled) setRows([...saved, ...extra].map((o, i) => ({ id: i, office: o.office, slots: String(o.slots), headName: (o as { headName?: string }).headName ?? '', headEmail: (o as { headEmail?: string }).headEmail ?? '' })));
+        if (!cancelled) setRows([...saved, ...extra].map((o, i) => ({ id: i, office: o.office, slots: String(o.slots), headName: (o as { headName?: string }).headName ?? '', headEmail: (o as { headEmail?: string }).headEmail ?? '', headOnLeave: (o as { headOnLeave?: { returnsOn?: string | null } }).headOnLeave ?? null })));
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load the offices.');
       }
@@ -1097,19 +1120,34 @@ function OfficesDialog({ getToken, offices, onClose, onSaved }: {
       {error && <Alert tone="danger">{error}</Alert>}
       {!rows ? (!error && <TableSkeleton rows={4} label="Loading offices" />) : (
         <div className="space-y-3">
-          <div className="hidden grid-cols-[1fr_4.5rem_1fr_1.2fr_auto] gap-2 text-xs font-medium text-ink-subtle sm:grid">
-            <span>Office</span><span>Slots</span><span>Head</span><span>Head's school email</span><span aria-hidden />
+          {/* Same columns as the rows (the last one fits Remove), so each
+              title sits over its field. */}
+          <div className="hidden grid-cols-[1fr_4.5rem_1fr_1.2fr_5.5rem] gap-2 px-0.5 text-xs font-medium text-ink-subtle sm:grid">
+            <span>Office</span><span>Slots</span><span>Head</span><span>Head's school email</span><span className="sr-only">Remove</span>
           </div>
           {rows.map(r => (
-            <div key={r.id} className="grid grid-cols-1 gap-2 rounded-control p-2 ring-1 ring-line sm:grid-cols-[1fr_4.5rem_1fr_1.2fr_auto] sm:p-0 sm:ring-0">
+            <div key={r.id} className="grid grid-cols-1 gap-2 rounded-control p-2 ring-1 ring-line sm:grid-cols-[1fr_4.5rem_1fr_1.2fr_5.5rem] sm:items-center sm:p-0 sm:ring-0">
               <TextInput value={r.office} onChange={e => update(r.id, { office: e.target.value })} placeholder="Office name" aria-label="Office name" disabled={busy} />
               <TextInput type="number" min={0} max={50} value={r.slots} onChange={e => update(r.id, { slots: e.target.value })} aria-label={`Slots for ${r.office || 'this office'}`} disabled={busy} />
               <TextInput value={r.headName} onChange={e => update(r.id, { headName: e.target.value })} placeholder="e.g. Dr. Juan Dela Cruz" aria-label={`Head of ${r.office || 'this office'}`} disabled={busy} />
               <TextInput type="email" value={r.headEmail} onChange={e => update(r.id, { headEmail: e.target.value })} placeholder="name@dlsud.edu.ph" aria-label={`Head's email for ${r.office || 'this office'}`} disabled={busy} />
               <Button size="sm" variant="ghost" onClick={() => setRows(prev => prev?.filter(x => x.id !== r.id) ?? prev)} disabled={busy} aria-label={`Remove ${r.office || 'this office'}`}>Remove</Button>
+              {r.headOnLeave && (
+                // Set by the head in the office portal: duties wait for them.
+                <p className="sm:col-span-5 -mt-1 px-1 text-xs text-warning-fg">
+                  The head is on leave{r.headOnLeave.returnsOn ? ` until ${new Date(`${r.headOnLeave.returnsOn}T00:00:00`).toLocaleDateString('en-PH', { month: 'long', day: 'numeric' })}` : ''}. Their scholars’ duties won’t be removed while they’re away.
+                </p>
+              )}
             </div>
           ))}
-          <Button size="sm" onClick={() => { setRows(prev => [...(prev ?? []), { id: nextId, office: '', slots: '2', headName: '', headEmail: '' }]); setNextId(n => n + 1); }} disabled={busy}>Add office</Button>
+          <button
+            type="button"
+            onClick={() => { setRows(prev => [...(prev ?? []), { id: nextId, office: '', slots: '2', headName: '', headEmail: '' }]); setNextId(n => n + 1); }}
+            disabled={busy}
+            className="flex w-full items-center justify-center gap-1.5 rounded-control border border-dashed border-line-strong px-3 py-2.5 text-sm font-medium text-ink-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            <Plus className="size-4" aria-hidden /> Add office
+          </button>
           <p className="text-xs text-ink-subtle">The head's email must be their @dlsud.edu.ph address — it's how AniSkolar knows it's them when they sign in. Leave it empty for an office that isn't using AniSkolar yet (its scholars' hours count without confirmation).</p>
         </div>
       )}

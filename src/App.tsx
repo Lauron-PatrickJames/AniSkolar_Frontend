@@ -4,8 +4,9 @@ import { useUser, useAuth, useClerk } from '@clerk/react';
 import { StudentProfile, Application, Scholarship, Announcement, ScholarshipOverride, ProfileChanges, ProfileSectionKey, SaveResult } from './types';
 import { acceptsOnlineApplications, applicationWindow, applyScholarshipOverrides, mockScholarships, registerCustomScholarships, setServerApplyBlocks } from './data/scholarships';
 import { isGrantFormType, toGrantDetails } from './utils/grantForms';
-import { Holdings, applyBlock, holdingNotice, isSfagScholar, setSfagOpenAllYear } from './utils/eligibility';
+import { Holdings, applyBlock, holdingNotice, isCurrentScholarship, isSfagScholar, setSfagOpenAllYear } from './utils/eligibility';
 import { DutyNotice } from './utils/notifications';
+import { APPLY_CHECKS, ApplyCheckDialog } from './components/ApplyCheck';
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout';
@@ -187,6 +188,8 @@ export default function App() {
 
   const [currentPage, setCurrentPage] = useState<string>(initialSession.currentPage);
   const [selectedScholarshipId, setSelectedScholarshipId] = useState<string | null>(initialSession.selectedScholarshipId);
+  // A members-only (or EBPSP) scholarship whose question is open.
+  const [applyCheckId, setApplyCheckId] = useState<string | null>(null);
 
   // The application being edited when resubmitting after "Needs Revision".
   // Not persisted to sessionStorage on purpose — a refresh mid-resubmit
@@ -703,17 +706,20 @@ export default function App() {
     if (!target) return false;
     setSelectedScholarshipId(target.id);
     setResubmitApplication(null);
+    if (APPLY_CHECKS[target.id]) { setCurrentPage('scholarship-details'); setApplyCheckId(target.id); return true; }
     setCurrentPage(acceptsOnlineApplications(target) ? 'apply-scholarship' : 'scholarship-details');
     return true;
   }
 
-  const handleApplyScholarship = (id: string) => {
+  const handleApplyScholarship = (id: string, checked = false) => {
     if (!isSignedIn) {
       try { sessionStorage.setItem(PENDING_APPLY_KEY, id); } catch { /* no storage */ }
       setLoginNotice('Log in with your DLSU-D account to apply.');
       setCurrentPage('login');
       return;
     }
+    // Only for some students (EBPSP, members-only): ask first.
+    if (!checked && APPLY_CHECKS[id]) { setApplyCheckId(id); return; }
     // Outside its window the SFAG can't be applied for, nor POLCA from a
     // full college (the server refuses both too).
     if (applyBlock(id, holdings)) return;
@@ -806,7 +812,7 @@ export default function App() {
 
   // Renewal and duty hours are for scholars only: a student with at least
   // one approved application (the backend refuses everyone else too).
-  const isScholar = applications.some(app => app.status === 'Approved');
+  const isScholar = applications.some(isCurrentScholarship);
   const isSfag = isSfagScholar(applications);
   const onScholarOnlyPage = SCHOLAR_ONLY_PAGES.includes(currentPage);
   const allowedHere = currentPage === 'duty-hours' ? isSfag : isScholar;
@@ -1022,6 +1028,16 @@ export default function App() {
       }
 
       return (
+        <>
+        {applyCheckId && APPLY_CHECKS[applyCheckId] && (
+          <ApplyCheckDialog
+            scholarshipName={scholarships.find(s => s.id === applyCheckId)?.name ?? ''}
+            check={APPLY_CHECKS[applyCheckId]}
+            onClose={() => setApplyCheckId(null)}
+            onApply={() => { const id = applyCheckId; setApplyCheckId(null); handleApplyScholarship(id, true); }}
+            onDetails={() => { const id = applyCheckId; setApplyCheckId(null); handleViewScholarship(id); }}
+          />
+        )}
         <StudentLayout
           currentPage={currentPage}
           onNavigate={handleNavigate}
@@ -1155,6 +1171,7 @@ export default function App() {
           })()}
           </Suspense>
         </StudentLayout>
+        </>
       );
     }
   };

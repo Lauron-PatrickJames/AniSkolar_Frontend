@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, MessageSquare, Trash2, UserCheck, UserRound, Users } from 'lucide-react';
+import { ChevronRight, MessageSquare, Trash2, Users } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatDate, titleCaseName } from './adminData';
 import {
-  Alert, Avatar, Badge, Button, Card, ConfirmDialog, EmptyState, ErrorState, IconButton, KpiCard, KpiGrid, MobileList, PageHeader, Pagination,
-  RowLink, SearchInput, Select, Table, TableSkeleton, Td, Th, Toast, Toolbar, Tooltip, Tr, Truncate, usePagination
+  Alert, Avatar, Badge, Button, Card, ConfirmDialog, EmptyState, ErrorState, IconButton, MobileList, PageHeader, Pagination,
+  RowLink, SearchInput, Select, Table, TableSkeleton, Tabs, Td, Th, Toast, Toolbar, Tooltip, Tr, Truncate, usePagination
 } from './AdminUI';
 import { COLLEGES, collegeName } from '../../data/programs';
 import { DeclaredScholarship } from '../../types';
@@ -114,12 +114,6 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
 
   useEffect(() => { load(); }, [load]);
 
-  const counts = useMemo(() => {
-    const all = rows ?? [];
-    const applied = all.filter(s => s.applications > 0).length;
-    return { all: all.length, applied, notApplied: all.length - applied };
-  }, [rows]);
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (rows ?? []).filter(s => {
@@ -200,15 +194,22 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
     <>
       <PageHeader title="Students" description="Everyone who has set up an AniSkolar profile, and whether they've applied." />
 
-      <KpiGrid columns={3}>
-        <KpiCard label="Signed up" value={counts.all} icon={Users} loading={!rows && loading} active={show === 'all'} onClick={() => setShow('all')} />
-        <KpiCard label="Applied" value={counts.applied} icon={UserCheck} tone="success" loading={!rows && loading} active={show === 'applied'} onClick={() => setShow('applied')} />
-        <KpiCard label="Not applied yet" value={counts.notApplied} icon={UserRound} tone={counts.notApplied ? 'warning' : 'neutral'} loading={!rows && loading} active={show === 'not-applied'} onClick={() => setShow('not-applied')} />
-      </KpiGrid>
-
+      {/* No count cards here: numbers live on Statistics (panel, Nov 2026).
+          The same three views are tabs. */}
       <Card
         flush
         headerSlot={
+          <>
+          <Tabs<Show>
+            label="Show"
+            value={show}
+            onChange={setShow}
+            tabs={[
+              { key: 'all', label: 'Everyone' },
+              { key: 'applied', label: 'Applied' },
+              { key: 'not-applied', label: 'Not applied yet' },
+            ]}
+          />
           <Toolbar>
             <SearchInput value={search} onChange={setSearch} label="Search students" placeholder="Search name, student no., email or program…" className="min-w-56 flex-1" />
             <Select value={college} onChange={setCollege} label="College" className="w-full sm:w-56">
@@ -222,6 +223,7 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
               {DECLARED.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </Select>
           </Toolbar>
+          </>
         }
       >
         {!rows && loading ? (

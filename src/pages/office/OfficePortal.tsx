@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { ArrowRight, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, Flag, Hourglass, MessageSquare, Search, Undo2, Users, X } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock, Flag, Hourglass, MessageSquare, Palmtree, Search, Undo2, Users, X } from 'lucide-react';
 import AccountSecurity from '../../components/AccountSecurity';
 import AdminLayout, { NavSection } from '../admin/AdminLayout';
 import Conversation from '../../components/messages/Conversation';
@@ -27,6 +27,8 @@ export interface OfficeHeadInfo {
   name: string;
   email: string;
   current: { academicYear: number; term: DutyTerm };
+  // On leave now (PUT /api/office/leave): duties wait for the head.
+  leave?: { since?: string | null; returnsOn?: string | null } | null;
 }
 
 type Tab = 'scholars' | 'evaluations' | 'messages';
@@ -71,6 +73,8 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
   const [counts, setCounts] = useState({ waiting: 0, evaluations: 0, unread: 0 });
   const [toast, setToast] = useState('');
   const [securityOpen, setSecurityOpen] = useState(false);
+  const [leave, setLeave] = useState(head.leave ?? null);
+  const [leaveOpen, setLeaveOpen] = useState(false);
 
   // Badges: duties waiting, evaluations not done, unread messages.
   const refreshCounts = useCallback(async () => {
@@ -123,6 +127,23 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
       >
         <PageHeader title={section.label} description={section.description} />
 
+        {/* On leave: the 48-hour rule waits for the head (panel, Nov 2026). */}
+        {tab === 'scholars' && (leave ? (
+          <Alert
+            tone="warning"
+            icon={Palmtree}
+            title={`You’re on leave${leave.returnsOn ? ` until ${longDay(leave.returnsOn)}` : ''}`}
+            action={<Button size="sm" onClick={() => setLeaveOpen(true)}>I’m back</Button>}
+          >
+            Your scholars’ duties wait for you: they won’t be removed after 48 hours while you’re away. When you’re back, you have 48 hours to check them.
+          </Alert>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-card bg-surface px-4 py-3 text-sm text-ink-muted ring-1 ring-line">
+            <span className="flex items-center gap-2"><Palmtree className="size-4 shrink-0 text-ink-subtle" aria-hidden />Going on leave? Mark it so unchecked duties aren’t removed while you’re away.</span>
+            <Button size="sm" onClick={() => setLeaveOpen(true)}>I’m on leave</Button>
+          </div>
+        ))}
+
         {/* What needs doing, from any section. */}
         {tab === 'scholars' && (counts.waiting > 0 || counts.evaluations > 0 || counts.unread > 0) && (
           <div className="flex flex-col divide-y divide-line rounded-card bg-surface ring-1 ring-line sm:flex-row sm:divide-x sm:divide-y-0">
@@ -138,17 +159,64 @@ export default function OfficePortal({ head, onLogout }: { head: OfficeHeadInfo;
           </div>
         )}
 
-        {tab === 'scholars' && <ScholarsTab head={head} getToken={getToken} onChanged={refreshCounts} onToast={setToast} onEvaluate={() => setTab('evaluations')} />}
+        {tab === 'scholars' && <ScholarsTab head={{ ...head, leave }} getToken={getToken} onChanged={refreshCounts} onToast={setToast} onEvaluate={() => setTab('evaluations')} />}
         {tab === 'evaluations' && <EvaluationsTab getToken={getToken} onChanged={refreshCounts} onToast={setToast} />}
         {tab === 'messages' && <MessagesTab getToken={getToken} />}
       </AdminLayout>
       {toast && <ResultDialog message={toast} onClose={() => setToast('')} />}
+      {leaveOpen && (
+        <LeaveDialog
+          onLeave={!!leave}
+          getToken={getToken}
+          onClose={() => setLeaveOpen(false)}
+          onSaved={next => { setLeave(next); setLeaveOpen(false); setToast(next ? 'You’re on leave. Your scholars’ duties will wait for you.' : 'Welcome back! You have 48 hours to check the duties waiting for you.'); }}
+        />
+      )}
       {securityOpen && (
         <Modal title="Account security" onClose={() => setSecurityOpen(false)} size="lg">
           <AccountSecurity />
         </Modal>
       )}
     </>
+  );
+}
+
+const longDay = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'short', month: 'long', day: 'numeric' });
+
+// Starts or ends the head's leave.
+function LeaveDialog({ onLeave, getToken, onClose, onSaved }: {
+  onLeave: boolean; getToken: GetToken; onClose: () => void; onSaved: (leave: OfficeHeadInfo['leave']) => void;
+}) {
+  const [returnsOn, setReturnsOn] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const save = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const body = await api<{ leave: OfficeHeadInfo['leave'] }>(getToken, '/api/office/leave', { method: 'PUT', body: { onLeave: !onLeave, ...(returnsOn ? { returnsOn } : {}) } });
+      onSaved(body.leave ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save.');
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={onLeave ? 'End your leave?' : 'Go on leave'}
+      description={onLeave ? 'Duties waiting for you get 48 hours from now to be checked.' : 'While you’re on leave, unchecked duties aren’t removed. The AdSO and your scholars see that you’re away.'}
+      onClose={onClose}
+      dismissible={!busy}
+      size="sm"
+      footer={<><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="primary" onClick={save} loading={busy}>{onLeave ? 'I’m back' : 'I’m on leave'}</Button></>}
+    >
+      {error && <Alert tone="danger">{error}</Alert>}
+      {!onLeave && (
+        <Field label="Back on" optional helper="Shown to your scholars and the AdSO.">
+          <TextInput type="date" value={returnsOn} onChange={e => setReturnsOn(e.target.value)} min={new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })} disabled={busy} />
+        </Field>
+      )}
+    </Modal>
   );
 }
 
@@ -342,6 +410,7 @@ function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head:
           onClose={() => setOpen(null)}
           onChanged={() => { load(); onChanged(); }}
           onToast={onToast}
+          onLeave={!!head.leave}
         />
       )}
     </div>
@@ -350,8 +419,8 @@ function ScholarsTab({ head, getToken, onChanged, onToast, onEvaluate }: { head:
 
 interface EntryRow { _id: string; date: string; timeIn: string; timeOut: string; hours: number; status: 'confirmed' | 'flagged' | null; note: string | null; loggedAt?: string | null }
 
-function DutiesModal({ studentNumber, term, getToken, onClose, onChanged, onToast }: {
-  studentNumber: string; term: TermKey; getToken: GetToken; onClose: () => void; onChanged: () => void; onToast: (m: string) => void;
+function DutiesModal({ studentNumber, term, getToken, onClose, onChanged, onToast, onLeave = false }: {
+  studentNumber: string; term: TermKey; getToken: GetToken; onClose: () => void; onChanged: () => void; onToast: (m: string) => void; onLeave?: boolean;
 }) {
   type Progress = { completed: number; required: number | null };
   type Summary = { regularHours: number; waitingHours?: number };
@@ -454,7 +523,9 @@ function DutiesModal({ studentNumber, term, getToken, onClose, onChanged, onToas
       <span className="ml-auto flex items-center gap-1">{actions}</span>
       {e.status === 'flagged' && e.note && <p className="w-full pl-0 text-xs text-danger-fg sm:pl-[8.75rem]">Your note: {e.note}</p>}
       {(() => {
-        // Unreviewed duties are removed 48 hours after they're logged.
+        // Unreviewed duties are removed 48 hours after they're logged
+        // (not while the head is on leave).
+        if (onLeave && !e.status) return <p className="w-full pl-0 text-xs text-ink-subtle sm:pl-[8.75rem]">Waiting for you: you’re on leave, so it won’t be removed.</p>;
         const left = hoursUntilRemoved(e);
         return left === null ? null : (
           <p className="w-full pl-0 text-xs text-warning-fg sm:pl-[8.75rem]">

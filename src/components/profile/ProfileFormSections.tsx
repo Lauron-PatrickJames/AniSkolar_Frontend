@@ -75,7 +75,7 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
         <div className={withSection ? 'grid grid-cols-1 gap-5 sm:grid-cols-2 @2xl:col-span-2 @2xl:gap-4' : 'min-w-0'}>
           <Slot name="yearLevel">
             <Field label="Year level" error={errorFor('yearLevel')}>
-              <Select value={draft.yearLevel} onChange={v => { update({ yearLevel: v }); touch('yearLevel'); }}>
+              <Select value={draft.yearLevel} onChange={v => { update(v === '1st Year' ? { yearLevel: v, gpa: '' } : { yearLevel: v }); touch('yearLevel'); }}>
                 <option value="" disabled>Select year level</option>
                 {YEAR_LEVELS.map(y => <option key={y} value={y}>{y}</option>)}
               </Select>
@@ -90,9 +90,10 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
           )}
         </div>
       )}
-      {locked.gpa ?? (
+      {/* 1st years have no college GPA yet, so they aren't asked for one. */}
+      {draft.yearLevel !== '1st Year' && (locked.gpa ?? (
         <Slot name="gpa" className={withSection ? 'sm:max-w-[calc(50%-0.625rem)] @2xl:max-w-none' : ''}>
-          <Field label="Cumulative GPA" optional={draft.yearLevel === '1st Year'} error={errorFor('gpa')} helper={!errorFor('gpa') ? (draft.yearLevel === '1st Year' ? '0.00 to 4.00. Incoming freshmen without a college GPA yet can leave this blank.' : '0.00 to 4.00, as on your latest grades.') : undefined}>
+          <Field label="Cumulative GPA" error={errorFor('gpa')} helper={!errorFor('gpa') ? '0.00 to 4.00, as on your latest grades.' : undefined}>
             <TextInput
               value={draft.gpa}
               inputMode="decimal"
@@ -107,7 +108,7 @@ export function AcademicFields({ draft, update, errorFor, touch, locked = {}, ex
             />
           </Field>
         </Slot>
-      )}
+      ))}
       </div>
     </div>
   );

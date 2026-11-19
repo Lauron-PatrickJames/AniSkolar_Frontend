@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ChevronRight, ClipboardList, Download, FileText, MessageSquare, Pencil, Printer, Trash2, UserPlus, Users } from 'lucide-react';
+import { ChevronRight, ClipboardList, Download, FileText, MessageSquare, Pencil, Printer, Trash2, Upload, UserPlus, Users } from 'lucide-react';
+import MemberUploadDialog from './MemberUploadDialog';
 import EditProfileDialog from '../../components/profile/EditProfileDialog';
 import { StudentProfile } from '../../types';
 import { downloadZip } from '../../utils/documents';
@@ -33,6 +34,8 @@ interface AdminScholarsProps {
   onMessageStudent?: (studentNumber: string) => void;
   // Offices that add their scholars themselves (the SDO): "Add scholar".
   onAddScholar?: () => void;
+  // Members-only offices: their scholarships, for "Upload member list".
+  memberScholarships?: { id: string; name: string }[];
 }
 
 // --- Scholar aggregation (client-side; used for the list/detail views and
@@ -159,6 +162,7 @@ async function exportScholarsToExcel(params: {
   approvedFilter: ApprovedFilter;
   sort: SortOption;
   columns: string[];
+  scholarshipId?: string;
 }): Promise<{ error?: string }> {
   try {
     const token = await params.getToken();
@@ -167,7 +171,8 @@ async function exportScholarsToExcel(params: {
       renewal: params.renewalFilter,
       approved: params.approvedFilter,
       sort: params.sort,
-      columns: params.columns.join(',')
+      columns: params.columns.join(','),
+      ...(params.scholarshipId ? { scholarshipId: params.scholarshipId } : {})
     });
     const response = await fetch(`${params.apiBaseUrl}/api/applications/export/scholars?${qs.toString()}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined
@@ -360,8 +365,9 @@ const SEGMENT_TO_RENEWAL: Record<ScholarSegment, RenewalFilter> = { 'All': 'all'
 const REFETCH_AFTER_MS = 30_000;
 
 export default function AdminScholars({
-  applications, isLoading, error, getToken, apiBaseUrl, onRefresh, selectedStudentNumber, onSelectStudent, onOpenApplication, onMessageStudent, onAddScholar
+  applications, isLoading, error, getToken, apiBaseUrl, onRefresh, selectedStudentNumber, onSelectStudent, onOpenApplication, onMessageStudent, onAddScholar, memberScholarships
 }: AdminScholarsProps) {
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [segment, setSegment] = useState<ScholarSegment>('All');
   const [approvedFilter, setApprovedFilter] = useState<ApprovedFilter>('any');
@@ -371,6 +377,8 @@ export default function AdminScholars({
   const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set(DEFAULT_EXPORT_COLUMNS));
   const [pickerFor, setPickerFor] = useState<ExportKind | null>(null);
   const [lifecycleOpen, setLifecycleOpen] = useState(false);
+  // One scholarship's scholars ('' = every scholarship).
+  const [scholarshipFilter, setScholarshipFilter] = useState('');
   const renewalFilter = SEGMENT_TO_RENEWAL[segment];
 
   // Applications are loaded by the dashboard; ask for fresh data when the
@@ -391,7 +399,16 @@ export default function AdminScholars({
     };
   }, [refreshIfStale]);
 
-  const scholars = useMemo(() => buildScholarSummaries(applications), [applications]);
+  // The scholarships in the list, for the filter.
+  const scholarshipOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    applications.forEach(a => { if (!byId.has(a.scholarshipId)) byId.set(a.scholarshipId, a.scholarshipName); });
+    return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [applications]);
+  const scholars = useMemo(
+    () => buildScholarSummaries(scholarshipFilter ? applications.filter(a => a.scholarshipId === scholarshipFilter) : applications),
+    [applications, scholarshipFilter]
+  );
   const counts = useMemo(() => {
     const returning = scholars.filter(s => s.isReturning).length;
     return { 'All': scholars.length, 'Returning': returning, 'First-time': scholars.length - returning } as Record<ScholarSegment, number>;
@@ -419,12 +436,13 @@ export default function AdminScholars({
     return sorted;
   }, [scholars, search, segment, approvedFilter, sort]);
 
-  const pager = usePagination(filtered, 15, `${search}|${segment}|${approvedFilter}|${sort}`);
+  const pager = usePagination(filtered, 15, `${search}|${segment}|${approvedFilter}|${sort}|${scholarshipFilter}`);
   const selected = selectedStudentNumber ? scholars.find(s => s.studentNumber === selectedStudentNumber) ?? null : null;
 
   // Human-readable filter state, embedded in exports so the file explains
   // what it was scoped to.
   const filterSubtitle = [
+    ...(scholarshipFilter ? [scholarshipOptions.find(o => o.id === scholarshipFilter)?.name ?? ''] : []),
     segment === 'Returning' ? 'Returning only' : segment === 'First-time' ? 'First-time only' : 'All scholars',
     ...(approvedFilter === 'yes' ? ['with an approved application'] : approvedFilter === 'no' ? ['without an approved application'] : []),
     ...(search.trim() ? [`search: "${search.trim()}"`] : []),
@@ -442,7 +460,7 @@ export default function AdminScholars({
       return;
     }
     setIsExporting(true);
-    const { error: err } = await exportScholarsToExcel({ getToken, apiBaseUrl, search, renewalFilter, approvedFilter, sort, columns });
+    const { error: err } = await exportScholarsToExcel({ getToken, apiBaseUrl, search, renewalFilter, approvedFilter, sort, columns, scholarshipId: scholarshipFilter || undefined });
     if (err) setExportError(err);
     setIsExporting(false);
   };
@@ -466,8 +484,8 @@ export default function AdminScholars({
   }
 
   // === List: all scholars =========================================================
-  const filtersActive = search.trim() !== '' || segment !== 'All' || approvedFilter !== 'any';
-  const clearFilters = () => { setSearch(''); setSegment('All'); setApprovedFilter('any'); };
+  const filtersActive = search.trim() !== '' || segment !== 'All' || approvedFilter !== 'any' || scholarshipFilter !== '';
+  const clearFilters = () => { setSearch(''); setSegment('All'); setApprovedFilter('any'); setScholarshipFilter(''); };
 
   return (
     <>
@@ -475,6 +493,7 @@ export default function AdminScholars({
         title="Scholars"
         actions={
           <>
+          {memberScholarships?.length ? <Button icon={Upload} onClick={() => setUploadOpen(true)}>Upload member list</Button> : null}
           {onAddScholar && <Button variant="primary" icon={UserPlus} onClick={onAddScholar}>Add scholar</Button>}
           <Menu
             label={isExporting ? 'Exporting…' : 'Export'}
@@ -491,6 +510,9 @@ export default function AdminScholars({
         }
       />
 
+      {uploadOpen && memberScholarships?.length ? (
+        <MemberUploadDialog scholarships={memberScholarships} getToken={getToken} onClose={() => setUploadOpen(false)} onDone={() => onRefresh?.()} />
+      ) : null}
       {exportError && <Alert tone="danger" onDismiss={() => setExportError('')}>{exportError}</Alert>}
       {error && hasData && (
         <Alert tone="danger" title="Couldn't refresh scholars" action={onRefresh && <Button size="sm" onClick={onRefresh}>Try again</Button>}>
@@ -503,6 +525,14 @@ export default function AdminScholars({
         headerSlot={
           <Toolbar>
             <SearchInput value={search} onChange={setSearch} label="Search scholars" placeholder="Search name, student no., program or college…" className="min-w-56 flex-1" />
+            {scholarshipOptions.length > 1 && (
+              <div className="w-full sm:w-64">
+                <Select value={scholarshipFilter} onChange={setScholarshipFilter} label="Scholarship">
+                  <option value="">All scholarships</option>
+                  {scholarshipOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </Select>
+              </div>
+            )}
           </Toolbar>
         }
       >

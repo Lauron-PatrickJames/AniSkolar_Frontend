@@ -8,7 +8,7 @@ import { OFFICE_LABELS, mockScholarships, officeOf } from '../../data/scholarshi
 import { COLLEGES, YEAR_LEVELS, collegeName, findProgram } from '../../data/programs';
 import { API_BASE_URL, AdminApplication, AppStatus, CYCLE_START_MONTH, STATUS_OPTIONS, authHeaders } from './adminData';
 import {
-  Alert, Button, Card, EmptyState, ErrorState, KpiCard, KpiGrid, PageHeader, STATUS_META, SegmentedControl, Select, Skeleton,
+  Alert, Button, Card, Checkbox, EmptyState, ErrorState, KpiCard, KpiGrid, Modal, PageHeader, STATUS_META, SegmentedControl, Select, Skeleton,
   Table, Td, TextInput, Th, Tooltip, Tr, RowLink, tokenColor
 } from './AdminUI';
 import { downloadExcel } from '../../utils/excelExport';
@@ -389,17 +389,20 @@ function statisticsSheet(rows: ScholarshipRow[], includeOffice: boolean, subtitl
       ...(includeOffice ? [{ header: 'Office' }] : []),
       { header: 'Submissions', format: 'integer' as const }, { header: 'Approved', format: 'integer' as const },
       { header: 'Rejected', format: 'integer' as const }, { header: 'Pending', format: 'integer' as const },
-      { header: 'Avg. decision time (days)', format: 'decimal1' as const }, { header: 'Avg. revision cycles', format: 'decimal1' as const },
+      { header: 'Avg. revision cycles', format: 'decimal1' as const },
       { header: 'Avg. applicant GPA', format: 'decimal' as const },
     ],
     rows: rows.map(r => [
       r.name,
       ...(includeOffice ? [OFFICE_LABELS[r.office]] : []),
       r.submissions, r.approved, r.rejected, r.pending,
-      r.avgDecisionDays, r.avgRevisionCycles, r.avgGpa,
+      r.avgRevisionCycles, r.avgGpa,
     ]),
   };
 }
+
+// What the Statistics export can include, one sheet each.
+type ExportPart = 'summary' | 'scholarships' | 'overTime' | 'sfag' | `by:${Dimension}`;
 
 // --- Breakdown ----------------------------------------------------------------------
 // The chart's metric for the range, grouped by college, year level, program
@@ -537,7 +540,6 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
     return { total: approved.length, levels, unset: approved.filter(a => ![100, 75, 50, 25].includes(Number(a.sfagPercentage))).length };
   }, [scoped]);
   const decided = counts.Approved + counts.Rejected;
-  const avgDecision = useMemo(() => average(scoped.map(decisionDays)), [scoped]);
   const [metric, setMetric] = useState<ChartMetric>('Submissions');
   const metrics: ChartMetric[] = signUps ? ['Submissions', 'Decisions', 'Sign-ups'] : ['Submissions', 'Decisions'];
   const series = useMemo(() => {
@@ -596,10 +598,62 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
   const failedEmpty = !!error && !hasData && !isLoading;
   const rangeText = describeRange(range);
 
-  const exportCsv = () => {
+  // Export: the AdSO picks what goes in the file (panel, Nov 2026), one
+  // sheet each.
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportParts, setExportParts] = useState<Set<ExportPart>>(() => new Set<ExportPart>(['summary', 'scholarships']));
+  const runExport = () => {
     const last = addDays(range.endExclusive, -1);
-    downloadExcel(`scholarship-statistics_${dayKey(range.start)}_to_${dayKey(last)}`, [statisticsSheet(sortedRows, showOffice, rangeText)]);
+    const sheets = [];
+    if (exportParts.has('summary')) {
+      const rate = decided > 0 ? counts.Approved / decided : null;
+      sheets.push({
+        name: 'Summary', title: 'Summary', subtitle: rangeText,
+        columns: [{ header: 'Measure' }, { header: 'Value', format: 'integer' as const }],
+        rows: [
+          ['Submissions', scoped.length], ['Added directly by an office', directAwards], ['Decided', decided],
+          ...STATUS_OPTIONS.map(st => [st, counts[st]] as [string, number]),
+          ['Approval rate (%)', rate === null ? '' : Math.round(rate * 100)],
+          ...(declined ? [['Declined by the student', declined] as [string, number]] : []),
+        ],
+      });
+    }
+    if (exportParts.has('scholarships')) sheets.push(statisticsSheet(sortedRows, showOffice, rangeText));
+    for (const dim of ['College', 'Year level', 'Program', 'Scholarship'] as Dimension[]) {
+      if (!exportParts.has(`by:${dim}`)) continue;
+      const fromApp = (a: AdminApplication): Groupable => ({
+        college: a.currentProfile?.college ?? findProgram(a.currentProfile?.programCode)?.college ?? null,
+        yearLevel: a.currentProfile?.yearLevel ?? null,
+        programCode: a.currentProfile?.programCode ?? null,
+        scholarshipId: a.scholarshipId,
+        scholarshipName: a.scholarshipName,
+        part: a.status === 'Approved',
+      });
+      sheets.push({
+        name: `By ${dim.toLowerCase()}`.slice(0, 31), title: `Submissions by ${dim.toLowerCase()}`, subtitle: rangeText,
+        columns: [{ header: dim }, { header: 'Submissions', format: 'integer' as const }, { header: 'Approved', format: 'integer' as const }],
+        rows: buildBreakdown(scoped.map(fromApp), dim).map(r => [r.title ?? r.label, r.total, r.part]),
+      });
+    }
+    if (exportParts.has('overTime')) {
+      const over = buildSeries(scoped.map(a => ({ at: a.createdAt })), range);
+      sheets.push({
+        name: 'Over time', title: `Submissions by ${over.unit}`, subtitle: rangeText,
+        columns: [{ header: over.unit === 'month' ? 'Month' : 'Period' }, { header: 'Submissions', format: 'integer' as const }],
+        rows: over.buckets.map(b => [b.label, b.count]),
+      });
+    }
+    if (exportParts.has('sfag') && sfagLevels) {
+      sheets.push({
+        name: 'SFAG grant levels', title: 'SFAG grant levels', subtitle: rangeText,
+        columns: [{ header: 'Grant' }, { header: 'Scholars', format: 'integer' as const }],
+        rows: [...sfagLevels.levels.map(l => [`${l.pct}%`, l.n] as [string, number]), ...(sfagLevels.unset ? [['Not set yet', sfagLevels.unset] as [string, number]] : [])],
+      });
+    }
+    setExportOpen(false);
+    if (sheets.length) downloadExcel(`scholarship-statistics_${dayKey(range.start)}_to_${dayKey(last)}`, sheets);
   };
+  const exportCsv = () => setExportOpen(true);
 
   const toggleSort = (key: SortKey) => {
     setSort(prev => (prev.key === key
@@ -611,7 +665,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
   const header = (
     <PageHeader
       title="Statistics"
-      meta={!firstLoad && <span className="text-xs text-ink-subtle">Showing {periodName(rangeKey) ? `${periodName(rangeKey)} (${rangeText})` : rangeText}</span>}
+      description={firstLoad ? undefined : `Showing ${periodName(rangeKey) ? `${periodName(rangeKey)} (${rangeText})` : rangeText}`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Select value={rangeKey} onChange={v => changeRange(v as RangeKey)} className="w-44" label="Date range" disabled={firstLoad}>
@@ -650,8 +704,8 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
   if (firstLoad) {
     body = (
       <div role="status" aria-label="Loading statistics" className="space-y-6">
-        <KpiGrid>
-          {['Submissions', 'Decided', 'Approval rate', 'Avg. time to decision'].map(label => (
+        <KpiGrid columns={3}>
+          {['Submissions', 'Decided', 'Approval rate'].map(label => (
             <KpiCard key={label} label={label} value="" loading />
           ))}
         </KpiGrid>
@@ -680,7 +734,7 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
     const maxCount = Math.max(...series.buckets.map(b => b.count));
     body = (
       <>
-        <KpiGrid>
+        <KpiGrid columns={3}>
           <KpiCard
             label="Submissions"
             value={scoped.length}
@@ -702,7 +756,6 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
               </>
             )}
           />
-          <KpiCard label="Avg. time to decision" value={formatDays(avgDecision)} />
         </KpiGrid>
 
         {sfagLevels && (
@@ -901,7 +954,6 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
                   numeric
                   className="w-24"
                 />
-                <SortTh label="Avg. decision" sortKey="avgDecisionDays" sort={sort} onSort={toggleSort} numeric className="w-32" />
                 <SortTh label="Avg. revisions" sortKey="avgRevisionCycles" sort={sort} onSort={toggleSort} numeric className="w-32" />
                 <SortTh label="Avg. GPA" sortKey="avgGpa" sort={sort} onSort={toggleSort} numeric className="w-24" hint="Applicants' cumulative GPA from their profiles (incoming freshmen have none)." />
               </tr>
@@ -917,7 +969,6 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
                   <Td numeric><Count n={r.approved} /></Td>
                   <Td numeric><Count n={r.rejected} /></Td>
                   <Td numeric><Count n={r.pending} /></Td>
-                  <Td numeric>{formatDays(r.avgDecisionDays)}</Td>
                   <Td numeric>{formatCycles(r.avgRevisionCycles)}</Td>
                   <Td numeric>{r.avgGpa === null ? '—' : r.avgGpa.toFixed(2)}</Td>
                 </Tr>
@@ -938,6 +989,32 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
         </Alert>
       )}
       {body}
+      {exportOpen && (() => {
+        const options: { key: ExportPart; label: string; description?: string }[] = [
+          { key: 'summary', label: 'Summary', description: 'Submissions, decisions, statuses and approval rate' },
+          { key: 'scholarships', label: 'By scholarship', description: 'The table on this page' },
+          { key: 'by:College', label: 'By college' },
+          { key: 'by:Year level', label: 'By year level' },
+          { key: 'by:Program', label: 'By program' },
+          { key: 'by:Scholarship', label: 'Submissions by scholarship (breakdown)' },
+          { key: 'overTime', label: 'Over time', description: 'Submissions by day, week or month' },
+          ...(sfagLevels ? [{ key: 'sfag' as ExportPart, label: 'SFAG grant levels' }] : []),
+        ];
+        const toggle = (key: ExportPart, on: boolean) => setExportParts(prev => { const next = new Set(prev); if (on) next.add(key); else next.delete(key); return next; });
+        return (
+          <Modal
+            title="Export to Excel"
+            description={`What to include, one sheet each. ${rangeText}.`}
+            onClose={() => setExportOpen(false)}
+            size="sm"
+            footer={<><Button onClick={() => setExportOpen(false)}>Cancel</Button><Button variant="primary" icon={Download} onClick={runExport} disabled={exportParts.size === 0}>Export</Button></>}
+          >
+            <div className="space-y-3">
+              {options.map(o => <Checkbox key={o.key} checked={exportParts.has(o.key)} onChange={on => toggle(o.key, on)} label={o.label} description={o.description} />)}
+            </div>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

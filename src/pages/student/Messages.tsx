@@ -3,7 +3,7 @@ import { useAuth } from '@clerk/react';
 import { ArrowLeft, MessageSquarePlus, RefreshCw, Search, X } from 'lucide-react';
 import { Application } from '../../types';
 import Conversation from '../../components/messages/Conversation';
-import { ChatMessage, MESSAGES_API_BASE, MESSAGES_READ_EVENT, MessageOffice, postMessage } from '../../utils/messages';
+import { ChatMessage, MESSAGES_API_BASE, MESSAGES_READ_EVENT, MessageOffice, postStudentMessage } from '../../utils/messages';
 
 // The student's conversations with the scholarship offices (backend
 // routes/messages.js): the AdSO, plus each office they applied to (POLCA,
@@ -107,10 +107,64 @@ export default function Messages({ applications: _applications }: { applications
   }, [load, loadOffices]);
 
   const send = async (data: { body: string; files: File[]; applicationId?: string }) => {
-    const message = await postMessage(`/api/messages/mine?office=${encodeURIComponent(office)}`, getToken, data);
-    setMessages(prev => [...(prev ?? []), message]);
-    setOffices(prev => prev.map(o => (o.code === office ? { ...o, started: true, last: message } : o)));
+    // The message, then the office's automatic reply if one came back.
+    const sent = await postStudentMessage(`/api/messages/mine?office=${encodeURIComponent(office)}`, getToken, data);
+    setMessages(prev => [...(prev ?? []), ...sent]);
+    setOffices(prev => prev.map(o => (o.code === office ? { ...o, started: true, last: sent[sent.length - 1] } : o)));
   };
+
+  // The office's quick questions (automatic replies): tap one, get its
+  // saved answer at once.
+  const [questions, setQuestions] = useState<{ _id: string; question: string }[]>([]);
+  const [asking, setAsking] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setQuestions([]);
+    (async () => {
+      try {
+        const res = await fetch(`${MESSAGES_API_BASE}/api/messages/mine/quick-questions?office=${encodeURIComponent(office)}`, { headers: await headers() });
+        if (res.ok && live) setQuestions((await res.json()).questions ?? []);
+      } catch {
+        // no quick questions
+      }
+    })();
+    return () => { live = false; };
+  }, [office, headers]);
+  const ask = async (id: string) => {
+    if (asking) return;
+    setAsking(id);
+    try {
+      const res = await fetch(`${MESSAGES_API_BASE}/api/messages/mine/quick-questions/${id}`, {
+        method: 'POST',
+        headers: { ...(await headers()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ office }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Couldn’t send the question.');
+      const sent: ChatMessage[] = body.messages ?? [];
+      setMessages(prev => [...(prev ?? []), ...sent]);
+      setOffices(prev => prev.map(o => (o.code === office ? { ...o, started: true, last: sent[sent.length - 1] ?? o.last } : o)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Couldn’t send the question.');
+    } finally {
+      setAsking(null);
+    }
+  };
+  const quickQuestions = questions.length ? () => (
+    <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Quick questions">
+      {questions.map(q => (
+        <button
+          key={q._id}
+          type="button"
+          onClick={() => ask(q._id)}
+          disabled={!!asking}
+          className="shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-brand-green ring-1 ring-brand-green/30 hover:bg-brand-green/5 disabled:opacity-60"
+        >
+          {asking === q._id ? 'Asking…' : q.question}
+        </button>
+      ))}
+    </div>
+  ) : undefined;
 
   const current = offices.find(o => o.code === office) ?? ADSO_FALLBACK;
   // AdSO first, then the most recent conversations.
@@ -235,7 +289,8 @@ export default function Messages({ applications: _applications }: { applications
               unsendPath="/api/messages/mine"
               getToken={getToken}
               onSend={send}
-              emptyText={`No messages yet. Say hello to the ${current.code === ADSO ? 'AdSO' : current.short} below.`}
+              composerTop={quickQuestions}
+              emptyText={`No messages yet. Say hello to the ${current.code === ADSO ? 'AdSO' : current.short} below${questions.length ? ', or tap a quick question' : ''}.`}
               placeholder={`Message ${current.short}…`}
             />
           )}

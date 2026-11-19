@@ -186,8 +186,15 @@ export function setSfagOpenAllYear(value: boolean): void {
 export const isSfagOpenAllYear = () => sfagOpenAllYear;
 // Duty hours are for SFAG scholars only (the backend's requireSfagScholar
 // also counts a renewal, which needs an approved application anyway).
-export function isSfagScholar(applications: { scholarshipId: string; status: string }[]): boolean {
-  return applications.some(app => app.scholarshipId === SFAG_ID && app.status === 'Approved');
+// A scholarship the student holds now: approved and not ended (graduated,
+// stopped, declined or not renewed). An ended one leaves the student a
+// regular student again: no Renewal, no Duty Hours.
+export function isCurrentScholarship(app: { status: string; endedAt?: string | null }): boolean {
+  return app.status === 'Approved' && !app.endedAt;
+}
+
+export function isSfagScholar(applications: { scholarshipId: string; status: string; endedAt?: string | null }[]): boolean {
+  return applications.some(app => app.scholarshipId === SFAG_ID && isCurrentScholarship(app));
 }
 
 export interface HeldScholarship { scholarshipId: string; scholarshipName: string }

@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Award, Clock, GraduationCap, Hourglass, Megaphone, RefreshCw } from 'lucide-react';
+import { Award, ChevronRight, Clock, GraduationCap, Hourglass, Megaphone, RefreshCw } from 'lucide-react';
 import { Scholarship, ScholarshipOverride } from '../../types';
 import { acceptsOnlineApplications, applyScholarshipOverrides, scholarshipDefaults } from '../../data/scholarships';
 import { DutySummary } from '../../utils/dutyHours';
 import { API_BASE_URL, AdminApplication, AppStatus, applicantName, authHeaders, titleCaseName } from './adminData';
 import { relativeTime } from './history';
 import { MainView } from './AdminLayout';
-import { Avatar, Badge, Button, Card, EmptyState, KpiCard, KpiGrid, Skeleton, Tone } from './AdminUI';
+import { Avatar, Badge, Button, Card, EmptyState, Skeleton, Tone } from './AdminUI';
 
 // The admin console's home: the signed-in office at a glance. Built from what the console already loads (applications) plus the
 // office's scholarships, renewal periods and, for the AdSO, this term's
@@ -142,22 +142,35 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
         </div>
       </div>
 
-      <KpiGrid columns={4}>
-        {onlyDirect ? (
-          <KpiCard label="Current scholars" value={counts.scholars} icon={GraduationCap} onClick={() => onNavigate('lifecycle')} loading={isLoading} />
-        ) : (
-          <>
-            <KpiCard label="To review" value={counts.waiting} icon={Hourglass} tone={counts.waiting ? 'warning' : 'neutral'} onClick={() => onOpenStatus('Under Evaluation')} loading={isLoading} />
-            <KpiCard label="Waiting on students" value={counts.revision} icon={Clock} onClick={() => onOpenStatus('Needs Revision')} loading={isLoading} />
-            <KpiCard label="Current scholars" value={counts.scholars} icon={GraduationCap} tone="success" onClick={() => onNavigate('lifecycle')} loading={isLoading} />
-          </>
-        )}
-        {hasRenewals ? (
-          <KpiCard label="Renewals to decide" value={renewalsWaiting} icon={RefreshCw} tone={renewalsWaiting ? 'warning' : 'neutral'} onClick={() => onNavigate('renewals')} loading={!periods} hint={openPeriods.length ? `${plural(openPeriods.length, 'period')} open` : 'No period open'} />
-        ) : isAdso ? null : (
-          <KpiCard label="Scholarships" value={scholarships?.length ?? 0} icon={Award} onClick={() => onNavigate('scholarships')} loading={!scholarships} />
-        )}
-      </KpiGrid>
+      {/* What needs doing, as links: no count cards here, the numbers
+          live on Statistics (panel, Nov 2026). */}
+      {!isLoading && (() => {
+        const todos = [
+          !onlyDirect && counts.waiting > 0 && { key: 'review', icon: Hourglass, text: `${plural(counts.waiting, 'application')} to review`, go: () => onOpenStatus('Under Evaluation') },
+          !onlyDirect && counts.revision > 0 && { key: 'revision', icon: Clock, text: `${plural(counts.revision, 'application')} waiting on students`, go: () => onOpenStatus('Needs Revision') },
+          hasRenewals && renewalsWaiting > 0 && { key: 'renewals', icon: RefreshCw, text: `${plural(renewalsWaiting, 'renewal')} to decide`, go: () => onNavigate('renewals') },
+          dutyStats && dutyStats.unassigned > 0 && { key: 'duty', icon: GraduationCap, text: `${plural(dutyStats.unassigned, 'SFAG scholar')} without a duty office`, go: () => onNavigate('dutyHours') },
+        ].filter(Boolean) as { key: string; icon: React.ElementType; text: string; go: () => void }[];
+        return (
+          <Card title="To do" flush>
+            {todos.length === 0 ? (
+              <p className="px-5 py-4 text-sm text-ink-muted">Nothing is waiting for you.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {todos.map(t => (
+                  <li key={t.key}>
+                    <button type="button" onClick={t.go} className="flex w-full items-center gap-3 px-5 py-3 text-left text-sm text-ink hover:bg-surface-muted focus:outline-hidden focus-visible:bg-surface-muted">
+                      <t.icon className="size-4 shrink-0 text-ink-subtle" aria-hidden />
+                      <span className="min-w-0 flex-1">{t.text}</span>
+                      <ChevronRight className="size-4 shrink-0 text-ink-subtle" aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        );
+      })()}
 
       <div className="grid gap-6 lg:grid-cols-5">
         <Card title="Recent activity" className="lg:col-span-3" flush>
@@ -223,31 +236,6 @@ export default function AdminHome({ applications, isLoading, getToken, isAdso, a
         </Card>
       </div>
 
-      {dutyStats && (
-          <Card title="Duty hours this semester" actions={<Button size="sm" variant="ghost" onClick={() => onNavigate('dutyHours')}>Open</Button>}>
-            <dl className="grid grid-cols-2 gap-4">
-              {([
-                ['SFAG scholars', dutyStats.total, 'text-ink'],
-                ['Hours complete', dutyStats.done, 'text-success-fg'],
-                ['No office yet', dutyStats.unassigned, dutyStats.unassigned ? 'text-warning-fg' : 'text-ink'],
-                ['Past the deadline', dutyStats.overdue, dutyStats.overdue ? 'text-danger-fg' : 'text-ink'],
-              ] as const).map(([label, value, color]) => (
-                <div key={label} className="rounded-control bg-surface-muted p-3">
-                  <dt className="text-xs text-ink-muted">{label}</dt>
-                  <dd className={`text-xl font-semibold tabular-nums ${color}`}>{value}</dd>
-                </div>
-              ))}
-            </dl>
-            {dutyStats.total > 0 && (
-              <div className="mt-4">
-                <div className="h-2 overflow-hidden rounded-full bg-surface-muted" role="img" aria-label={`${dutyStats.done} of ${dutyStats.total} done`}>
-                  <div className="h-full rounded-full bg-success-solid" style={{ width: `${Math.round((dutyStats.done / dutyStats.total) * 100)}%` }} />
-                </div>
-                <p className="mt-1.5 text-xs text-ink-muted">{Math.round((dutyStats.done / dutyStats.total) * 100)}% have finished their hours</p>
-              </div>
-            )}
-          </Card>
-        )}
     </div>
   );
 }

@@ -29,6 +29,8 @@ export interface ChatMessage {
   readAt: string | null;
   // Unsent by its writer (within 24 hours): no text or files left.
   unsentAt?: string | null;
+  // Sent by the office's automatic replies (welcome, away, quick question).
+  auto?: 'welcome' | 'away' | 'faq' | null;
   createdAt: string;
 }
 
@@ -104,6 +106,20 @@ export async function postMessage(url: string, getToken: GetToken, data: { body:
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || "Couldn't send the message.");
   return body.message;
+}
+
+// A student's message to an office, with the office's automatic reply if
+// one was sent (welcome or away).
+export async function postStudentMessage(url: string, getToken: GetToken, data: { body: string; files: File[]; applicationId?: string }): Promise<ChatMessage[]> {
+  const fd = new FormData();
+  fd.append('body', data.body);
+  if (data.applicationId) fd.append('applicationId', data.applicationId);
+  data.files.forEach(f => fd.append('files', f));
+  const token = await getToken();
+  const res = await fetch(`${API_BASE_URL}${url}`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : undefined, body: fd });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "Couldn't send the message.");
+  return [body.message, ...(body.autoReplies ?? [])];
 }
 
 export { API_BASE_URL as MESSAGES_API_BASE };

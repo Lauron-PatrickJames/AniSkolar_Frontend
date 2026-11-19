@@ -209,7 +209,7 @@ test.describe('FSE report', () => {
     await signIn(page, [], fetched);
     await expect(page.getByText('Institutional FSE', { exact: true })).toBeVisible();
     const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Export year to Excel' }).click();
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
     expect((await download).suggestedFilename()).toMatch(/.xlsx$/);
     // The other semester's report was loaded for the workbook.
     expect(fetched).toContain('/api/fse/r3');

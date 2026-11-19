@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { findExplicitWords } from '../../utils/profanity';
-import { Ban, FileText, Loader2, Paperclip, Send, Undo2, X } from 'lucide-react';
+import { Ban, FileText, Loader2, Paperclip, Send, Trash2, Undo2, X } from 'lucide-react';
 import {
   ATTACHMENT_TYPES, ChatMessage, MAX_ATTACHMENTS, MAX_ATTACHMENT_SIZE, MAX_MESSAGE_LENGTH, MessageAttachment, canUnsend, openAttachment, unsendMessage, useAttachmentUrl
 } from '../../utils/messages';
@@ -92,7 +92,7 @@ export default function Conversation({ messages: given, viewer, filesPath, getTo
 
   const unsend = async (m: ChatMessage, ask = true) => {
     if (!unsendPath || unsending) return;
-    if (ask && !window.confirm('Unsend this message? Its text and files are removed for both of you.')) return;
+    if (ask && !window.confirm('Delete this message? Its text and files are removed for both of you.')) return;
     setUnsending(m._id);
     setError('');
     setNotice('');
@@ -102,7 +102,7 @@ export default function Conversation({ messages: given, viewer, filesPath, getTo
       if (undoFor === m._id) setUndoFor(null);
       setNotice(emailSent ? 'Unsent. Its email alert had already gone out, so they may have seen the text there.' : 'Message unsent.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't unsend the message.");
+      setError(err instanceof Error ? err.message : "Couldn't delete the message.");
     } finally {
       setUnsending(null);
     }
@@ -146,13 +146,14 @@ export default function Conversation({ messages: given, viewer, filesPath, getTo
                 <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                   <p className="inline-flex items-center gap-1.5 rounded-2xl px-3.5 py-2 text-xs italic text-slate-500 ring-1 ring-slate-200">
                     <Ban className="h-3.5 w-3.5" aria-hidden />
-                    {mine ? 'You unsent a message' : `${m.authorName || (m.from === 'student' ? 'The student' : 'The office')} unsent a message`} · {timeLabel(m.createdAt)}
+                    {mine ? 'You deleted a message' : `${m.authorName || (m.from === 'student' ? 'The student' : 'The office')} deleted a message`} · {timeLabel(m.createdAt)}
                   </p>
                 </div>
               ) : (
               <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 py-2.5 text-sm shadow-xs ${mine ? 'bg-brand-green text-white rounded-br-md' : 'bg-white text-slate-800 ring-1 ring-slate-200 rounded-bl-md'}`}>
                   {!mine && <p className="mb-0.5 text-[11px] font-bold text-slate-500">{m.authorName || (m.from === 'adso' ? 'Admissions and Scholarship Office' : m.from === 'office' ? 'Office' : 'Student')}</p>}
+                  {mine && m.auto && <p className="mb-0.5 text-[11px] font-bold text-white/80">Automatic reply</p>}
                   {m.applicationRef && (
                     <p className={`mb-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${mine ? 'bg-white/20' : 'bg-slate-100 text-slate-600'}`}>About {m.applicationRef}</p>
                   )}
@@ -164,8 +165,9 @@ export default function Conversation({ messages: given, viewer, filesPath, getTo
                   )}
                   <p className={`mt-1 text-right text-[10px] ${mine ? 'text-white/75' : 'text-slate-400'}`}>
                     {mine && unsendPath && canUnsend(m) && (
-                      <button type="button" onClick={() => unsend(m)} disabled={!!unsending} className="mr-1.5 font-semibold underline-offset-2 hover:underline disabled:opacity-60" aria-label="Unsend this message">
-                        {unsending === m._id ? 'Unsending…' : 'Unsend'}
+                      // Your own message, within 24 hours of sending it.
+                      <button type="button" onClick={() => unsend(m)} disabled={!!unsending} title="Delete for both of you (within 24 hours of sending)" className="mr-1.5 inline-flex items-center gap-0.5 font-semibold underline-offset-2 hover:underline disabled:opacity-60" aria-label="Delete this message">
+                        <Trash2 className="h-3 w-3" aria-hidden />{unsending === m._id ? 'Deleting…' : 'Delete'}
                       </button>
                     )}
                     {timeLabel(m.createdAt)}{mine && m.readAt ? ' · Seen' : ''}
@@ -211,7 +213,13 @@ export default function Conversation({ messages: given, viewer, filesPath, getTo
         <textarea
           value={body}
           onChange={e => setBody(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } }}
+          // Enter sends and Shift+Enter starts a new line, like most chats;
+          // on phones Enter is a new line and the Send button sends.
+          onKeyDown={e => {
+            if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+            const touch = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+            if (e.ctrlKey || e.metaKey || (!e.shiftKey && !touch)) { e.preventDefault(); send(); }
+          }}
           maxLength={MAX_MESSAGE_LENGTH}
           rows={2}
           placeholder={placeholder || 'Write a message…'}
@@ -236,7 +244,7 @@ export default function Conversation({ messages: given, viewer, filesPath, getTo
           <button
             type="submit"
             disabled={sending || explicit.length > 0}
-            title="Send (Ctrl+Enter)"
+            title="Send (Enter). Shift+Enter for a new line."
             className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-brand-green px-3.5 py-2 text-xs font-bold text-white hover:bg-brand-green-dark disabled:opacity-60"
           >
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send

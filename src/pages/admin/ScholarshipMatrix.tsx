@@ -124,7 +124,7 @@ export default function ScholarshipMatrix({ scholarships, onPatch, onOpen, readO
   // table scrolls sideways.
   const section = (title: string) => (
     <tr>
-      <th scope="colgroup" className={`${STICKY} border-b border-line bg-surface-muted px-3 py-2 text-xs font-medium text-ink-muted`}>{title}</th>
+      <th scope="colgroup" className={`${STICKY} border-b border-line bg-surface-muted px-3 py-2 text-left text-xs font-semibold text-ink`}>{title}</th>
       <td colSpan={scholarships.length} className="border-b border-line bg-surface-muted" />
     </tr>
   );
@@ -142,22 +142,27 @@ export default function ScholarshipMatrix({ scholarships, onPatch, onOpen, readO
         <table className="border-separate border-spacing-0 text-sm" aria-label="Scholarship requirements matrix">
           <thead>
             <tr>
-              <th scope="col" className={`${STICKY} z-20 w-60 min-w-60 border-b border-line px-3 py-2 text-xs font-medium text-ink-muted`}>Requirement</th>
-              {scholarships.map(s => (
-                <th key={s.id} scope="col" className="w-32 min-w-32 border-b border-line px-2 py-2 align-bottom text-xs font-medium">
-                  <button type="button" onClick={() => onOpen(s.id)} title={s.name} className="line-clamp-3 text-left text-ink hover:text-accent">
-                    {s.name}
-                  </button>
-                  {!acceptsOnlineApplications(s) && <span className="mt-0.5 block font-normal text-ink-subtle">Through the {handlingOffice(s)}</span>}
-                </th>
-              ))}
+              <th scope="col" className={`${STICKY} z-20 w-64 min-w-64 border-b border-line px-3 py-2.5 align-bottom text-xs font-medium text-ink-muted`}>Requirement</th>
+              {/* The short name (SFAG, EBPSP…) when it has one, whole and
+                  centred over its column; the full name on hover. */}
+              {scholarships.map(s => {
+                const short = /\(([^)]+)\)\s*$/.exec(s.name)?.[1];
+                return (
+                  <th key={s.id} scope="col" className="w-36 min-w-36 border-b border-line px-2 py-2.5 text-center align-bottom text-xs font-medium">
+                    <button type="button" onClick={() => onOpen(s.id)} title={s.name} className="w-full text-balance leading-snug text-ink hover:text-accent">
+                      {short ?? s.name}
+                    </button>
+                    {!acceptsOnlineApplications(s) && <span className="mt-1 block text-[11px] font-normal leading-tight text-ink-subtle">Through the {handlingOffice(s)}</span>}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {section('Eligibility')}
             {RULES.map(def => (
               <tr key={def.key}>
-                <th scope="row" className={`${STICKY} border-b border-line px-3 py-1.5 font-normal text-ink`}>{def.label}</th>
+                <th scope="row" className={`${STICKY} border-b border-line px-3 py-2 text-left font-normal leading-snug text-ink`}>{def.label}</th>
                 {scholarships.map(s => {
                   const rules = s.rules ?? {};
                   const locked = readOnly || lockedRules(s.applicationFormType).includes(def.key);
@@ -199,7 +204,7 @@ export default function ScholarshipMatrix({ scholarships, onPatch, onOpen, readO
               </tr>
             ))}
             <tr>
-              <th scope="row" className={`${STICKY} border-b border-line px-3 py-1.5 font-normal text-ink`}>Other conditions</th>
+              <th scope="row" className={`${STICKY} border-b border-line px-3 py-2 text-left font-normal leading-snug text-ink`}>Other conditions</th>
               {scholarships.map(s => {
                 const lines = s.customEligibility ?? [];
                 return (
@@ -216,7 +221,7 @@ export default function ScholarshipMatrix({ scholarships, onPatch, onOpen, readO
             {section('Documents to upload')}
             {docRows.map(row => (
               <tr key={row.key}>
-                <th scope="row" title={row.title} className={`${STICKY} max-w-60 truncate border-b border-line px-3 py-1.5 font-normal text-ink`}>
+                <th scope="row" title={row.title} className={`${STICKY} max-w-64 border-b border-line px-3 py-2 text-left font-normal leading-snug text-ink`}>
                   {row.label}
                   {row.key.startsWith('custom:') && <span className="ml-1 text-xs text-ink-subtle">(custom)</span>}
                 </th>

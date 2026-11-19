@@ -472,6 +472,19 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
     });
   }, [rows, filter, search, sort]);
 
+  // The office's own scholarships first, apart from the ones other offices
+  // handle (AdSO, panel Nov 2026: "the ones I handle"). One group when
+  // there's nothing else.
+  const groups = useMemo(() => {
+    const own = visible.filter(r => officeOf(r.scholarship) === ownOffice);
+    const others = visible.filter(r => officeOf(r.scholarship) !== ownOffice);
+    if (!own.length || !others.length) return [{ key: 'all', label: '', rows: visible }];
+    return [
+      { key: 'own', label: `Handled by ${ownOffice === 'LSO' ? 'the AdSO (you)' : 'your office'}`, rows: own },
+      { key: 'others', label: 'Handled by other offices', rows: others },
+    ];
+  }, [visible, ownOffice]);
+
   const firstLoad = isLoading && rows.length === 0;
   const failedEmpty = !!loadError && rows.length === 0 && !isLoading;
   const filtersActive = filter !== 'all' || search.trim() !== '';
@@ -631,8 +644,16 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
                 <Th sticky={false} className="w-16"><span className="sr-only">Actions</span></Th>
               </tr>
             </thead>
-            <tbody>
-              {visible.map(row => {
+            {groups.map(group => (
+            <tbody key={group.key}>
+              {group.label && (
+                <tr>
+                  <th colSpan={5} scope="colgroup" className="bg-surface-muted px-4 py-2 text-left text-xs font-semibold text-ink-muted">
+                    {group.label} <span className="font-normal text-ink-subtle tabular-nums">· {group.rows.length}</span>
+                  </th>
+                </tr>
+              )}
+              {group.rows.map(row => {
                 const s = row.scholarship;
                 const office = officeOf(s);
                 const dim = s.status === 'Closed' ? 'opacity-55' : '';
@@ -665,10 +686,13 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
                 );
               })}
             </tbody>
+            ))}
           </Table>
           </div>
           <MobileList>
-            {visible.map(row => {
+            {groups.flatMap(group => [
+              ...(group.label ? [<li key={`h-${group.key}`} className="bg-surface-muted px-4 py-2 text-xs font-semibold text-ink-muted">{group.label} · {group.rows.length}</li>] : []),
+              ...group.rows.map(row => {
               const s = row.scholarship;
               return (
                 <li key={s.id} className={`flex items-center gap-2 px-4 py-3 ${s.status === 'Closed' ? 'opacity-70' : ''}`}>
@@ -680,7 +704,8 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
                   <DropdownMenu label={`Actions for ${s.name}`} items={menuItems(row)} />
                 </li>
               );
-            })}
+            }),
+            ])}
           </MobileList>
           </>
         )}

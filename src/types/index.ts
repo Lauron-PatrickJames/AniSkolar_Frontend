@@ -613,11 +613,13 @@ export interface Application {
   status: 'Under Evaluation' | 'Approved' | 'Rejected' | 'Needs Revision';
   reviewNote?: string;
   submittedAt: string;
+  // When the office last decided (approved, rejected, asked for changes).
+  reviewedAt?: string | null;
   referenceCode?: string;
   // An approved scholarship that ended: graduated, stopped, or declined by
   // the student for another one.
   endedAt?: string | null;
-  endReason?: 'Graduated' | 'Stopped' | 'Declined' | null;
+  endReason?: 'Graduated' | 'Stopped' | 'Declined' | 'Not Renewed' | null;
   // Added by the office without an application (the SDO's tryouts).
   awardedDirectly?: boolean;
   // SFAG: the tuition discount applied for, and the one granted.

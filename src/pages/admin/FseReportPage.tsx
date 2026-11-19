@@ -148,7 +148,7 @@ export default function FseReportPage({ getToken }: { getToken: () => Promise<st
         title="Full Scholarship Equivalent"
         actions={
           <>
-            {report && <Button icon={Download} onClick={exportReport} loading={exporting}>Export year to Excel</Button>}
+            {report && <Button icon={Download} onClick={exportReport} loading={exporting}>Export</Button>}
             <Button variant="primary" icon={Upload} onClick={() => setUploading(true)}>Generate report</Button>
             {report && (
               <DropdownMenu

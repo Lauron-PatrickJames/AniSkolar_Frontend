@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, Plus, Trash2, RotateCcw, Info, AlertCircle, Copy, Check, Award, CheckCircle, ChevronRight, Loader2, Save } from 'lucide-react';
+import { Calculator, Plus, Trash2, RotateCcw, Info, AlertCircle, Copy, Check, Award, CheckCircle, ChevronRight, Loader2, Save, Sparkles, BookOpen } from 'lucide-react';
 import { Application, ProfileChanges, SaveResult, Scholarship, StudentProfile } from '../../types';
 import { acceptsOnlineApplications } from '../../data/scholarships';
 import { GpaCheck, checkGpaRequirement, describeGpaRequirement, isContinuingStudent, toGpaNumber } from '../../utils/eligibility';
@@ -90,6 +90,27 @@ function GpaCheckPill({ status }: { status: GpaCheck['status'] }) {
     </span>
   );
 }
+
+// DLSU-D's grading system for bachelor's degrees, from the student portal's
+// Grading System Reference (myDLSU-D → Grades): each percentage range and
+// its grade point. Special marks (incomplete, dropped, exempted…) have no
+// grade point and don't count toward the GPA.
+const GRADING_SYSTEM: { grade: string; range: string; meaning: string }[] = [
+  { grade: '4.00', range: '98–100', meaning: 'Passed' },
+  { grade: '3.75', range: '95–97', meaning: 'Passed' },
+  { grade: '3.50', range: '92–94', meaning: 'Passed' },
+  { grade: '3.25', range: '89–91', meaning: 'Passed' },
+  { grade: '3.00', range: '86–88', meaning: 'Passed' },
+  { grade: '2.75', range: '83–85', meaning: 'Passed' },
+  { grade: '2.50', range: '80–82', meaning: 'Passed' },
+  { grade: '2.25', range: '77–79', meaning: 'Passed' },
+  { grade: '2.00', range: '74–76', meaning: 'Passed' },
+  { grade: '1.75', range: '71–73', meaning: 'Passed' },
+  { grade: '1.50', range: '68–70', meaning: 'Passed' },
+  { grade: '1.25', range: '64–67', meaning: 'Passed' },
+  { grade: '1.00', range: '60–63', meaning: 'Passed' },
+  { grade: '0.00', range: 'Below 60', meaning: 'Failed' },
+];
 
 interface GPACalculatorProps {
   student: StudentProfile;
@@ -212,6 +233,13 @@ export default function GPACalculator({ student, scholarships, applications, onU
       }))
       .sort((a, b) => Number(b.held) - Number(a.held));
   }, [scholarships, heldIds, continuing, includedCount, gpa, lowestGrade]);
+
+  // Scholarships these grades meet that the student doesn't hold and can
+  // apply for or qualify for: the suggestions.
+  const suggested = useMemo(
+    () => scholarshipChecks.filter(c => !c.held && c.check.status === 'meets').slice(0, 5),
+    [scholarshipChecks]
+  );
 
   // Saving the computed GPA to the profile, which Explore and the
   // dashboard check scholarships against.
@@ -447,6 +475,38 @@ export default function GPACalculator({ student, scholarships, applications, onU
         </div>
       </div>
 
+      {/* Suggested: scholarships this GPA meets that the student can still go for. */}
+      {includedCount > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-100 space-y-1">
+            <h3 className="flex items-center gap-2 font-display font-bold text-base text-slate-900">
+              <Sparkles className="w-4 h-4 text-brand-green" aria-hidden /> Suggested scholarships
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed">Based on a GPA of {gpa.toFixed(2)}{lowestGrade !== null ? ` and a lowest grade of ${lowestGrade.toFixed(2)}` : ''}.</p>
+          </div>
+          {suggested.length === 0 ? (
+            <p className="px-6 py-5 text-xs text-slate-500 leading-relaxed">
+              None of the scholarships with a GPA requirement fits these grades yet. Scholarships without a GPA requirement are in Explore Grants.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {suggested.map(({ scholarship, req }) => (
+                <li key={scholarship.id}>
+                  <button type="button" onClick={() => onViewScholarship(scholarship.id)} className="w-full px-6 py-4 flex items-center gap-3 text-left hover:bg-slate-50 focus:outline-hidden focus-visible:bg-slate-50">
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold text-sm text-slate-800">{scholarship.name}</span>
+                      <span className="block text-xs text-slate-500">{describeGpaRequirement(req)}</span>
+                    </span>
+                    <span className="shrink-0 text-xs font-bold text-brand-green">You meet it</span>
+                    <ChevronRight className="w-4 h-4 shrink-0 text-slate-400" aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Scholarship GPA check */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-100 space-y-1">
@@ -521,6 +581,36 @@ export default function GPACalculator({ student, scholarships, applications, onU
               Use {roundedGpa.toFixed(2)} as my GPA
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* The grading basis the grades above are on. */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-100 space-y-1">
+          <h3 className="flex items-center gap-2 font-display font-bold text-base text-slate-900">
+            <BookOpen className="w-4 h-4 text-slate-500" aria-hidden /> Grading system
+          </h3>
+          <p className="text-xs text-slate-500 leading-relaxed">Enter each grade as its grade point (bachelor’s degrees, from the myDLSU-D Grading System Reference). Marks like incomplete, dropped or exempted have no grade point, so leave those courses out.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-slate-500">
+                <th className="px-6 py-2.5 font-semibold">Grade point</th>
+                <th className="px-6 py-2.5 font-semibold">Percentage</th>
+                <th className="px-6 py-2.5 font-semibold">Remark</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {GRADING_SYSTEM.map(row => (
+                <tr key={row.grade}>
+                  <td className="px-6 py-2 font-mono font-semibold text-slate-800 tabular-nums">{row.grade}</td>
+                  <td className="px-6 py-2 text-slate-600 tabular-nums">{row.range}</td>
+                  <td className="px-6 py-2 text-slate-600">{row.meaning}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 

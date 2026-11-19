@@ -5,7 +5,7 @@ import { MESSAGES_API_BASE, MESSAGES_READ_EVENT } from '../utils/messages';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { StudentProfile, Application, Announcement } from '../types';
-import { HeldScholarship, isSfagScholar } from '../utils/eligibility';
+import { HeldScholarship, isCurrentScholarship, isSfagScholar } from '../utils/eligibility';
 import { motion } from 'motion/react';
 
 interface StudentLayoutProps {
@@ -60,7 +60,7 @@ export default function StudentLayout({
         isOpen={isSidebarOpen}
         onClose={closeSidebar}
         onLogout={onLogout}
-        isScholar={applications.some(app => app.status === 'Approved')}
+        isScholar={applications.some(isCurrentScholarship)}
         isSfagScholar={isSfagScholar(applications)}
         heldScholarships={heldScholarships}
         unreadMessages={unreadMessages}

@@ -49,8 +49,9 @@ export default function Sidebar({
     ...(holds ? [{
       label: 'Scholarship',
       chip: !choosing ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-brand-green ring-1 ring-emerald-100" title={heldScholarships[0].scholarshipName}>
-          <ShieldCheck className="h-3 w-3" aria-hidden />{short(heldScholarships[0].scholarshipName)}
+        // Slim and one line: a long name is cut, the full one on hover.
+        <span className="inline-flex min-w-0 max-w-[60%] items-center gap-1 rounded-full bg-emerald-50 px-1.5 text-[11px] font-semibold leading-[18px] text-brand-green" title={heldScholarships[0].scholarshipName}>
+          <ShieldCheck className="size-3 shrink-0" aria-hidden /><span className="truncate">{short(heldScholarships[0].scholarshipName)}</span>
         </span>
       ) : undefined,
       items: [

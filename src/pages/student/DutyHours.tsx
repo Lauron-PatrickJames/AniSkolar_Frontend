@@ -43,6 +43,8 @@ export default function DutyHours({ student, canLog = true }: { student: Student
   const [current, setCurrent] = useState<TermKey | null>(null);
   const [knownTerms, setKnownTerms] = useState<TermKey[]>([]);
   const [log, setLog] = useState<DutyLog | null>(null);
+  // The office head is on leave: duties wait for them (not removed).
+  const [headOnLeave, setHeadOnLeave] = useState<{ returnsOn?: string | null } | null>(null);
   const [rule, setRule] = useState<DutyRule>({ percentage: null, yearGroup: null, requiredHours: null });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -69,6 +71,7 @@ export default function DutyHours({ student, canLog = true }: { student: Student
       setCurrent(body.current);
       setKnownTerms(body.terms ?? []);
       setLog(body.log);
+      setHeadOnLeave(body.headOnLeave ?? null);
       setConfirmationRequired(!!body.summary?.confirmationRequired);
       setEvaluated(!!body.evaluated);
       setEvaluation(body.evaluation ?? null);
@@ -226,13 +229,19 @@ export default function DutyHours({ student, canLog = true }: { student: Student
           <SummaryCard summary={summary} />
           {/* Duty is rendered in the office the AdSO assigns, so logging opens
               once there is one (the server refuses new duties before that). */}
+          {headOnLeave && confirmationRequired && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+              <p className="font-bold">Your office head is on leave{headOnLeave.returnsOn ? ` until ${new Date(`${headOnLeave.returnsOn}T00:00:00`).toLocaleDateString('en-PH', { month: 'long', day: 'numeric' })}` : ''}</p>
+              <p className="mt-0.5 text-amber-800">Keep logging your duties. They wait for your head to confirm them when they’re back, so they won’t be removed after {REVIEW_WINDOW_HOURS} hours.</p>
+            </div>
+          )}
           {!canLog ? <NoLongerScholarCard /> : log.officeAssigned ? <AddDutyForm log={log} onSave={save} confirmationRequired={confirmationRequired} /> : <AwaitingOfficeCard />}
         </div>
       </div>
       {!!log.expiredEntries?.length && <ExpiredDutiesNote entries={log.expiredEntries} />}
 
       {(log.officeAssigned || log.entries.length > 0) && (
-        <RegularDutyTable log={log} onSave={canLog ? save : undefined} confirmationRequired={confirmationRequired} />
+        <RegularDutyTable log={log} onSave={canLog ? save : undefined} confirmationRequired={confirmationRequired} headOnLeave={!!headOnLeave} />
       )}
 
       <div className={`grid grid-cols-1 gap-6 ${log.entries.length > 0 ? 'lg:grid-cols-2' : ''}`}>
@@ -503,13 +512,14 @@ function AddDutyForm({ log, onSave, confirmationRequired = false }: { log: DutyL
 }
 
 // "· removed in 5 h" on a duty still waiting for the office head.
-function waitingSuffix(entry: DutyEntry): string {
+function waitingSuffix(entry: DutyEntry, headOnLeave = false): string {
+  if (headOnLeave) return ' · head on leave';
   const left = hoursUntilRemoved(entry);
   if (left === null) return '';
   return left <= 1 ? ' · removed within the hour' : ` · removed in ${left} h`;
 }
 
-function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: DutyLog; onSave?: (log: DutyLog) => void; confirmationRequired?: boolean }) {
+function RegularDutyTable({ log, onSave, confirmationRequired = false, headOnLeave = false }: { log: DutyLog; onSave?: (log: DutyLog) => void; confirmationRequired?: boolean; headOnLeave?: boolean }) {
   const entries = sortEntries(log.entries);
   const remove = (entry: DutyEntry) => {
     const i = log.entries.indexOf(entry);
@@ -538,7 +548,7 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
                     {confirmationRequired && (
                       <> · {entry.status === 'confirmed' ? <span className="font-bold text-emerald-700">Confirmed</span>
                         : entry.status === 'flagged' ? <span className="font-bold text-rose-700">Flagged{entry.note ? `: ${entry.note}` : ''}</span>
-                          : <span className="font-bold text-amber-700">Waiting{waitingSuffix(entry)}</span>}</>
+                          : <span className="font-bold text-amber-700">Waiting{waitingSuffix(entry, headOnLeave)}</span>}</>
                     )}
                   </p>
                 </div>
@@ -581,7 +591,7 @@ function RegularDutyTable({ log, onSave, confirmationRequired = false }: { log: 
                       <td className="px-3 py-2.5">
                         {entry.status === 'confirmed' ? <span className="text-xs font-bold text-emerald-700">Confirmed</span>
                           : entry.status === 'flagged' ? <span className="text-xs font-bold text-rose-700" title={entry.note ?? ''}>Flagged{entry.note ? `: ${entry.note}` : ''}</span>
-                            : <span className="text-xs font-bold text-amber-700">Waiting{waitingSuffix(entry)}</span>}
+                            : <span className="text-xs font-bold text-amber-700">Waiting{waitingSuffix(entry, headOnLeave)}</span>}
                       </td>
                     )}
                     <td className="pr-4 text-right">

@@ -18,6 +18,7 @@ const STATUS: Record<string, { label: string; className: string; icon: React.Ele
   Declined: { label: 'Declined by you', className: 'bg-slate-100 text-slate-600 ring-slate-200', icon: Ban },
   Graduated: { label: 'Graduated', className: 'bg-slate-100 text-slate-600 ring-slate-200', icon: CheckCircle2 },
   Stopped: { label: 'Ended', className: 'bg-slate-100 text-slate-600 ring-slate-200', icon: Ban },
+  'Not Renewed': { label: 'Not renewed', className: 'bg-slate-100 text-slate-600 ring-slate-200', icon: Ban },
   Ended: { label: 'Declined or ended', className: '', icon: Ban },
 };
 
@@ -90,9 +91,13 @@ export default function MyApplications({ applications, onViewScholarship, onResu
             const Icon = meta.icon;
             return (
               <li key={a.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 space-y-1">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                     <h3 className="font-display text-base font-bold text-slate-900">{a.scholarshipName}</h3>
+                    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${meta.className}`}>
+                      <Icon className="size-3.5" aria-hidden /> {meta.label}
+                    </span>
+                  </div>
                     <p className="text-xs text-slate-500">
                       {a.referenceCode && <span className="font-mono font-semibold text-slate-700">{a.referenceCode}</span>}
                       {a.referenceCode && ' · '}
@@ -100,10 +105,6 @@ export default function MyApplications({ applications, onViewScholarship, onResu
                         ? `Added by the ${officeDisplayName(a.office).replace(/^.*\(([^)]+)\)$/, '$1')} · ${formatDate(a.submittedAt)}`
                         : `Submitted ${formatDate(a.submittedAt)}`}
                     </p>
-                  </div>
-                  <span className={`inline-flex shrink-0 items-center gap-1.5 self-start rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${meta.className}`}>
-                    <Icon className="h-3.5 w-3.5" /> {meta.label}
-                  </span>
                 </div>
 
                 {(a.status === 'Under Evaluation' || a.status === 'Needs Revision') && officeFormFor(a.scholarshipId)?.interview && (

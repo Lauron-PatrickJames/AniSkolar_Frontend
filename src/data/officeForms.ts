@@ -267,7 +267,10 @@ export const OFFICE_FORMS: Record<string, OfficeForm> = {
       { key: 'department', label: 'Your department', type: 'text', placeholder: 'e.g. Department of Information Technology', hint: 'One 25% scholarship is reserved for each department.', showIf: { key: 'member', value: 'staff' } },
       { key: 'dutyHours', label: 'Duty hours completed', type: 'number', min: 0, max: 1000 },
     ],
-    approver: 'Vicissitude',
+    // Members only (Nov 2026): Vicissitude adds them, no application.
+    documents: a => a.member ? ['Performance evaluation and duty hours record'] : [],
+    award: { who: 'member', detailsTitle: 'Vicissitude', grant: 'assessment', messagePlaceholder: 'e.g. Thank you for your work on the yearbook this semester!' },
+    approver: 'Vicissitude Coordinator',
     assessmentTitle: 'Performance rating',
     assessment: [
       { key: 'coordinatorScore', label: 'Coordinator and Layout Artist (60%)', hint: '1.00–5.00', type: 'number', min: 1, max: 5, step: 0.01 },
@@ -340,6 +343,9 @@ export const OFFICE_FORMS: Record<string, OfficeForm> = {
       { key: 'position', label: 'Your position', type: 'select', options: HERALDO_POSITIONS },
       { key: 'publishedWorks', label: 'Published works this term', type: 'number', min: 0, max: 500 },
     ],
+    // Members only (Nov 2026): the office adds its staff, no application.
+    documents: a => a.position ? ['Scholarship points computation'] : [],
+    award: { who: 'staff member', detailsTitle: 'Heraldo Filipino', grant: 'assessment', messagePlaceholder: 'e.g. Thank you for your work for the Heraldo this term!' },
     approver: 'Editor in Chief and Publication Adviser',
     assessmentTitle: 'Scholarship points',
     assessment: [

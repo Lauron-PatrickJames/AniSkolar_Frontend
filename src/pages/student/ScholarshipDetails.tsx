@@ -4,6 +4,7 @@ import AnnouncementCard from '../../components/AnnouncementCard';
 import { ArrowLeft, ArrowRight, Award, CheckCircle, ListChecks, HelpCircle, FileCheck, Calendar, ShieldAlert, XCircle, AlertTriangle, Clock, RefreshCw, Building2, Repeat, Info, Megaphone, Ban } from 'lucide-react';
 import { motion } from 'motion/react';
 import { OFFICE_SHORT_LABELS, acceptsOnlineApplications, handlingOffice, officeOf } from '../../data/scholarships';
+import { APPLY_CHECKS } from '../../components/ApplyCheck';
 import { officeFormFor } from '../../data/officeForms';
 import { isCurrentApplication } from '../../utils/eligibility';
 
@@ -109,7 +110,7 @@ export default function ScholarshipDetails({
   const meta = endReason
     ? {
         ...baseMeta,
-        label: endReason === 'Declined' ? 'Declined by you' : endReason === 'Graduated' ? 'Scholarship ended: graduated' : 'Scholarship ended',
+        label: endReason === 'Declined' ? 'Declined by you' : endReason === 'Graduated' ? 'Scholarship ended: graduated' : endReason === 'Not Renewed' ? 'Scholarship ended: not renewed' : 'Scholarship ended',
         description: endReason === 'Declined'
           ? `You declined this scholarship${existingApplication?.endedAt ? ` on ${new Date(existingApplication.endedAt).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}, so it no longer applies to you.`
           : `You’re no longer a scholar of this program. Contact the ${officeShort} if this is wrong.`,
@@ -188,6 +189,14 @@ export default function ScholarshipDetails({
                 View in My Applications <ArrowRight className="w-4 h-4" />
               </button>
             )
+          ) : isInfoOnly && APPLY_CHECKS[scholarship.id] ? (
+            // Members only: asks whether they're a member, then explains.
+            <button
+              onClick={() => onApply(scholarship.id)}
+              className="w-full md:w-auto text-sm font-semibold px-8 py-3.5 rounded-xl bg-brand-green text-white hover:bg-brand-green-dark shadow-sm transition-all focus:outline-hidden inline-flex items-center justify-center gap-2"
+            >
+              Apply For This Scholarship
+            </button>
           ) : isInfoOnly ? (
             <span className="w-full md:w-auto px-5 py-3 rounded-xl bg-slate-100 text-slate-500 border border-slate-200 text-sm font-semibold inline-flex items-center justify-center gap-2">
               <Info className="w-4 h-4" />

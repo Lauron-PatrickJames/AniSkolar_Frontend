@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Archive, ArchiveRestore, ArrowLeft, Building2, ExternalLink, FileText, Mail, MailOpen, MessageSquare, PenSquare, Pin, PinOff, Trash2, UserRound } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, Bot, Building2, ExternalLink, FileText, Mail, MailOpen, MessageSquare, PenSquare, Pin, PinOff, Trash2, UserRound } from 'lucide-react';
 import { StudentProfile } from '../../types';
 import Conversation from '../../components/messages/Conversation';
+import AutoRepliesDialog from './AutoRepliesDialog';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
 import { collegeName } from '../../data/programs';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
@@ -71,6 +72,13 @@ export default function MessagesPage({ getToken, isAdso = true, selectedStudent,
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [newOpen, setNewOpen] = useState(false);
+  const [autoOpen, setAutoOpen] = useState(false);
+  // Loads New message's lists in the background, so they're there when it opens.
+  // Kept while Messages is open; leaving it (or signing out) drops them.
+  useEffect(() => {
+    prefetchNewMessage(getToken, isAdso);
+    return () => { delete pickCache.students; delete pickCache.peers; delete pickCache.offices; };
+  }, [getToken, isAdso]);
   const [inboxView, setInboxView] = useState<InboxView>('Inbox');
   const [toast, setToast] = useState<{ message: string; undo?: () => void } | null>(null);
   const [deleting, setDeleting] = useState<Thread | null>(null);
@@ -233,8 +241,12 @@ export default function MessagesPage({ getToken, isAdso = true, selectedStudent,
     <div className="space-y-6">
       <PageHeader
         title="Messages"
-        actions={<Button icon={PenSquare} onClick={() => setNewOpen(true)}>New message</Button>}
+        actions={<>
+          <Button icon={Bot} onClick={() => setAutoOpen(true)}>Automatic replies</Button>
+          <Button icon={PenSquare} onClick={() => setNewOpen(true)}>New message</Button>
+        </>}
       />
+      {autoOpen && <AutoRepliesDialog getToken={getToken} onClose={() => setAutoOpen(false)} onSaved={m => { setAutoOpen(false); setResult(m); }} />}
       <div className="grid gap-4 lg:grid-cols-[22rem_1fr]">
         {list}
         {selectedStudent?.startsWith(PEER_PREFIX) ? (
@@ -527,35 +539,44 @@ const GroupLabel = ({ children }: { children: React.ReactNode }) => (
   <li className="sticky top-0 z-10 bg-surface px-3 pb-1 pt-3 text-xs font-medium text-ink-subtle first:pt-0">{children}</li>
 );
 
+// Who New message can write to, loaded once when Messages opens and kept,
+// so its tabs show their lists at once (panel, Nov 2026).
+type PickStudent = { studentNumber: string; name: string; programCode?: string; college?: string; yearLevel?: string };
+type PickPeer = { code: string; name: string; short: string };
+type PickOffice = { office: string; headName?: string; headEmail?: string };
+const pickCache: { students?: Promise<PickStudent[]>; peers?: Promise<PickPeer[]>; offices?: Promise<PickOffice[]> } = {};
+const getJson = async <T,>(getToken: () => Promise<string | null>, path: string, pick: (body: any) => T, fallback: T): Promise<T> => {
+  try {
+    const res = await fetch(`${API_BASE_URL}${path}`, { headers: await authHeaders(getToken) });
+    return res.ok ? pick(await res.json()) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+export function prefetchNewMessage(getToken: () => Promise<string | null>, isAdso: boolean) {
+  pickCache.students ??= getJson(getToken, '/api/messages/admin/students?q=', b => b.students ?? [], []);
+  pickCache.peers ??= getJson(getToken, '/api/messages/admin/peers', b => b.offices ?? [], []);
+  if (isAdso) pickCache.offices ??= getJson(getToken, '/api/duty-hours/admin/settings', b => (b.officeSlots ?? []).filter((o: PickOffice) => o.headEmail), []);
+}
+
 function NewMessageDialog({ getToken, isAdso, existing, onClose, onOpen }: { getToken: () => Promise<string | null>; isAdso: boolean; existing: Set<string>; onClose: () => void; onOpen: (key: string) => void }) {
   const [to, setTo] = useState<'Student' | 'Peer' | 'Office'>('Student');
-  // The other scholarship offices (POLCA, the AdSO…).
-  const [peers, setPeers] = useState<{ code: string; name: string; short: string }[]>([]);
+  // Students listed before any search, the other scholarship offices
+  // (POLCA, the AdSO…) and the duty offices: from the cache, null while loading.
+  const [initialStudents, setInitialStudents] = useState<PickStudent[] | null>(null);
+  const [peers, setPeers] = useState<PickPeer[] | null>(null);
+  const [offices, setOffices] = useState<PickOffice[] | null>(null);
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/messages/admin/peers`, { headers: await authHeaders(getToken) });
-        if (res.ok) setPeers((await res.json()).offices ?? []);
-      } catch {
-        // no offices to pick
-      }
-    })();
-  }, [getToken]);
-  const [query, setQuery] = useState('');
-  const [found, setFound] = useState<{ studentNumber: string; name: string; programCode?: string; college?: string; yearLevel?: string }[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [offices, setOffices] = useState<{ office: string; headName?: string; headEmail?: string }[]>([]);
-  useEffect(() => {
-    if (!isAdso) return;
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/duty-hours/admin/settings`, { headers: await authHeaders(getToken) });
-        if (res.ok) setOffices(((await res.json()).officeSlots ?? []).filter((o: { headEmail?: string }) => o.headEmail));
-      } catch {
-        // no offices to pick
-      }
-    })();
+    prefetchNewMessage(getToken, isAdso);
+    let live = true;
+    pickCache.students!.then(v => live && setInitialStudents(v));
+    pickCache.peers!.then(v => live && setPeers(v));
+    if (isAdso) pickCache.offices!.then(v => live && setOffices(v));
+    return () => { live = false; };
   }, [getToken, isAdso]);
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState<PickStudent[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
   // Students, a moment after typing.
   useEffect(() => {
@@ -577,8 +598,8 @@ function NewMessageDialog({ getToken, isAdso, existing, onClose, onOpen }: { get
   }, [query, to, getToken]);
 
   const q = query.trim().toLowerCase();
-  const officeList = offices.filter(o => !q || o.office.toLowerCase().includes(q) || (o.headName ?? '').toLowerCase().includes(q));
-  const peerList = peers.filter(o => !q || o.name.toLowerCase().includes(q) || o.short.toLowerCase().includes(q));
+  const officeList = (offices ?? []).filter(o => !q || o.office.toLowerCase().includes(q) || (o.headName ?? '').toLowerCase().includes(q));
+  const peerList = (peers ?? []).filter(o => !q || o.name.toLowerCase().includes(q) || o.short.toLowerCase().includes(q));
   // Offices you already write to first, then scholarship offices, then the student governments.
   const isGov = (o: { name: string }) => /student government/i.test(o.name);
   const peerGroups = [
@@ -597,13 +618,11 @@ function NewMessageDialog({ getToken, isAdso, existing, onClose, onOpen }: { get
   return (
     <Modal size="md" title="New message" onClose={onClose} footer={<Button onClick={onClose}>Cancel</Button>}>
       <div className="space-y-4">
+        {/* Every tab from the start (not once its list loads), and one
+            fixed size whichever is open. */}
         <SegmentedControl<'Student' | 'Peer' | 'Office'>
           label="Write to"
-          options={[
-            'Student',
-            ...(peers.length ? ['Peer' as const] : []),
-            ...(offices.length ? ['Office' as const] : []),
-          ]}
+          options={['Student', 'Peer', ...(isAdso ? ['Office' as const] : [])]}
           value={to}
           onChange={v => { if (v) { setTo(v); setQuery(''); } }}
           renderLabel={o => (o === 'Student' ? 'Student' : o === 'Peer' ? 'Office' : 'Duty office')}
@@ -615,10 +634,28 @@ function NewMessageDialog({ getToken, isAdso, existing, onClose, onOpen }: { get
           label={to === 'Student' ? 'Search students' : 'Search offices'}
           placeholder={to === 'Student' ? 'Name or student number…' : to === 'Peer' ? 'Search offices, e.g. POLCA…' : 'Office or head’s name…'}
         />
-        <div className="-mx-2 max-h-[22rem] min-h-48 overflow-y-auto px-2">
+        <div className="-mx-2 h-[22rem] overflow-y-auto px-2">
           {to === 'Student' ? (
             query.trim().length < 2 ? (
-              <p className="py-10 text-center text-sm text-ink-subtle">Type a name or student number.</p>
+              !initialStudents ? (
+                <div className="space-y-2">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+              ) : initialStudents.length === 0 ? (
+                <p className="py-10 text-center text-sm text-ink-subtle">Type a name or student number.</p>
+              ) : (
+                <ul className="space-y-0.5">
+                  <GroupLabel>Students · type to search everyone</GroupLabel>
+                  {initialStudents.map(st => (
+                    <PickRow
+                      key={st.studentNumber}
+                      badge={<Avatar name={titleCaseName(st.name)} size="sm" />}
+                      title={titleCaseName(st.name)}
+                      detail={[st.studentNumber, st.programCode, st.yearLevel].filter(Boolean).join(' · ')}
+                      existing={existing.has(st.studentNumber)}
+                      onClick={() => onOpen(st.studentNumber)}
+                    />
+                  ))}
+                </ul>
+              )
             ) : searching && !found ? (
               <div className="space-y-2">{[0, 1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
             ) : (
@@ -640,6 +677,8 @@ function NewMessageDialog({ getToken, isAdso, existing, onClose, onOpen }: { get
                 )}
               </ul>
             )
+          ) : (to === 'Peer' ? !peers : !offices) ? (
+            <div className="space-y-2">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : to === 'Peer' ? (
             <ul className="space-y-0.5">
               {peerGroups.map(g => (

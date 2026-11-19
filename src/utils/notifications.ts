@@ -27,6 +27,8 @@ export interface NotificationItem {
   page?: string;
   kind?: 'announcement';
   postedBy?: string;
+  // When it happened (ms), for newest-first order; 0 = no date.
+  at?: number;
 }
 
 // This semester's duty hours, for the "hours done / evaluated" notices
@@ -59,20 +61,37 @@ function saveIds(prefix: string, studentNumber: string, ids: Set<string>) {
   }
 }
 
+// What each status means, worded so "we received it" and "you're
+// approved" can't be mistaken for each other (panel, Nov 2026).
+function statusTitle(scholarshipName: string, status: string): string {
+  switch (status) {
+    case 'Under Evaluation': return `Application received: ${scholarshipName}`;
+    case 'Approved': return `Approved: you’re a ${scholarshipName} scholar`;
+    case 'Rejected': return `Not approved: ${scholarshipName}`;
+    case 'Needs Revision': return `Changes needed: ${scholarshipName}`;
+    default: return scholarshipName;
+  }
+}
+
 function statusMessage(scholarshipName: string, status: string): string {
   switch (status) {
     case 'Under Evaluation':
-      return `Your application for ${scholarshipName} is under evaluation.`;
+      return `We received your application for the ${scholarshipName}. The office is now reviewing it. You're not a scholar yet; we'll notify you here once there's a decision.`;
     case 'Approved':
-      return `Great news! Your application for ${scholarshipName} has been approved.`;
+      return `Congratulations! The office reviewed and approved your application. You are now a ${scholarshipName} scholar. See My Scholarship for what's next.`;
     case 'Rejected':
-      return `Your application for ${scholarshipName} was not approved this cycle.`;
+      return `The office reviewed your application for the ${scholarshipName} and couldn't approve it this cycle.`;
     case 'Needs Revision':
-      return `Your application for ${scholarshipName} needs changes. Check what the office asked for and resubmit.`;
+      return `Your application for the ${scholarshipName} needs changes before the office can decide. Check what the office asked for and resubmit.`;
     default:
-      return `Your application for ${scholarshipName}: ${status}.`;
+      return `Your application for the ${scholarshipName}: ${status}.`;
   }
 }
+
+const timeOf = (value?: string | null) => {
+  const t = value ? Date.parse(value) : NaN;
+  return Number.isNaN(t) ? 0 : t;
+};
 
 // Notifications can't be cleared any more (View all keeps every one);
 // ones cleared before stay hidden from the bell only.
@@ -93,7 +112,8 @@ export function buildNotifications(student: StudentProfile, applications: Applic
       title: 'Welcome to AniSkolar',
       text: `Welcome to AniSkolar, ${student.name.split(' ')[0] || 'there'}! Explore available scholarships to get started.`,
       time: 'Just now',
-      isRead: read.has('welcome')
+      isRead: read.has('welcome'),
+      at: Number.MAX_SAFE_INTEGER,
     });
   }
 
@@ -105,16 +125,36 @@ export function buildNotifications(student: StudentProfile, applications: Applic
   applications.forEach(app => {
     const id = `app-${app.id}-${app.status}`;
     if (cleared.has(id)) return;
+    // A decision is dated by when it was made; "received" by submission.
+    const when = app.status === 'Under Evaluation' ? app.submittedAt : (app.reviewedAt || app.submittedAt);
     items.push({
       id,
-      title: app.scholarshipName,
-      text: statusMessage(app.scholarshipName, app.status),
-      time: readableDate(app.submittedAt),
+      title: statusTitle(app.scholarshipName, app.status),
+      text: app.status === 'Approved' && app.awardedDirectly
+        ? `The office added you as a ${app.scholarshipName} scholar. See My Scholarship for the details.`
+        : statusMessage(app.scholarshipName, app.status),
+      time: readableDate(when ?? undefined),
+      at: timeOf(when),
       isRead: read.has(id),
       scholarshipId: app.scholarshipId,
       status: app.status,
       note: app.reviewNote?.trim() || undefined,
     });
+    // Decided: the "received" notice stays too, so the two are separate
+    // steps (an office-added scholar never applied, so has none).
+    const receivedId = `app-${app.id}-Under Evaluation`;
+    if (app.status !== 'Under Evaluation' && !app.awardedDirectly && !cleared.has(receivedId)) {
+      items.push({
+        id: receivedId,
+        title: statusTitle(app.scholarshipName, 'Under Evaluation'),
+        text: `We received your application for the ${app.scholarshipName} and the office reviewed it.`,
+        time: readableDate(app.submittedAt),
+        at: timeOf(app.submittedAt),
+        isRead: true,
+        scholarshipId: app.scholarshipId,
+        status: 'Received',
+      });
+    }
   });
 
   // An interview set (or moved) by the office (POLCA): one per schedule,
@@ -133,6 +173,7 @@ export function buildNotifications(student: StudentProfile, applications: Applic
       time: when,
       isRead: read.has(id),
       scholarshipId: app.scholarshipId,
+      at: timeOf(app.reviewedAt) || timeOf(app.submittedAt),
     });
   });
 
@@ -149,6 +190,8 @@ export function buildNotifications(student: StudentProfile, applications: Applic
           : `You've completed your duty hours for the ${duty.termLabel}. ${duty.office ? `The head of ${duty.office}` : 'Your office'} has been asked to evaluate you; it goes into your renewal. Nothing else to do for duty hours this semester.`,
         time: duty.termLabel,
         isRead: read.has(id),
+        // Undated: it's about now, so it goes on top.
+        at: Number.MAX_SAFE_INTEGER,
       });
     }
   }
@@ -170,13 +213,15 @@ export function buildNotifications(student: StudentProfile, applications: Applic
     text: a.description || a.content.slice(0, 280),
     time: a.date,
     isRead: read.has(`ann-${a.id}`),
+    at: timeOf(a.publishedAt),
     status: undefined,
     note: undefined,
     kind: 'announcement' as const,
     postedBy: a.postedBy ?? undefined,
   })));
 
-  return items;
+  // Latest first (stable, so same-time items keep their order).
+  return items.map((n, i) => [n, i] as const).sort(([a, i], [b, j]) => (b.at ?? 0) - (a.at ?? 0) || i - j).map(([n]) => n);
 }
 
 export function markAllRead(studentNumber: string, ids: string[]) {

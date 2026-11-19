@@ -119,10 +119,10 @@ export default function AttendanceDialog({ event: initialEvent, term, getToken, 
   }, [getToken, initialEvent._id]);
   useEffect(() => { load(); }, [load]);
 
-  // The sheet being looked at, shown beside the list (images inline).
+  // The sheet being looked at, shown beside the list (images and PDFs).
   useEffect(() => {
     const sheet = event.sheets.find(s => s.fileId === viewing);
-    if (!sheet || sheet.mimetype === 'application/pdf') { setPreview(null); return; }
+    if (!sheet) { setPreview(null); return; }
     let cancelled = false;
     let url: string | null = null;
     sheetUrl(event._id, sheet.fileId, getToken).then(u => { if (cancelled) URL.revokeObjectURL(u); else { url = u; setPreview({ fileId: sheet.fileId, url: u }); } }).catch(() => setPreview(null));
@@ -282,11 +282,11 @@ export default function AttendanceDialog({ event: initialEvent, term, getToken, 
                 {viewingSheet && (
                   <div className="space-y-2">
                     <div className="overflow-auto rounded-control bg-surface-muted ring-1 ring-line max-h-[55vh]">
-                      {viewingSheet.mimetype === 'application/pdf'
-                        ? <div className="p-6 text-center text-sm text-ink-muted">PDF sheets open in a new tab.</div>
-                        : preview?.fileId === viewingSheet.fileId
-                          ? <img src={preview.url} alt={`Signed sheet: ${viewingSheet.filename}`} className="w-full" />
-                          : <div className="p-6"><TableSkeleton rows={3} label="Loading the sheet" /></div>}
+                      {preview?.fileId !== viewingSheet.fileId
+                        ? <div className="p-6"><TableSkeleton rows={3} label="Loading the sheet" /></div>
+                        : viewingSheet.mimetype === 'application/pdf'
+                          ? <iframe src={preview.url} title={`Signed sheet: ${viewingSheet.filename}`} className="block h-[55vh] w-full bg-white" />
+                          : <img src={preview.url} alt={`Signed sheet: ${viewingSheet.filename}`} className="w-full" />}
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="truncate text-xs text-ink-subtle">{viewingSheet.filename}</span>

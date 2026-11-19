@@ -159,11 +159,14 @@ export default function ScholarshipDetails({
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-green/10 text-brand-green border border-brand-green/20">
               {scholarship.category}
             </span>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold   ${
-              scholarship.status === 'Open' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-            }`}>
-              {scholarship.status}
-            </span>
+            {/* No application: no Open / Closed. */}
+            {!isInfoOnly && (
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold   ${
+                scholarship.status === 'Open' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {scholarship.status}
+              </span>
+            )}
           </div>
           <h2 className="font-display font-black text-2xl md:text-3xl text-slate-900 tracking-tight leading-snug">
             {scholarship.name}
@@ -171,7 +174,7 @@ export default function ScholarshipDetails({
           {period && (
             <div className="flex items-center text-slate-500 text-xs gap-1.5">
               <Calendar className="w-4 h-4 text-slate-400" />
-              <span className="font-semibold">Application period:</span>
+              <span className="font-semibold">{isInfoOnly ? 'How scholars are chosen:' : 'Application period:'}</span>
               <span className="text-slate-800 font-bold">{period}</span>
             </div>
           )}

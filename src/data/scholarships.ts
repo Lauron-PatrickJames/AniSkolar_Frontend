@@ -369,7 +369,7 @@ const BUILT_IN_SCHOLARSHIPS: ScholarshipSource[] = [
       'Step 1: Keep your grades up — rankings are computed from your GPA at the end of each semester.',
       'Step 2: Qualified students are identified and notified by the AdSO. No application is needed.'
     ],
-    deadline: 'Contact the AdSO for the current schedule',
+    deadline: 'By academic ranking each semester',
     status: 'Open'
   },
   {

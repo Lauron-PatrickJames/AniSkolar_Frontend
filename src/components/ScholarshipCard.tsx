@@ -73,7 +73,8 @@ export default function ScholarshipCard({
             {scholarship.category}
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-            {membersOnly ? 'Members only' : scholarship.status}
+            {/* No application: nothing to be open for (members-only say so). */}
+            {membersOnly ? 'Members only' : acceptsOnlineApplications(scholarship) ? scholarship.status : null}
           </span>
         </div>
 
@@ -148,7 +149,7 @@ export default function ScholarshipCard({
           <div className="text-left">
             {/* Dates are an application period; otherwise it says how and when. */}
             <p className="text-xs text-slate-500 font-bold">
-              {scholarship.directAward ? 'How scholars are chosen' : scholarship.opensOn || scholarship.closesOn ? 'Application period' : 'Schedule'}
+              {scholarship.directAward || !acceptsOnlineApplications(scholarship) ? 'How scholars are chosen' : scholarship.opensOn || scholarship.closesOn ? 'Application period' : 'Schedule'}
             </p>
             <p className="text-xs text-slate-700 font-semibold">{scholarship.deadline}</p>
           </div>

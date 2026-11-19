@@ -3,6 +3,7 @@ import { Holdings, applyBlock, getAvailableScholarships, holdingNotice, isCurren
 import { Scholarship, Application, StudentProfile } from '../../types';
 import ScholarshipCard from '../../components/ScholarshipCard';
 import CompareTable from '../../components/CompareTable';
+import { acceptsOnlineApplications } from '../../data/scholarships';
 import { Search, Info, BookmarkCheck, LayoutGrid, Table2 } from 'lucide-react';
 
 
@@ -184,7 +185,7 @@ export default function ExploreGrants({
               applicationStatus={applicationByScholarship.get(scholarship.id)?.status}
               applicationEndReason={applicationByScholarship.get(scholarship.id)?.endReason}
               awardedDirectly={applicationByScholarship.get(scholarship.id)?.awardedDirectly}
-              warning={applicationByScholarship.has(scholarship.id) ? null : holdingNotice(scholarship.id, holdings) ?? profileGpaWarning(scholarship, student)}
+              warning={applicationByScholarship.has(scholarship.id) ? null : (acceptsOnlineApplications(scholarship) ? holdingNotice(scholarship.id, holdings) : null) ?? profileGpaWarning(scholarship, student)}
               blockedReason={applyBlock(scholarship.id, holdings)}
             />
           ))}

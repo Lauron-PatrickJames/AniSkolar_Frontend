@@ -1113,7 +1113,7 @@ export default function App() {
                     onResubmit={handleResubmitApplication}
                     onViewApplications={() => handleNavigate('applications')}
                     blockedReason={applyBlock(activeScholarship.id, holdings) ?? applicationWindow(activeScholarship)}
-                    notice={holdingNotice(activeScholarship.id, holdings)}
+                    notice={acceptsOnlineApplications(activeScholarship) ? holdingNotice(activeScholarship.id, holdings) : null}
                   />
                 );
               case 'apply-scholarship':

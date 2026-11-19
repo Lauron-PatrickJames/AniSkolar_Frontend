@@ -6,11 +6,6 @@ import { motion } from 'motion/react';
 import { acceptsOnlineApplications, handlingOffice } from '../data/scholarships';
 import { APPLY_CHECKS } from './ApplyCheck';
 
-// "Admissions and Scholarship Office (AdSO)" → "Apply at the AdSO".
-function officeShortName(office: string): string {
-  const short = /\(([^)]+)\)\s*$/.exec(office)?.[1];
-  return short ? `Apply at the ${short}` : `Apply at the ${office}`;
-}
 
 interface ScholarshipCardProps {
   scholarship: Scholarship;
@@ -168,13 +163,13 @@ export default function ScholarshipCard({
             Details
           </button>
           {onApply && !acceptsOnlineApplications(scholarship) && !membersOnly && (
-            // One line, like the other buttons: the office's short name, the
-            // full name on hover ("Apply at the AdSO").
+            // No application (e.g. Academic: from the Registrar's ranking);
+            // who awards it on hover.
             <span
-              title={`Apply through the ${handlingOffice(scholarship)}`}
+              title={`Awarded by the ${handlingOffice(scholarship)}`}
               className="min-w-0 flex-1 h-10 inline-flex items-center justify-center px-3.5 rounded-lg text-xs font-semibold text-slate-500 bg-slate-100 border border-slate-200"
             >
-              <span className="truncate">{officeShortName(handlingOffice(scholarship))}</span>
+              <span className="truncate">No application needed</span>
             </span>
           )}
           {onApply && membersOnly && (

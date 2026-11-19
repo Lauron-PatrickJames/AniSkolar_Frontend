@@ -484,8 +484,8 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
     const others = visible.filter(r => officeOf(r.scholarship) !== ownOffice);
     if (!own.length || !others.length) return [{ key: 'all', label: '', rows: visible }];
     return [
-      { key: 'own', label: `Handled by ${ownOffice === 'LSO' ? 'the AdSO (you)' : 'your office'}`, rows: own },
-      { key: 'others', label: 'Handled by other offices', rows: others },
+      { key: 'own', label: 'Your scholarships', rows: own },
+      { key: 'others', label: 'Other offices’ scholarships', rows: others },
     ];
   }, [visible, ownOffice]);
 

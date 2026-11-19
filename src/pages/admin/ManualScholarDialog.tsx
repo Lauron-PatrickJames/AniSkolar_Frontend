@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, FileImage, UserPlus, X } from 'lucide-react';
 import { Scholarship } from '../../types';
+import { acceptsOnlineApplications } from '../../data/scholarships';
 import { API_BASE_URL, authHeaders, titleCaseName } from './adminData';
 import { Alert, Button, Checkbox, Modal, Select, Textarea } from './AdminUI';
 import { FoundStudent, NewStudent, StudentPicker, isNewStudentValid } from './AddScholarDialog';
@@ -50,7 +51,7 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
   // The AdSO account's role: its scholarships follow the approval chain.
   adsoRole?: 'associate' | 'head' | 'director';
 }) {
-  const chain = adsoRole ? CHAIN_STEP[adsoRole] : null;
+  const chainRole = adsoRole;
   const [scholarshipId, setScholarshipId] = useState(scholarships.length === 1 ? scholarships[0].id : '');
   const [student, setStudent] = useState<FoundStudent | null>(null);
   const [newStudent, setNewStudent] = useState<NewStudent | null>(null);
@@ -72,6 +73,10 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
   }, [file]);
 
   const scholarship = scholarships.find(s => s.id === scholarshipId);
+  // The approval chain only for scholarships students apply for; one
+  // without an application (Academic, from the Registrar's list) is added
+  // at once.
+  const chain = chainRole && (!scholarship || acceptsOnlineApplications(scholarship)) ? CHAIN_STEP[chainRole] : null;
   const isSfag = scholarship?.applicationFormType === 'sfag';
   const studentDone = !!student || isNewStudentValid(newStudent);
   const missing = useMemo(() => [

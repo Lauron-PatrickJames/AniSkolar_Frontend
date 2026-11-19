@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/react';
-import { CircleCheck, CircleOff, Clock, Info, LayoutList, ListChecks, Pencil, Plus, Save, Table2, Trash2 } from 'lucide-react';
+import { CircleCheck, CircleOff, Clock, Info, LayoutList, ListChecks, Pencil, Plus, Save, Table2, Trash2, Upload, UserPlus } from 'lucide-react';
+import MemberUploadDialog from './MemberUploadDialog';
 import { ApplicationFormType, Scholarship, ScholarshipOffice, ScholarshipOverride } from '../../types';
 import {
   OFFICE_LABELS, acceptsOnlineApplications, applyScholarshipOverrides, formatPeriod, officeOf, registerCustomScholarships, scholarshipDefaults, handlingOffice, OFFICE_SHORT_LABELS } from '../../data/scholarships';
@@ -342,9 +343,12 @@ interface ScholarshipsManagerProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onViewApplications: (scholarshipId: string) => void;
+  // Scholarships without an application (the Academic Scholarship): the
+  // AdSO adds who was granted it, one at a time or from a list.
+  addScholars?: { adsoRole?: 'associate' | 'head' | 'director'; onAddOne: (scholarshipId: string) => void; onAdded: () => void };
 }
 
-export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, onViewApplications }: ScholarshipsManagerProps) {
+export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, onViewApplications, addScholars }: ScholarshipsManagerProps) {
   const { getToken } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -505,6 +509,7 @@ export default function ScholarshipsManager({ ownOffice, selectedId, onSelect, o
           row={selected}
           ownOffice={ownOffice}
           getToken={getToken}
+          addScholars={addScholars}
           onBack={() => onSelect(null)}
           onSaved={overrides => {
             const before = selected.scholarship.status;
@@ -779,10 +784,11 @@ function DetailSkeleton() {
 
 // --- Detail view -----------------------------------------------------------------
 
-function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewApplications, onDeleted }: {
+function ScholarshipDetail({ row, ownOffice, getToken, addScholars, onBack, onSaved, onViewApplications, onDeleted }: {
   row: Row;
   ownOffice: ScholarshipOffice;
   getToken: () => Promise<string | null>;
+  addScholars?: ScholarshipsManagerProps['addScholars'];
   onBack: () => void;
   onSaved: (overrides: ScholarshipOverride) => void;
   onViewApplications: (scholarshipId: string) => void;
@@ -790,6 +796,7 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
 }) {
   const s = row.scholarship;
   const isCustom = !!row.defaults.custom;
+  const [uploadFor, setUploadFor] = useState<{ id: string; name: string } | null>(null);
 
   const [form, setForm] = useState<EditorState>(() => editorFrom(s, row.overrides.officeNumbers));
   const [attempted, setAttempted] = useState(false);
@@ -1102,9 +1109,20 @@ function ScholarshipDetail({ row, ownOffice, getToken, onBack, onSaved, onViewAp
                 ))}
               </dl>
             ) : (
-              <p className="text-sm text-ink-muted">This scholarship is listed for information only. Students can't apply online, so it has no applications.</p>
+              <div className="space-y-4">
+                <p className="text-sm text-ink-muted">Students can't apply for this one online, so it has no applications.{addScholars && office === ownOffice && !s.directAward ? ' Add the students who were granted it instead.' : ''}</p>
+                {addScholars && office === ownOffice && !s.directAward && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="primary" icon={Upload} onClick={() => setUploadFor({ id: s.id, name: s.name })}>Upload list of scholars</Button>
+                    <Button icon={UserPlus} onClick={() => addScholars.onAddOne(s.id)}>Add one scholar</Button>
+                  </div>
+                )}
+              </div>
             )}
           </Card>
+          {uploadFor && addScholars && (
+            <MemberUploadDialog scholarships={[uploadFor]} getToken={getToken} adsoRole={addScholars.adsoRole} onClose={() => setUploadFor(null)} onDone={addScholars.onAdded} />
+          )}
 
           {isCustom ? (
             <Card title="Delete scholarship">

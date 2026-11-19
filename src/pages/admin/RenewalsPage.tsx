@@ -281,11 +281,12 @@ export default function RenewalsPage({ getToken, isAdso, ownOffice = 'LSO' }: { 
         title="Renewals"
         actions={
           <>
+            {/* Export is a button of its own, not hidden in the menu. */}
+            {period && <Button icon={Download} onClick={exportCsv}>Export to Excel</Button>}
             {period && (
               <DropdownMenu
                 label="More actions"
                 items={[
-                  { key: 'export', label: 'Export to Excel', icon: Download, onSelect: exportCsv },
                   {
                     key: 'files', label: 'Download all documents (.zip)', icon: FileText,
                     onSelect: () => {

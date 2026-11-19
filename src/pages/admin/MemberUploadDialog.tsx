@@ -62,12 +62,15 @@ function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 
-export default function MemberUploadDialog({ scholarships, getToken, onClose, onDone }: {
+export default function MemberUploadDialog({ scholarships, getToken, onClose, onDone, adsoRole }: {
   scholarships: { id: string; name: string }[];
   getToken: () => Promise<string | null>;
   onClose: () => void;
   onDone: () => void;
+  adsoRole?: 'associate' | 'head' | 'director';
 }) {
+  // The AdSO's list is the Registrar's (no approval chain: the list is the decision).
+  const registrarList = !!adsoRole;
   const [scholarshipId, setScholarshipId] = useState(scholarships[0]?.id ?? '');
   const [fileName, setFileName] = useState('');
   const [members, setMembers] = useState<MemberRow[] | null>(null);
@@ -75,7 +78,7 @@ export default function MemberUploadDialog({ scholarships, getToken, onClose, on
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ added: string[]; skipped: { studentNumber: string; reason: string }[] } | null>(null);
+  const [result, setResult] = useState<{ added: string[]; skipped: { studentNumber: string; reason: string }[]; awaiting?: 'head' | 'director' } | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const approver = OFFICE_FORMS[scholarshipId]?.approver ?? 'office head';
 
@@ -107,7 +110,7 @@ export default function MemberUploadDialog({ scholarships, getToken, onClose, on
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Failed to add the members.');
-      setResult({ added: body.added ?? [], skipped: body.skipped ?? [] });
+      setResult({ added: body.added ?? [], skipped: body.skipped ?? [], awaiting: body.awaiting });
       if (body.added?.length) onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add the members.');
@@ -122,7 +125,9 @@ export default function MemberUploadDialog({ scholarships, getToken, onClose, on
         <div className="space-y-4">
           <p className="flex items-center gap-2 text-sm text-ink">
             <CheckCircle2 className="size-5 text-success-fg" aria-hidden />
-            {result.added.length === 1 ? '1 member is now a scholar.' : `${result.added.length} members are now scholars.`} We emailed them.
+            {result.awaiting
+              ? `${result.added.length === 1 ? '1 student was' : `${result.added.length} students were`} added and sent to the ${result.awaiting === 'head' ? 'Head for a recommendation' : 'Director for approval'}. They become scholars once the Director approves them in Applications.`
+              : <>{result.added.length === 1 ? '1 is now a scholar.' : `${result.added.length} are now scholars.`} We emailed them.</>}
           </p>
           {result.skipped.length > 0 && (
             <div className="space-y-2">
@@ -143,8 +148,8 @@ export default function MemberUploadDialog({ scholarships, getToken, onClose, on
   const incomplete = (members ?? []).filter(m => !/^\d{9}$/.test(m.studentNumber)).length;
   return (
     <Modal
-      title="Upload member list"
-      description="Everyone on the list becomes a scholar. Members already listed as scholars are skipped."
+      title={adsoRole ? 'Upload list of scholars' : 'Upload member list'}
+      description="Everyone on the list becomes a scholar and we email them. Anyone already a scholar is skipped."
       onClose={onClose}
       dismissible={!busy}
       size="md"
@@ -205,7 +210,7 @@ export default function MemberUploadDialog({ scholarships, getToken, onClose, on
         <Field label="Message to the members" optional>
           <Textarea value={note} onChange={e => setNote(e.target.value)} rows={2} maxLength={2000} disabled={busy} placeholder="e.g. Thank you for your service this semester!" />
         </Field>
-        <Checkbox checked={approved} onChange={setApproved} disabled={busy} label={`The ${approver} approved this list`} />
+        <Checkbox checked={approved} onChange={setApproved} disabled={busy} label={registrarList ? 'This is the Registrar’s list of students granted this scholarship' : `The ${approver} approved this list`} />
       </div>
     </Modal>
   );

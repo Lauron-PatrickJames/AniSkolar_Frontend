@@ -1076,7 +1076,9 @@ export function Td({ children, className = '', numeric }: { children?: React.Rea
 // or link so the row is reachable by keyboard.
 export function Tr({ children, onClick, className = '' }: { children: React.ReactNode; onClick?: () => void; className?: string }) {
   return (
-    <tr onClick={onClick} className={`group transition-colors ${onClick ? 'cursor-pointer hover:bg-surface-muted' : ''} ${className}`}>
+    // Every row highlights on hover (easier to follow across wide tables);
+    // only clickable ones get the pointer.
+    <tr onClick={onClick} className={`group transition-colors hover:bg-surface-muted ${onClick ? 'cursor-pointer' : ''} ${className}`}>
       {children}
     </tr>
   );

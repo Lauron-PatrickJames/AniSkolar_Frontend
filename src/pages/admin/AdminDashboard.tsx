@@ -84,6 +84,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const [addScholarFor, setAddScholarFor] = useState<string | null>(null);
   const [manualAddOpen, setManualAddOpen] = useState(false);
+  // "Add one scholar" from a scholarship's page: that scholarship only.
+  const [manualFor, setManualFor] = useState<string | null>(null);
   const [addedNotice, setAddedNotice] = useState('');
   // Every office starts on its dashboard.
   const homeView: MainView = 'home';
@@ -92,6 +94,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   // Associate, Head and Director (publicMetadata.adsoRole in Clerk). The
   // server enforces the same rule (routes/applications.js, canAddScholars).
   const adsoRoleRaw = (user?.publicMetadata as { adsoRole?: string } | undefined)?.adsoRole;
+  const adsoRole = adsoRoleRaw === 'associate' || adsoRoleRaw === 'head' || adsoRoleRaw === 'director' ? adsoRoleRaw : undefined;
   const canAddScholars = MEMBER_OFFICES.includes(adminOffice ?? '')
     || (isAdso && (adsoRoleRaw === 'associate' || adsoRoleRaw === 'head' || adsoRoleRaw === 'director'));
   const addScholar = !canAddScholars ? undefined
@@ -419,6 +422,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         selectedId={selectedScholarship}
         onSelect={id => (id ? setSelectedScholarship(id) : backToList())}
         onViewApplications={viewApplicationsFor}
+        addScholars={isAdso && adsoRole ? { adsoRole, onAddOne: id => { setManualFor(id); setManualAddOpen(true); }, onAdded: fetchApplications } : undefined}
       />
     );
   } else if (selected) {
@@ -483,7 +487,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         />
       )}
       {manualAddOpen && (
-        <ManualScholarDialog scholarships={manualAward} getToken={getToken} onClose={() => setManualAddOpen(false)} onAdded={scholarAdded} adsoRole={isAdso && (adsoRoleRaw === 'associate' || adsoRoleRaw === 'head' || adsoRoleRaw === 'director') ? adsoRoleRaw : undefined} />
+        <ManualScholarDialog scholarships={manualFor ? manualAward.filter(m => m.id === manualFor) : manualAward} getToken={getToken} onClose={() => { setManualAddOpen(false); setManualFor(null); }} onAdded={(...args) => { setManualFor(null); scholarAdded(...args); }} adsoRole={isAdso ? adsoRole : undefined} />
       )}
       {addedNotice && <ResultDialog message={addedNotice} onClose={() => setAddedNotice('')} />}
     </AdminLayout>

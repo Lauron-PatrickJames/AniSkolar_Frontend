@@ -206,6 +206,7 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
         description="SFAG scholars' duty hours this term: who's on track, who's behind, and where they serve."
         actions={
           <>
+            {rows.length > 0 && <Button icon={Download} onClick={exportCsv}>Export to Excel</Button>}
             <Button icon={Building2} onClick={() => setOfficesOpen(true)}>Offices</Button>
             <Button variant="primary" icon={CalendarCheck} onClick={() => setEventsOpen(true)} disabled={!term}>Events{pendingClaimCount ? ` (${pendingClaimCount})` : ''}</Button>
             <Menu
@@ -214,7 +215,6 @@ export default function DutyHoursPage({ getToken }: { getToken: () => Promise<st
               items={[
                 { key: 'hours', label: 'Hours and evaluation', icon: Clock, onSelect: () => setHoursOpen(true) },
                 { key: 'deadline', label: deadline ? 'Change deadline' : 'Set deadline', icon: CalendarClock, onSelect: () => setDeadlineOpen(true) },
-                ...(rows.length ? [{ key: 'export', label: 'Export to Excel', icon: Download, onSelect: exportCsv }] : []),
               ]}
             />
           </>

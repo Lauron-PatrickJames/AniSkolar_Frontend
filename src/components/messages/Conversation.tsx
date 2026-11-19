@@ -54,6 +54,8 @@ export default function Conversation({ messages: given, viewer, filesPath, getTo
   const [undoFor, setUndoFor] = useState<string | null>(null);
   const before = useRef<Set<string> | null>(null);
   const messages = useMemo(() => given.map(m => unsent[m._id] ?? m), [given, unsent]);
+  // A deleted message is gone for both sides: no "deleted a message" note.
+  const shown = useMemo(() => messages.filter(m => !m.unsentAt), [messages]);
   const listRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // Explicit words in the draft: warned about here, refused by the server.
@@ -133,8 +135,8 @@ export default function Conversation({ messages: given, viewer, filesPath, getTo
   return (
     <div className={`flex min-h-0 flex-col ${className}`}>
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-5" aria-live="polite">
-        {messages.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{emptyText}</p>}
-        {messages.map(m => {
+        {shown.length === 0 && <p className="py-10 text-center text-sm text-slate-500">{emptyText}</p>}
+        {shown.map(m => {
           const mine = m.from === viewer;
           const day = dayLabel(m.createdAt);
           const showDay = day !== lastDay;

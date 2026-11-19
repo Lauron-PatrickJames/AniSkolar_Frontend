@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Check, CornerUpLeft, Send, ThumbsDown, ThumbsUp } from 'lucide-react';
-import { API_BASE_URL, AdminApplication, authHeaders, formatDateTime, normalizeApplication } from './adminData';
-import { Alert, Button, Field, Textarea } from './AdminUI';
+import { API_BASE_URL, AdminApplication, applicantName, authHeaders, formatDateTime, normalizeApplication, titleCaseName } from './adminData';
+import { Alert, Button, ConfirmDialog, Field, Quote, Textarea } from './AdminUI';
 
 // The AdSO's approval chain for its own scholarships (backend
 // utils/approvalChain.js): the Scholarship Associate checks and endorses,
@@ -9,7 +9,7 @@ import { Alert, Button, Field, Textarea } from './AdminUI';
 // rejection, and the Director gives the final decision (the Decision
 // card's Approve / Reject). Staff notes here are never shown to the
 // student. An account's role is publicMetadata.adsoRole in Clerk; an
-// account without one can act at every step.
+// account without one can act at every step. Each step is confirmed first.
 
 export type ChainStage = 'associate' | 'head' | 'director';
 export type AdsoRole = ChainStage | null;
@@ -35,18 +35,18 @@ const ACTION_TEXT: Record<string, string> = {
   revision: 'Sent back to the student for revision',
 };
 
-type Step = { action: string; label: string; icon: React.ElementType; variant: 'primary' | 'secondary' | 'danger-secondary' | 'ghost'; needsNote?: string; done: string };
+type Step = { action: string; label: string; icon: React.ElementType; variant: 'primary' | 'secondary' | 'danger-secondary' | 'ghost'; needsNote?: string; done: string; confirm: string; next: string };
 const STEP_ACTIONS: Record<ChainStage, Step[]> = {
   associate: [
-    { action: 'endorse', label: 'Endorse to the Head', icon: Send, variant: 'primary', done: 'Endorsed to the Head.' },
+    { action: 'endorse', label: 'Endorse to the Head', icon: Send, variant: 'primary', done: 'Endorsed to the Head.', confirm: 'Endorse {name}’s application to the Head?', next: 'It goes to the Head of the Recruitment and Scholarship Unit, who recommends approval or rejection. You can’t change it unless the Head returns it.' },
   ],
   head: [
-    { action: 'recommendApproval', label: 'Recommend approval', icon: ThumbsUp, variant: 'primary', done: 'Recommended approval to the Director.' },
-    { action: 'recommendRejection', label: 'Recommend rejection', icon: ThumbsDown, variant: 'danger-secondary', needsNote: 'Say why you recommend rejecting it.', done: 'Recommended rejection to the Director.' },
-    { action: 'returnToAssociate', label: 'Return to the Associate', icon: CornerUpLeft, variant: 'ghost', needsNote: 'Say what the Associate should check.', done: 'Returned to the Associate.' },
+    { action: 'recommendApproval', label: 'Recommend approval', icon: ThumbsUp, variant: 'primary', done: 'Recommended approval to the Director.', confirm: 'Recommend approving {name}’s application?', next: 'It goes to the Director with your recommendation. The Director makes the final decision.' },
+    { action: 'recommendRejection', label: 'Recommend rejection', icon: ThumbsDown, variant: 'danger-secondary', needsNote: 'Say why you recommend rejecting it.', done: 'Recommended rejection to the Director.', confirm: 'Recommend rejecting {name}’s application?', next: 'It goes to the Director with your recommendation and note. The Director makes the final decision.' },
+    { action: 'returnToAssociate', label: 'Return to the Associate', icon: CornerUpLeft, variant: 'ghost', needsNote: 'Say what the Associate should check.', done: 'Returned to the Associate.', confirm: 'Return {name}’s application to the Associate?', next: 'The Associate sees your note, checks it again and endorses it back to you.' },
   ],
   director: [
-    { action: 'returnToHead', label: 'Return to the Head', icon: CornerUpLeft, variant: 'ghost', needsNote: 'Say what the Head should look at again.', done: 'Returned to the Head.' },
+    { action: 'returnToHead', label: 'Return to the Head', icon: CornerUpLeft, variant: 'ghost', needsNote: 'Say what the Head should look at again.', done: 'Returned to the Head.', confirm: 'Return {name}’s application to the Head?', next: 'The Head sees your note and recommends again.' },
   ],
 };
 
@@ -61,13 +61,22 @@ export default function ApprovalChain({ app, role, getToken, onChanged }: {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  // The step waiting for "are you sure?".
+  const [confirming, setConfirming] = useState<Step | null>(null);
+  const name = titleCaseName(applicantName(app)) || 'this student';
   const steps = app.approvalSteps ?? [];
   // The Head's latest recommendation, for the Director.
   const recommendation = [...steps].reverse().find(s => s.action === 'recommendApproval' || s.action === 'recommendRejection');
   const mine = canAct(role, stage);
 
-  const take = async (step: Step) => {
+  // A missing note is caught before asking.
+  const ask = (step: Step) => {
     if (step.needsNote && !note.trim()) { setError(step.needsNote); return; }
+    setError('');
+    setConfirming(step);
+  };
+
+  const take = async (step: Step) => {
     setBusy(step.action);
     setError('');
     try {
@@ -79,6 +88,7 @@ export default function ApprovalChain({ app, role, getToken, onChanged }: {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Couldn’t save the step.');
       setNote('');
+      setConfirming(null);
       onChanged(normalizeApplication(body.application), step.done);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Couldn’t save the step.');
@@ -113,7 +123,7 @@ export default function ApprovalChain({ app, role, getToken, onChanged }: {
         </Alert>
       )}
 
-      {error && <Alert tone="danger" onDismiss={() => setError('')}>{error}</Alert>}
+      {error && !confirming && <Alert tone="danger" onDismiss={() => setError('')}>{error}</Alert>}
 
       {mine ? (
         STEP_ACTIONS[stage].length > 0 && (
@@ -123,13 +133,29 @@ export default function ApprovalChain({ app, role, getToken, onChanged }: {
             </Field>
             <div className="flex flex-wrap gap-2">
               {STEP_ACTIONS[stage].map(s => (
-                <Button key={s.action} size="sm" variant={s.variant} icon={s.icon} loading={busy === s.action} disabled={!!busy} onClick={() => take(s)}>{s.label}</Button>
+                <Button key={s.action} size="sm" variant={s.variant} icon={s.icon} loading={busy === s.action} disabled={!!busy} onClick={() => ask(s)}>{s.label}</Button>
               ))}
             </div>
           </div>
         )
       ) : (
         <p className="text-xs text-ink-subtle">Only the {labelOf(stage)} can take this step. You can still send it back to the student for revision.</p>
+      )}
+
+      {confirming && (
+        <ConfirmDialog
+          title={confirming.confirm.replace('{name}', name)}
+          confirmLabel={confirming.label}
+          confirmIcon={confirming.icon}
+          tone={confirming.variant === 'danger-secondary' ? 'danger' : 'primary'}
+          busy={busy === confirming.action}
+          error={error}
+          onConfirm={() => take(confirming)}
+          onCancel={() => { if (!busy) { setConfirming(null); setError(''); } }}
+        >
+          <p className="text-sm text-ink-muted">{confirming.next}</p>
+          {note.trim() && <Quote className="mt-3">{note.trim()}</Quote>}
+        </ConfirmDialog>
       )}
 
       {steps.length > 0 && (

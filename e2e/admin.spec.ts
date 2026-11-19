@@ -82,6 +82,13 @@ test.describe('AdSO', () => {
     await maria.click();
     await expect(page.getByText('ENT-2026-0001').first()).toBeVisible();
     await expect(page.getByText(/entrance scholarship/i).first()).toBeVisible();
+
+    // Each approval chain step asks first.
+    await page.getByRole('button', { name: 'Endorse to the Head' }).click();
+    const confirm = page.getByRole('alertdialog').or(page.getByRole('dialog')).filter({ hasText: 'application to the Head?' });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirm).toBeHidden();
   });
 
   test('Students: finds who holds more than one scholarship, and who declared others', async ({ page }) => {

@@ -1,17 +1,14 @@
-import React, { useState } from 'react';
-import { ChevronDown, ClipboardCheck } from 'lucide-react';
-import { EVALUATION_ITEMS, passingAverage, RATING_LABELS, ratingLabel } from '../utils/renewals';
+import { ClipboardCheck } from 'lucide-react';
 
-// The office head's 1–5 evaluation of a scholar's duty, as the scholar
-// sees it: the average and what it means, each item, and the head's
-// commendations and recommendations (or remarks, on older evaluations).
-// Used on Duty Hours (the term's evaluation) and on a renewal.
+// The office head's evaluation of a scholar's duty, as the scholar sees it:
+// the head's commendations and recommendations (or remarks, on older
+// evaluations), who wrote them and when. Never the ratings or the average:
+// the backend doesn't send those to scholars (utils/renewals.js
+// studentEvaluation). Used on Duty Hours and on a renewal.
 export interface ScholarEvaluation {
-  scores: Record<string, number>;
-  average: number;
-  remarks?: string | null;
   commendations?: string | null;
   recommendations?: string | null;
+  remarks?: string | null;
   evaluatorName?: string | null;
   assignedOffice?: string | null;
   enteredAt?: string | null;
@@ -23,80 +20,33 @@ const formatDate = (value?: string | null) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
-export default function EvaluationSummary({ evaluation, title = 'Your office’s evaluation', defaultOpen = false }: {
+export default function EvaluationSummary({ evaluation, title = 'Your office’s evaluation' }: {
   evaluation: ScholarEvaluation;
   title?: string;
+  // Kept for callers; there's nothing to expand any more.
   defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const passed = evaluation.average >= passingAverage();
   const who = [evaluation.evaluatorName, evaluation.assignedOffice].filter(Boolean).join(', ');
-  const items = EVALUATION_ITEMS.filter(i => evaluation.scores?.[i.key]);
+  const comments = ([['Commendations', evaluation.commendations], ['Recommendations', evaluation.recommendations], ['Remarks', evaluation.remarks]] as const)
+    .filter(([, text]) => text);
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h3 className="flex items-center gap-2 font-display font-bold text-base text-slate-900">
-            <ClipboardCheck className="w-4 h-4 text-brand-green" aria-hidden />{title}
-          </h3>
-          {(who || evaluation.enteredAt) && (
-            <p className="text-xs text-slate-500 mt-1">{[who && `By ${who}`, formatDate(evaluation.enteredAt)].filter(Boolean).join(' · ')}</p>
-          )}
-        </div>
-        <div className="text-right">
-          <p className="font-display font-black text-3xl text-slate-900 leading-none">{evaluation.average.toFixed(2)}<span className="text-base font-semibold text-slate-500"> / 5</span></p>
-          <p className={`mt-1 text-xs font-bold ${passed ? 'text-brand-green' : 'text-amber-700'}`}>{ratingLabel(evaluation.average)}</p>
-        </div>
+      <div className="min-w-0">
+        <h3 className="flex items-center gap-2 font-display font-bold text-base text-slate-900">
+          <ClipboardCheck className="w-4 h-4 text-brand-green" aria-hidden />{title}
+        </h3>
+        {(who || evaluation.enteredAt) && (
+          <p className="text-xs text-slate-500 mt-1">{[who && `By ${who}`, formatDate(evaluation.enteredAt)].filter(Boolean).join(' · ')}</p>
+        )}
       </div>
 
-      {!passed && (
-        <p className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-xs text-amber-900 leading-relaxed">
-          An average below {passingAverage().toFixed(2)} ({RATING_LABELS[Math.floor(passingAverage())]}) means the scholarship office will talk with you before deciding your renewal.
-        </p>
-      )}
-
-      {([['Commendations', evaluation.commendations], ['Recommendations', evaluation.recommendations], ['Remarks', evaluation.remarks]] as const)
-        .filter(([, text]) => text)
-        .map(([label, text]) => (
-          <blockquote key={label} className="rounded-xl bg-slate-50 border border-slate-100 p-3.5">
-            <p className="text-xs font-bold text-slate-400">{label}</p>
-            <p className="text-sm text-slate-700 whitespace-pre-line mt-0.5">{text}</p>
-          </blockquote>
-        ))}
-
-      {items.length > 0 && (
-        <div>
-          <button
-            type="button"
-            onClick={() => setOpen(o => !o)}
-            aria-expanded={open}
-            className="flex items-center gap-1.5 text-xs font-bold text-brand-green hover:text-brand-green-dark focus:outline-hidden"
-          >
-            {open ? 'Hide the ratings' : `See all ${items.length} ratings`}
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
-          </button>
-          {open && (
-            <ul className="mt-3 divide-y divide-slate-100">
-              {items.map(i => {
-                const score = evaluation.scores[i.key];
-                return (
-                  <li key={i.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 sm:flex-nowrap">
-                    {/* Phones: the label gets its own line, bars and score under it. */}
-                    <span className="min-w-0 basis-full text-sm text-slate-700 sm:flex-1 sm:basis-0">{i.label}</span>
-                    <span className="flex gap-1" aria-hidden>
-                      {[1, 2, 3, 4, 5].map(n => (
-                        <span key={n} className={`h-1.5 w-4 rounded-full ${n <= score ? (score >= passingAverage() ? 'bg-brand-green' : 'bg-amber-500') : 'bg-slate-200'}`} />
-                      ))}
-                    </span>
-                    <span className="ml-auto text-right text-xs text-slate-500 sm:ml-0 sm:w-36">
-                      <span className="font-bold text-slate-800">{score}</span> · {RATING_LABELS[score]}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+      {comments.length > 0 ? comments.map(([label, text]) => (
+        <blockquote key={label} className="rounded-xl bg-slate-50 border border-slate-100 p-3.5">
+          <p className="text-xs font-bold text-slate-400">{label}</p>
+          <p className="text-sm text-slate-700 whitespace-pre-line mt-0.5">{text}</p>
+        </blockquote>
+      )) : (
+        <p className="text-sm text-slate-600">Your office has evaluated your duty. It goes to the scholarship office with your renewal.</p>
       )}
     </div>
   );

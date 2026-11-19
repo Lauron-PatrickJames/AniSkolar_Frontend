@@ -72,7 +72,7 @@ export interface RenewalEvaluation {
   remarks?: string;           // evaluations from before Commendations / Recommendations
   commendations?: string;
   recommendations?: string;
-  // Continue in the office (true) or grow in another (false).
+  // Continue in the office (true) or transfer to another (false).
   requestAgain?: boolean;
   enteredBy?: string;
   enteredAt?: string;
@@ -143,7 +143,7 @@ export const RATING_SCALE: Record<number, string> = {
 };
 
 // The form's question 8: true = continue in the office, false = another office.
-export const CONTINUE_LABELS = { true: 'Continue in our office', false: 'Let them grow in another office' } as const;
+export const CONTINUE_LABELS = { true: 'Continue in our office', false: 'Transfer to another office' } as const;
 
 // 5 Outstanding … 2 Needs improvement, as the office reads the form. The
 // form's label for 1 isn't in our copy.

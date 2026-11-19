@@ -342,7 +342,7 @@ function RenewalCard({ renewal, onRevise }: { renewal: Renewal; onRevise?: () =>
         </div>
       )}
 
-      {renewal.evaluation?.average ? <EvaluationSummary evaluation={renewal.evaluation} title="Your office's evaluation (part of this renewal)" /> : null}
+      {renewal.evaluation ? <EvaluationSummary evaluation={renewal.evaluation} title="Your office's evaluation (part of this renewal)" /> : null}
 
       <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 [&>div]:rounded-xl [&>div]:bg-slate-50 [&>div]:px-3 [&>div]:py-2.5">
         <div>

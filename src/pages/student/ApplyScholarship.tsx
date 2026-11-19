@@ -359,6 +359,13 @@ const STANDARD_SECTIONS: (WizardSection & { key: StdSectionKey })[] = [
   { key: 'review', label: 'Review & Submit', part: 'review' }
 ];
 
+// The server's names for the form's parts (its errors say which) -> the
+// section that shows them.
+const SERVER_SECTIONS: Record<string, StdSectionKey> = {
+  personalInfo: 'personal', contactSchool: 'contact', parentsGuardian: 'parents', siblings: 'siblings',
+  assetsExpenses: 'assets', standardInfo: 'profile', grant: 'grant',
+};
+
 // Drafts saved before the section layout stored a numbered tab instead.
 const LEGACY_SFAG_STEPS: Record<number, StdSectionKey> = {
   1: 'personal', 2: 'contact', 3: 'parents', 4: 'siblings', 5: 'assets', 6: 'documents'
@@ -892,7 +899,9 @@ function StandardApplyScholarship({
 
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(body.error || `Failed to ${isResubmit ? 'resubmit' : 'submit'} application. Please try again.`);
+      // The server can say which section the problem is in (e.g. a phone
+      // number with letters): the form opens it.
+      throw Object.assign(new Error(body.error || `Failed to ${isResubmit ? 'resubmit' : 'submit'} application. Please try again.`), { section: body.section as string | undefined });
     }
     return body.application;
   };
@@ -956,6 +965,10 @@ function StandardApplyScholarship({
     } catch (err) {
       setIsSubmitting(false);
       setBanner(err instanceof Error ? err.message : `Something went wrong ${isResubmit ? 'resubmitting' : 'submitting'} your application. Please try again.`);
+      const target = SERVER_SECTIONS[(err as { section?: string })?.section ?? ''];
+      const key = target && sections.find(s => s.key === target || (target === 'profile' && s.key === 'office'))?.key;
+      if (key) setCurrentKey(key);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 

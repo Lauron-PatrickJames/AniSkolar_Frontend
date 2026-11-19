@@ -1381,7 +1381,8 @@ export function Modal({ title, description, children, footer, onClose, size = 'm
           sheet ? 'h-dvh sm:h-[min(44rem,88dvh)]' : 'max-h-[92dvh] rounded-t-card sm:max-h-[88dvh]'
         }`}
       >
-        <header className="flex shrink-0 items-start gap-3 border-b border-line px-5 py-4">
+        {/* No line under the title when there's no body (a title-only confirmation). */}
+        <header className={`flex shrink-0 items-start gap-3 px-5 py-4 ${children !== undefined ? 'border-b border-line' : ''}`}>
           {icon}
           <div className="min-w-0 flex-1">
             <h2 id={titleId} className="text-base font-semibold text-ink">{title}</h2>
@@ -1406,7 +1407,7 @@ export function Modal({ title, description, children, footer, onClose, size = 'm
 // Confirmation for consequential actions. Focus starts on Cancel; errors
 // from the action show inside the dialog, which stays open until it
 // succeeds or is cancelled.
-export function ConfirmDialog({ title, description, children, confirmLabel, confirmIcon, tone = 'primary', onConfirm, onCancel, busy, error }: {
+export function ConfirmDialog({ title, description, children, confirmLabel, confirmIcon, tone = 'primary', onConfirm, onCancel, busy, error, showIcon }: {
   title: string;
   description?: React.ReactNode;
   children?: React.ReactNode;
@@ -1417,8 +1418,12 @@ export function ConfirmDialog({ title, description, children, confirmLabel, conf
   onCancel: () => void;
   busy?: boolean;
   error?: string;
+  // Shows the action's icon beside the title (danger dialogs always show a warning).
+  showIcon?: boolean;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const ActionIcon = confirmIcon;
+  const hasBody = !!children || !!error;
   return (
     <Modal
       role="alertdialog"
@@ -1432,6 +1437,10 @@ export function ConfirmDialog({ title, description, children, confirmLabel, conf
         <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-danger-bg text-danger">
           <AlertTriangle className="size-4.5" aria-hidden />
         </span>
+      ) : showIcon && ActionIcon ? (
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-accent">
+          <ActionIcon className="size-4.5" aria-hidden />
+        </span>
       ) : undefined}
       footer={
         <>
@@ -1440,12 +1449,12 @@ export function ConfirmDialog({ title, description, children, confirmLabel, conf
         </>
       }
     >
-      {(children || error) && (
+      {hasBody ? (
         <div className="space-y-3">
           {children}
           {error && <Alert tone="danger">{error}</Alert>}
         </div>
-      )}
+      ) : undefined}
     </Modal>
   );
 }

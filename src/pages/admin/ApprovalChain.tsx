@@ -147,6 +147,7 @@ export default function ApprovalChain({ app, role, getToken, onChanged }: {
           title={confirming.confirm.replace('{name}', name)}
           confirmLabel={confirming.label}
           confirmIcon={confirming.icon}
+          showIcon
           tone={confirming.variant === 'danger-secondary' ? 'danger' : 'primary'}
           busy={busy === confirming.action}
           error={error}

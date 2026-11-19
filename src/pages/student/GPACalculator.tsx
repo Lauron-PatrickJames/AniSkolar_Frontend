@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Calculator, Plus, Trash2, RotateCcw, Info, AlertCircle, Copy, Check, Award, CheckCircle, ChevronRight, Loader2, Save, Sparkles, BookOpen } from 'lucide-react';
 import { Application, ProfileChanges, SaveResult, Scholarship, StudentProfile } from '../../types';
 import { acceptsOnlineApplications } from '../../data/scholarships';
-import { GpaCheck, checkGpaRequirement, describeGpaRequirement, isContinuingStudent, toGpaNumber } from '../../utils/eligibility';
+import { GpaCheck, checkGpaRequirement, describeGpaRequirement, isContinuingStudent, isEligible, toGpaNumber } from '../../utils/eligibility';
 
 interface CourseEntry {
   id: string;
@@ -222,7 +222,9 @@ export default function GPACalculator({ student, scholarships, applications, onU
   const continuing = isContinuingStudent(student);
   const scholarshipChecks = useMemo(() => {
     return scholarships
-      .filter(s => s.gpaRequirement)
+      // Only the ones open to this student (e.g. not CBAA-only for a CICS
+      // student), like Explore Grants; held ones always show.
+      .filter(s => s.gpaRequirement && (heldIds.has(s.id) || isEligible(s, student)))
       .map(s => ({ scholarship: s, req: s.gpaRequirement!, held: heldIds.has(s.id) }))
       .filter(({ req, held }) => held || (req.stage === 'apply' && (continuing || !req.continuingOnly)))
       .map(row => ({
@@ -232,7 +234,7 @@ export default function GPACalculator({ student, scholarships, applications, onU
           : checkGpaRequirement(row.req, { gpa, lowestGrade }, { continuing: row.held || continuing })
       }))
       .sort((a, b) => Number(b.held) - Number(a.held));
-  }, [scholarships, heldIds, continuing, includedCount, gpa, lowestGrade]);
+  }, [scholarships, student, heldIds, continuing, includedCount, gpa, lowestGrade]);
 
   // Scholarships these grades meet that the student doesn't hold and can
   // apply for or qualify for: the suggestions.

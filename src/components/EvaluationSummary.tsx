@@ -3,12 +3,15 @@ import { ChevronDown, ClipboardCheck } from 'lucide-react';
 import { EVALUATION_ITEMS, passingAverage, RATING_LABELS, ratingLabel } from '../utils/renewals';
 
 // The office head's 1–5 evaluation of a scholar's duty, as the scholar
-// sees it: the average and what it means, each item, and the remarks.
+// sees it: the average and what it means, each item, and the head's
+// commendations and recommendations (or remarks, on older evaluations).
 // Used on Duty Hours (the term's evaluation) and on a renewal.
 export interface ScholarEvaluation {
   scores: Record<string, number>;
   average: number;
   remarks?: string | null;
+  commendations?: string | null;
+  recommendations?: string | null;
   evaluatorName?: string | null;
   assignedOffice?: string | null;
   enteredAt?: string | null;
@@ -52,12 +55,14 @@ export default function EvaluationSummary({ evaluation, title = 'Your office’s
         </p>
       )}
 
-      {evaluation.remarks && (
-        <blockquote className="rounded-xl bg-slate-50 border border-slate-100 p-3.5">
-          <p className="text-xs font-bold text-slate-400">Remarks</p>
-          <p className="text-sm text-slate-700 whitespace-pre-line mt-0.5">{evaluation.remarks}</p>
-        </blockquote>
-      )}
+      {([['Commendations', evaluation.commendations], ['Recommendations', evaluation.recommendations], ['Remarks', evaluation.remarks]] as const)
+        .filter(([, text]) => text)
+        .map(([label, text]) => (
+          <blockquote key={label} className="rounded-xl bg-slate-50 border border-slate-100 p-3.5">
+            <p className="text-xs font-bold text-slate-400">{label}</p>
+            <p className="text-sm text-slate-700 whitespace-pre-line mt-0.5">{text}</p>
+          </blockquote>
+        ))}
 
       {items.length > 0 && (
         <div>

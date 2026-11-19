@@ -5,7 +5,7 @@ import {
 import { mockScholarships, acceptsOnlineApplications, applyScholarshipOverrides } from '../../data/scholarships';
 import { retentionMinGpa } from '../../utils/eligibility';
 import {
-  DEFAULT_RENEWAL_REQUIREMENTS, EVALUATION_ITEMS, passingAverage, RATING_LABELS, RENEWAL_DECISIONS, RENEWAL_TERMS, Renewal,
+  CONTINUE_LABELS, DEFAULT_RENEWAL_REQUIREMENTS, EVALUATION_ITEMS, passingAverage, RATING_LABELS, RENEWAL_DECISIONS, RENEWAL_TERMS, Renewal,
   RenewalDecision, RenewalPeriod, RenewalStatus, RenewalTerm, academicYearLabel, currentAcademicYear, formatGpa, meetsGpa,
   deadlineLabel, isIsoDate, periodLabel, ratingLabel
 } from '../../utils/renewals';
@@ -18,6 +18,7 @@ import { ResultDialog,
 import { QuickReplies, UnfilledHint, firstNameOf, unfilledParts } from './ReplyTemplates';
 import { downloadExcel, excelDate } from '../../utils/excelExport';
 import { useRefreshTick } from '../../utils/useRefreshTick';
+import ContinueChoice from '../../components/ContinueChoice';
 
 // Renewals: the AdSO opens a renewal period per scholarship and term;
 // scholars holding the scholarship submit their grades (or say they're not
@@ -1016,14 +1017,19 @@ function EvaluationSummary({ renewal }: { renewal: Renewal }) {
         By <span className="font-medium text-ink">{ev.evaluatorName || 'the office head'}</span>{ev.assignedOffice ? `, ${ev.assignedOffice}` : ''}
         {ev.enteredAt ? ` · ${formatDateTime(ev.enteredAt)}` : ''}{ev.source === 'office' ? ' · in the office portal' : ' · entered by the scholarship office'}
       </p>
+      {ev.commendations && <DetailField label="Commendations" value={<span className="whitespace-pre-line font-normal">{ev.commendations}</span>} />}
+      {ev.recommendations && <DetailField label="Recommendations" value={<span className="whitespace-pre-line font-normal">{ev.recommendations}</span>} />}
       {ev.remarks && <DetailField label="Remarks (the scholar sees these too)" value={<span className="whitespace-pre-line font-normal">{ev.remarks}</span>} />}
+      {ev.requestAgain !== undefined && ev.requestAgain !== null && (
+        <DetailField label="Next semester" value={<span className="font-normal">{ev.requestAgain ? CONTINUE_LABELS.true : CONTINUE_LABELS.false}</span>} />
+      )}
       <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
-        {open ? 'Hide the ratings' : `Show all ${EVALUATION_ITEMS.length} ratings`}
+        {open ? 'Hide the ratings' : `Show all ${EVALUATION_ITEMS.filter(item => ev.scores?.[item.key]).length} ratings`}
         <ChevronDown className={`size-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
       </button>
       {open && (
         <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-          {EVALUATION_ITEMS.map(item => (
+          {EVALUATION_ITEMS.filter(item => ev.scores?.[item.key]).map(item => (
             <div key={item.key} className="flex items-baseline justify-between gap-3 border-b border-line py-1 text-sm">
               <dt className="text-ink-muted">{item.label}</dt>
               <dd className="shrink-0 font-medium text-ink">{ev.scores?.[item.key] ?? '—'}</dd>
@@ -1066,7 +1072,11 @@ function EvaluationForm({ renewal, dutyOffice, getToken, onCancel, onSaved }: {
   const [evaluatorName, setEvaluatorName] = useState(ev?.evaluatorName ?? '');
   // The scholar's duty office (Duty hours) unless one was saved before.
   const [assignedOffice, setAssignedOffice] = useState(ev?.assignedOffice ?? dutyOffice ?? '');
-  const [remarks, setRemarks] = useState(ev?.remarks ?? '');
+  // Older evaluations had one Remarks field: it starts the commendations.
+  const [commendations, setCommendations] = useState(ev?.commendations ?? ev?.remarks ?? '');
+  const [recommendations, setRecommendations] = useState(ev?.recommendations ?? '');
+  // The form's question 8, if the head answered it.
+  const [continueHere, setContinueHere] = useState<'Continue' | 'Another' | ''>(ev?.requestAgain === true ? 'Continue' : ev?.requestAgain === false ? 'Another' : '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -1077,13 +1087,14 @@ function EvaluationForm({ renewal, dutyOffice, getToken, onCancel, onSaved }: {
 
   const save = async () => {
     if (average === null) { setError('Rate every item from 1 to 5.'); return; }
+    if (!commendations.trim() || !recommendations.trim()) { setError('Copy the commendations and recommendations from the form.'); return; }
     setSaving(true);
     setError('');
     try {
       const res = await fetch(`${API_BASE_URL}/api/renewals/admin/${renewal._id}/evaluation`, {
         method: 'PATCH',
         headers: await authHeaders(getToken, true),
-        body: JSON.stringify({ scores, evaluatorName, assignedOffice, remarks }),
+        body: JSON.stringify({ scores, evaluatorName, assignedOffice, commendations, recommendations, ...(continueHere ? { requestAgain: continueHere === 'Continue' } : {}) }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Failed to save the evaluation.');
@@ -1120,8 +1131,14 @@ function EvaluationForm({ renewal, dutyOffice, getToken, onCancel, onSaved }: {
           <TextInput value={assignedOffice} onChange={e => setAssignedOffice(e.target.value)} disabled={saving} maxLength={200} />
         </Field>
       </div>
-      <Field label="Remarks" optional helper="Staff only.">
-        <Textarea rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} disabled={saving} maxLength={2000} />
+      <Field label="Continue in their office or transfer?" optional>
+        <ContinueChoice name={`continue-${renewal._id}`} value={continueHere} onChange={setContinueHere} disabled={saving} />
+      </Field>
+      <Field label="Commendations" helper="The scholar sees this.">
+        <Textarea rows={2} value={commendations} onChange={e => setCommendations(e.target.value)} disabled={saving} maxLength={2000} />
+      </Field>
+      <Field label="Recommendations" helper="The scholar sees this.">
+        <Textarea rows={2} value={recommendations} onChange={e => setRecommendations(e.target.value)} disabled={saving} maxLength={2000} />
       </Field>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-sm text-ink-muted">

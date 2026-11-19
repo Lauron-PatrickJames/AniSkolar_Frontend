@@ -39,6 +39,8 @@ interface ScholarRow {
   requiredHoursFromAdso: number | null;    // hours for that percentage and year group, when set
   yearGroup: YearGroup | null;             // from the profile's year level
   pendingClaims: number;                   // event claims waiting for approval
+  // The office whose head asked for this scholar again last term (evaluation).
+  requestedBy?: string | null;
   updatedAt: string | null;
 }
 
@@ -592,11 +594,22 @@ function shuffled<T>(items: T[]): T[] {
 
 // Deals scholars into offices' free slots round by round (each office with
 // room gets one per round, in a random order), so a short list is spread
-// across offices instead of filling the first one.
+// across offices instead of filling the first one. Scholars an office's
+// head asked for again (last term's evaluation) go to that office first,
+// while it has room.
+const officeKey = (o: string) => o.trim().replace(/\s+/g, ' ').toLowerCase();
 function dealScholars(scholars: ScholarRow[], free: { office: string; free: number }[]) {
-  const queue = shuffled(scholars);
   const left = new Map(free.map(f => [f.office, f.free]));
   const result = new Map<string, ScholarRow[]>();
+  const placed = new Set<string>();
+  for (const scholar of scholars) {
+    const office = scholar.requestedBy && free.find(f => officeKey(f.office) === officeKey(scholar.requestedBy!))?.office;
+    if (!office || !(left.get(office)! > 0)) continue;
+    result.set(office, [...(result.get(office) ?? []), scholar]);
+    left.set(office, left.get(office)! - 1);
+    placed.add(scholar.studentNumber);
+  }
+  const queue = shuffled(scholars.filter(s => !placed.has(s.studentNumber)));
   while (queue.length) {
     const open = shuffled([...left.entries()].filter(([, n]) => n > 0).map(([office]) => office));
     if (!open.length) break;
@@ -727,7 +740,7 @@ function RandomAssignDialog({ rows, term, offices, officeCounts, getToken, onClo
             {[...preview.byOffice].sort(([a], [b]) => a.localeCompare(b)).map(([office, scholars]) => (
               <li key={office} className="p-3">
                 <p className="text-sm font-medium text-ink">{office} <span className="font-normal text-ink-subtle">· +{scholars.length}{officeCounts[office] ? ` (has ${officeCounts[office]})` : ''}</span></p>
-                <p className="mt-1 text-sm text-ink-muted">{scholars.map(s => (s.name ? titleCaseName(s.name) : s.studentNumber)).join(', ')}</p>
+                <p className="mt-1 text-sm text-ink-muted">{scholars.map(s => `${s.name ? titleCaseName(s.name) : s.studentNumber}${s.requestedBy && officeKey(s.requestedBy) === officeKey(office) ? ' (requested again)' : ''}`).join(', ')}</p>
               </li>
             ))}
           </ul>
@@ -1118,7 +1131,10 @@ function OfficeButton({ row, onClick }: { row: ScholarRow; onClick: () => void }
           <Pencil className="size-3.5 shrink-0 text-ink-subtle opacity-0 group-hover/office:opacity-100 group-focus-visible/office:opacity-100" aria-hidden />
         </>
       ) : (
-        <span className="font-medium text-accent">Assign office</span>
+        <span className="min-w-0">
+          <span className="block font-medium text-accent">Assign office</span>
+          {row.requestedBy && <span className="block truncate text-xs text-ink-subtle">Requested again by {row.requestedBy}</span>}
+        </span>
       )}
     </button>
   );

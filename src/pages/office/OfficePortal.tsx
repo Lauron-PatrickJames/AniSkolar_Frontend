@@ -6,7 +6,8 @@ import AdminLayout, { NavSection } from '../admin/AdminLayout';
 import Conversation from '../../components/messages/Conversation';
 import { ChatMessage, MESSAGES_READ_EVENT, postMessage } from '../../utils/messages';
 import { DutyTerm, format12h, hoursUntilRemoved, formatDutyDate, formatHours, termLabel, weekday } from '../../utils/dutyHours';
-import { EVALUATION_ITEMS, passingAverage, RATING_LABELS, ratingLabel } from '../../utils/renewals';
+import ContinueChoice from '../../components/ContinueChoice';
+import { EVALUATION_ITEMS, passingAverage, RATING_LABELS, RATING_SCALE, ratingLabel } from '../../utils/renewals';
 import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from '../admin/adminData';
 import { ResultDialog,
   Alert, Avatar, Badge, Button, Card, EmptyState, MobileList, ErrorState, Field, Modal, PageHeader, SearchInput, SegmentedControl, Select, Table,
@@ -582,7 +583,7 @@ const hrs = (n: number) => String(Math.round(n * 100) / 100);
 interface EvalScholar {
   studentNumber: string; name: string; program: string; yearLevel: string; avatarUrl?: string;
   state: EvalState; completed: number; required: number | null; waitingHours: number;
-  evaluation: { scores: Record<string, number>; average: number; remarks: string | null; enteredAt: string } | null;
+  evaluation: { scores: Record<string, number>; average: number; remarks: string | null; commendations?: string | null; recommendations?: string | null; enteredAt: string; requestAgain?: boolean | null } | null;
   locked: boolean;
 }
 interface EvalTerm { term: TermKey; scholars: EvalScholar[] }
@@ -665,18 +666,30 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
   term: TermKey; scholar: EvalScholar; getToken: GetToken; onClose: () => void; onSaved: () => void;
 }) {
   const [scores, setScores] = useState<Record<string, number>>(scholar.evaluation?.scores ?? {});
-  const [remarks, setRemarks] = useState(scholar.evaluation?.remarks ?? '');
+  // An evaluation from before Commendations / Recommendations starts from its remarks.
+  const [commendations, setCommendations] = useState(scholar.evaluation?.commendations ?? scholar.evaluation?.remarks ?? '');
+  const [recommendations, setRecommendations] = useState(scholar.evaluation?.recommendations ?? '');
+  // The form's question 8. "Continue in our office" makes the AdSO's Random
+  // assign place them here first next semester.
+  const [continueHere, setContinueHere] = useState<'Continue' | 'Another' | ''>(
+    scholar.evaluation?.requestAgain === true ? 'Continue' : scholar.evaluation?.requestAgain === false ? 'Another' : '');
+  const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const rated = EVALUATION_ITEMS.filter(i => scores[i.key]).length;
   const average = rated === EVALUATION_ITEMS.length ? EVALUATION_ITEMS.reduce((n, i) => n + scores[i.key], 0) / EVALUATION_ITEMS.length : null;
+  const missing = average === null ? `Rate all ${EVALUATION_ITEMS.length} items (${rated} done).`
+    : !continueHere ? 'Choose whether they continue in your office.'
+      : !commendations.trim() ? 'Write your commendations.'
+        : !recommendations.trim() ? 'Write your recommendations.' : '';
 
   const save = async () => {
-    if (average === null) { setError('Rate every item from 1 to 5.'); return; }
+    setAttempted(true);
+    if (missing) { setError(missing); return; }
     setBusy(true);
     setError('');
     try {
-      await api(getToken, `/api/office/evaluations/${scholar.studentNumber}`, { method: 'PUT', body: { ...term, scores, remarks } });
+      await api(getToken, `/api/office/evaluations/${scholar.studentNumber}`, { method: 'PUT', body: { ...term, scores, commendations, recommendations, requestAgain: continueHere === 'Continue' } });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save the evaluation.');
@@ -699,12 +712,21 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
           </p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button onClick={onClose} disabled={busy}>Cancel</Button>
-            <Button variant="primary" loading={busy} onClick={save} disabled={average === null}>Submit evaluation</Button>
+            <Button variant="primary" loading={busy} onClick={save}>Submit evaluation</Button>
           </div>
         </div>
       )}
     >
-      {error && <Alert tone="danger">{error}</Alert>}
+      {error && <Alert tone="danger" onDismiss={() => setError('')}>{error}</Alert>}
+      {/* The form's rating scale. */}
+      <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-control bg-surface-muted px-3.5 py-3 text-xs">
+        {[5, 4, 3, 2, 1].map(n => (
+          <React.Fragment key={n}>
+            <dt className="font-semibold tabular-nums text-ink">{n}</dt>
+            <dd className="text-ink-muted">{RATING_SCALE[n]}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
       <div className="divide-y divide-line rounded-control ring-1 ring-line">
         {EVALUATION_ITEMS.map((item, i) => (
           <div key={item.key} className="flex flex-col gap-1.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
@@ -719,9 +741,19 @@ function EvaluateModal({ term, scholar, getToken, onClose, onSaved }: {
           </div>
         ))}
       </div>
-      <div className="mt-4">
-        <Field label="Remarks" optional helper="The scholar sees this.">
-          <Textarea rows={2} value={remarks} onChange={e => setRemarks(e.target.value)} maxLength={2000} disabled={busy} />
+      <div className="mt-5 space-y-4">
+        <Field
+          label="Would you prefer them to continue their services in your office, or to transfer them to another office?"
+          error={attempted && !continueHere ? 'Choose one.' : undefined}
+          helper={continueHere === 'Continue' ? 'The scholarship office places them with you first next semester, if you still have a slot.' : undefined}
+        >
+          <ContinueChoice name="continue-here" value={continueHere} onChange={setContinueHere} disabled={busy} invalid={attempted && !continueHere} />
+        </Field>
+        <Field label="Commendations" helper="The scholar sees this." error={attempted && !commendations.trim() ? 'Write your commendations.' : undefined}>
+          <Textarea rows={2} value={commendations} onChange={e => setCommendations(e.target.value)} maxLength={2000} disabled={busy} />
+        </Field>
+        <Field label="Recommendations" helper="The scholar sees this." error={attempted && !recommendations.trim() ? 'Write your recommendations.' : undefined}>
+          <Textarea rows={2} value={recommendations} onChange={e => setRecommendations(e.target.value)} maxLength={2000} disabled={busy} />
         </Field>
       </div>
       {average !== null && average < passingAverage() && (

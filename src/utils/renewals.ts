@@ -69,7 +69,11 @@ export interface RenewalEvaluation {
   average: number;
   evaluatorName?: string;
   assignedOffice?: string;
-  remarks?: string;
+  remarks?: string;           // evaluations from before Commendations / Recommendations
+  commendations?: string;
+  recommendations?: string;
+  // Continue in the office (true) or grow in another (false).
+  requestAgain?: boolean;
   enteredBy?: string;
   enteredAt?: string;
   // 'office' = the office head entered it in the office portal.
@@ -105,8 +109,8 @@ export interface Renewal {
 }
 
 // Department head's Student Assistant evaluation (SFAG), rated 1–5.
-// Mirrors EVALUATION_ITEMS in the backend's utils/renewals.js. The form has
-// 19 items; the copy we have shows these 15 — add the rest in both places.
+// Mirrors EVALUATION_ITEMS in the backend's utils/renewals.js: the form's
+// 19 items, in its order. Older evaluations have the first 15.
 export const EVALUATION_ITEMS: { key: string; label: string }[] = [
   { key: 'jobKnowledge', label: 'Job knowledge' },
   { key: 'awareness', label: 'Awareness of what to do without constant supervision' },
@@ -123,7 +127,23 @@ export const EVALUATION_ITEMS: { key: string; label: string }[] = [
   { key: 'cooperationPublic', label: 'Cooperation with public' },
   { key: 'acceptanceOfSupervision', label: 'Acceptance of supervision' },
   { key: 'reliability', label: 'Reliability and consistency in performance' },
+  { key: 'completionOfTasks', label: 'Completion of tasks' },
+  { key: 'adherenceToSchedule', label: 'Adherence to work schedule' },
+  { key: 'promptness', label: 'Promptness in reporting to work' },
+  { key: 'overallPerformance', label: 'Overall performance' },
 ];
+
+// The form's rating scale, shown above the ratings.
+export const RATING_SCALE: Record<number, string> = {
+  5: 'Consistently demonstrates outstanding performance',
+  4: 'Above average; often exerts extra effort',
+  3: 'Average; performs in an acceptable and satisfactory manner',
+  2: 'Needs to improve; occasionally doesn’t meet the standards required',
+  1: 'Performance unacceptable; consistently fails to meet minimum standards',
+};
+
+// The form's question 8: true = continue in the office, false = another office.
+export const CONTINUE_LABELS = { true: 'Continue in our office', false: 'Let them grow in another office' } as const;
 
 // 5 Outstanding … 2 Needs improvement, as the office reads the form. The
 // form's label for 1 isn't in our copy.

@@ -32,13 +32,25 @@ function Step({ n, title, done, invalid, children }: { n: number; title: string;
   );
 }
 
-export default function ManualScholarDialog({ scholarships, getToken, onClose, onAdded }: {
+// The AdSO's approval chain (utils/approvalChain.js on the backend): who
+// adds the scholar takes their own step, and it goes on from there.
+const CHAIN_STEP = {
+  associate: { confirm: 'I checked this and endorse it to the Head of the Recruitment and Scholarship Unit', next: 'The Head recommends it, then the Director gives the final approval. Until then it waits in Applications.', button: 'Add and endorse' },
+  head: { confirm: 'I recommend approving this scholar', next: 'The Director gives the final approval. Until then it waits in Applications.', button: 'Add and recommend' },
+  director: { confirm: 'I approve this scholarship', next: 'They’re a scholar right away and we email them.', button: 'Add scholar' },
+} as const;
+
+export default function ManualScholarDialog({ scholarships, getToken, onClose, onAdded, adsoRole }: {
   // The office's scholarships it can add scholars to.
   scholarships: Scholarship[];
   getToken: () => Promise<string | null>;
   onClose: () => void;
-  onAdded: (name: string, pendingAccount: boolean) => void;
+  // awaiting: the approval step it went to (the AdSO's chain), if not approved yet.
+  onAdded: (name: string, pendingAccount: boolean, awaiting?: 'head' | 'director') => void;
+  // The AdSO account's role: its scholarships follow the approval chain.
+  adsoRole?: 'associate' | 'head' | 'director';
 }) {
+  const chain = adsoRole ? CHAIN_STEP[adsoRole] : null;
   const [scholarshipId, setScholarshipId] = useState(scholarships.length === 1 ? scholarships[0].id : '');
   const [student, setStudent] = useState<FoundStudent | null>(null);
   const [newStudent, setNewStudent] = useState<NewStudent | null>(null);
@@ -102,7 +114,7 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
       const body = await res.json().catch(() => ({}));
       if (res.status === 409 && body.code === 'holds_other_scholarship') { setHolds(body.held ?? []); return; }
       if (!res.ok) throw new Error(body.error || 'Failed to add the scholar.');
-      onAdded(student ? titleCaseName(student.name) : `${newStudent!.firstName.trim()} ${newStudent!.lastName.trim()}`, !!body.pendingAccount);
+      onAdded(student ? titleCaseName(student.name) : `${newStudent!.firstName.trim()} ${newStudent!.lastName.trim()}`, !!body.pendingAccount, body.awaiting);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add the scholar.');
     } finally {
@@ -119,7 +131,9 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
     <Modal
       size="xl"
       title="Add a scholar"
-      description="For someone awarded outside AniSkolar, like on a paper application. They’re a scholar right away and we email them."
+      description={chain && adsoRole !== 'director'
+        ? 'For someone awarded outside AniSkolar, like on a paper application. It goes through the approval chain like an application.'
+        : 'For someone awarded outside AniSkolar, like on a paper application. They’re a scholar right away and we email them.'}
       onClose={onClose}
       dismissible={!busy}
       footer={
@@ -132,7 +146,7 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
                 : <span className="tabular-nums">{doneCount} of 4 steps done</span>}
           </p>
           <Button onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant="primary" icon={UserPlus} onClick={() => submit()} loading={busy}>Add scholar</Button>
+          <Button variant="primary" icon={UserPlus} onClick={() => submit()} loading={busy}>{chain?.button ?? 'Add scholar'}</Button>
         </div>
       }
     >
@@ -248,8 +262,9 @@ export default function ManualScholarDialog({ scholarships, getToken, onClose, o
               </section>
             <Step n={4} title="Approval" done={approved} invalid={attempted && !approved}>
                 <div className={`rounded-control p-3 ring-1 ring-inset transition-colors ${approved ? 'bg-success-bg ring-success-fg/30' : attempted ? 'ring-danger-fg/40' : 'ring-line'}`}>
-                  <Checkbox checked={approved} onChange={setApproved} label="The office head approved this scholarship" disabled={busy} />
+                  <Checkbox checked={approved} onChange={setApproved} label={chain?.confirm ?? 'The office head approved this scholarship'} disabled={busy} />
                 </div>
+                {chain && <p className="mt-2 text-xs text-ink-muted">{chain.next}</p>}
               </Step>
             </div>
           </div>

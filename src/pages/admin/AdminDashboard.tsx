@@ -97,10 +97,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const addScholar = !canAddScholars ? undefined
     : directAward.length ? () => setAddScholarFor(directAward[0].id)
     : manualAward.length ? () => setManualAddOpen(true) : undefined;
-  const scholarAdded = (name: string, pending: boolean) => {
+  const scholarAdded = (name: string, pending: boolean, awaiting?: 'head' | 'director') => {
     setAddScholarFor(null);
     setManualAddOpen(false);
-    setAddedNotice(pending ? `${name} is now a scholar. They'll see it the first time they sign in to AniSkolar; we emailed them.` : `${name} is now a scholar. We emailed them.`);
+    setAddedNotice(awaiting
+      ? `${name} was added and sent to the ${awaiting === 'head' ? 'Head of the Recruitment and Scholarship Unit for a recommendation' : 'Director for the final approval'}. They become a scholar once the Director approves it in Applications.`
+      : pending ? `${name} is now a scholar. They'll see it the first time they sign in to AniSkolar; we emailed them.` : `${name} is now a scholar. We emailed them.`);
     fetchApplications();
   };
   // The page open in this tab comes back after a refresh (not the Dashboard).
@@ -481,7 +483,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         />
       )}
       {manualAddOpen && (
-        <ManualScholarDialog scholarships={manualAward} getToken={getToken} onClose={() => setManualAddOpen(false)} onAdded={scholarAdded} />
+        <ManualScholarDialog scholarships={manualAward} getToken={getToken} onClose={() => setManualAddOpen(false)} onAdded={scholarAdded} adsoRole={isAdso && (adsoRoleRaw === 'associate' || adsoRoleRaw === 'head' || adsoRoleRaw === 'director') ? adsoRoleRaw : undefined} />
       )}
       {addedNotice && <ResultDialog message={addedNotice} onClose={() => setAddedNotice('')} />}
     </AdminLayout>

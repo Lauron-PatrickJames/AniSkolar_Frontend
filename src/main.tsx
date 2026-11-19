@@ -22,6 +22,25 @@ function CrashScreen() {
   );
 }
 
+// After a new version is deployed, a tab opened before it still asks for
+// the old version's page files, which no longer exist, and the page would
+// crash. Load the new version instead: reload once (not again within a
+// minute, so a real outage doesn't loop).
+const RELOADED_KEY = 'aniskolar_reloaded_for_update';
+function reloadForUpdate(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(RELOADED_KEY) || 0);
+    if (Date.now() - last < 60_000) return false;
+    sessionStorage.setItem(RELOADED_KEY, String(Date.now()));
+  } catch {
+    // no storage: reload anyway
+  }
+  window.location.reload();
+  return true;
+}
+window.addEventListener('vite:preloadError', e => { if (reloadForUpdate()) e.preventDefault(); });
+const isStaleChunk = (error: unknown) => /dynamically imported module|Importing a module script failed|error loading dynamically imported|Failed to fetch dynamically/i.test(String((error as Error)?.message ?? error));
+
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 if (!PUBLISHABLE_KEY) {
@@ -51,7 +70,7 @@ document.addEventListener('paste', e => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Sentry.ErrorBoundary fallback={<CrashScreen />}>
+    <Sentry.ErrorBoundary fallback={({ error }) => (isStaleChunk(error) && reloadForUpdate() ? <></> : <CrashScreen />)}>
       <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
         {isSsoCallback ? <SsoCallbackPage /> : <App />}
       </ClerkProvider>

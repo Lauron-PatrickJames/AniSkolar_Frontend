@@ -379,25 +379,27 @@ function sortRows(rows: ScholarshipRow[], key: SortKey, dir: 'asc' | 'desc'): Sc
 }
 
 // The table as an Excel sheet (same columns as on the page).
-function statisticsSheet(rows: ScholarshipRow[], includeOffice: boolean, subtitle: string) {
+// The table's columns an export can leave out (the name always stays).
+type StatColumn = 'office' | 'submissions' | 'approved' | 'rejected' | 'pending' | 'revisions' | 'gpa';
+const STAT_COLUMNS: { key: StatColumn; label: string; header: string; format?: 'integer' | 'decimal' | 'decimal1'; value: (r: ScholarshipRow) => string | number | null }[] = [
+  { key: 'office', label: 'Office', header: 'Office', value: r => OFFICE_LABELS[r.office] },
+  { key: 'submissions', label: 'Submissions', header: 'Submissions', format: 'integer', value: r => r.submissions },
+  { key: 'approved', label: 'Approved', header: 'Approved', format: 'integer', value: r => r.approved },
+  { key: 'rejected', label: 'Rejected', header: 'Rejected', format: 'integer', value: r => r.rejected },
+  { key: 'pending', label: 'Pending', header: 'Pending', format: 'integer', value: r => r.pending },
+  { key: 'revisions', label: 'Avg. revisions', header: 'Avg. revision cycles', format: 'decimal1', value: r => r.avgRevisionCycles },
+  { key: 'gpa', label: 'Avg. GPA', header: 'Avg. applicant GPA', format: 'decimal', value: r => r.avgGpa },
+];
+
+// The table as an Excel sheet: the chosen columns (all by default).
+function statisticsSheet(rows: ScholarshipRow[], includeOffice: boolean, subtitle: string, columns?: Set<StatColumn>) {
+  const cols = STAT_COLUMNS.filter(c => (c.key !== 'office' || includeOffice) && (!columns || columns.has(c.key)));
   return {
     name: 'Statistics',
     title: 'Scholarship statistics',
     subtitle,
-    columns: [
-      { header: 'Scholarship' },
-      ...(includeOffice ? [{ header: 'Office' }] : []),
-      { header: 'Submissions', format: 'integer' as const }, { header: 'Approved', format: 'integer' as const },
-      { header: 'Rejected', format: 'integer' as const }, { header: 'Pending', format: 'integer' as const },
-      { header: 'Avg. revision cycles', format: 'decimal1' as const },
-      { header: 'Avg. applicant GPA', format: 'decimal' as const },
-    ],
-    rows: rows.map(r => [
-      r.name,
-      ...(includeOffice ? [OFFICE_LABELS[r.office]] : []),
-      r.submissions, r.approved, r.rejected, r.pending,
-      r.avgRevisionCycles, r.avgGpa,
-    ]),
+    columns: [{ header: 'Scholarship' }, ...cols.map(c => ({ header: c.header, ...(c.format ? { format: c.format } : {}) }))],
+    rows: rows.map(r => [r.name, ...cols.map(c => c.value(r))]),
   };
 }
 
@@ -602,6 +604,9 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
   // sheet each.
   const [exportOpen, setExportOpen] = useState(false);
   const [exportParts, setExportParts] = useState<Set<ExportPart>>(() => new Set<ExportPart>(['summary', 'scholarships']));
+  // "By scholarship": which scholarships (null = all) and which columns.
+  const [exportScholarships, setExportScholarships] = useState<Set<string> | null>(null);
+  const [exportColumns, setExportColumns] = useState<Set<StatColumn>>(() => new Set(STAT_COLUMNS.map(c => c.key)));
   const runExport = () => {
     const last = addDays(range.endExclusive, -1);
     const sheets = [];
@@ -618,7 +623,10 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
         ],
       });
     }
-    if (exportParts.has('scholarships')) sheets.push(statisticsSheet(sortedRows, showOffice, rangeText));
+    if (exportParts.has('scholarships')) {
+      const picked = exportScholarships ? sortedRows.filter(r => exportScholarships.has(r.id)) : sortedRows;
+      sheets.push(statisticsSheet(picked, showOffice, rangeText, exportColumns));
+    }
     for (const dim of ['College', 'Year level', 'Program', 'Scholarship'] as Dimension[]) {
       if (!exportParts.has(`by:${dim}`)) continue;
       const fromApp = (a: AdminApplication): Groupable => ({
@@ -1006,11 +1014,47 @@ export default function AdminAnalytics({ applications, isLoading, error, onRefre
             title="Export to Excel"
             description={`What to include, one sheet each. ${rangeText}.`}
             onClose={() => setExportOpen(false)}
-            size="sm"
-            footer={<><Button onClick={() => setExportOpen(false)}>Cancel</Button><Button variant="primary" icon={Download} onClick={runExport} disabled={exportParts.size === 0}>Export</Button></>}
+            size="md"
+            footer={<><Button onClick={() => setExportOpen(false)}>Cancel</Button><Button variant="primary" icon={Download} onClick={runExport} disabled={exportParts.size === 0 || (exportParts.has('scholarships') && exportScholarships?.size === 0)}>Export</Button></>}
           >
             <div className="space-y-3">
-              {options.map(o => <Checkbox key={o.key} checked={exportParts.has(o.key)} onChange={on => toggle(o.key, on)} label={o.label} description={o.description} />)}
+              {options.map(o => (
+                <React.Fragment key={o.key}>
+                  <Checkbox checked={exportParts.has(o.key)} onChange={on => toggle(o.key, on)} label={o.label} description={o.description} />
+                  {/* By scholarship: pick the scholarships and the columns. */}
+                  {o.key === 'scholarships' && exportParts.has('scholarships') && (() => {
+                    const chosen = exportScholarships ?? new Set(sortedRows.map(r => r.id));
+                    const setChosen = (id: string, on: boolean) => {
+                      const next = new Set(chosen);
+                      if (on) next.add(id); else next.delete(id);
+                      setExportScholarships(next.size === sortedRows.length ? null : next);
+                    };
+                    const setColumn = (key: StatColumn, on: boolean) => setExportColumns(prev => { const next = new Set(prev); if (on) next.add(key); else next.delete(key); return next; });
+                    return (
+                      <div className="ml-7 space-y-4 rounded-control bg-surface-muted p-3">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-ink-muted">Scholarships · {chosen.size} of {sortedRows.length}</p>
+                            <span className="flex gap-2 text-xs">
+                              <button type="button" className="font-medium text-accent hover:underline" onClick={() => setExportScholarships(null)}>All</button>
+                              <button type="button" className="font-medium text-accent hover:underline" onClick={() => setExportScholarships(new Set())}>None</button>
+                            </span>
+                          </div>
+                          <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
+                            {sortedRows.map(r => <Checkbox key={r.id} checked={chosen.has(r.id)} onChange={on => setChosen(r.id, on)} label={r.name} />)}
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-ink-muted">Columns</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {STAT_COLUMNS.filter(c => c.key !== 'office' || showOffice).map(c => <Checkbox key={c.key} checked={exportColumns.has(c.key)} onChange={on => setColumn(c.key, on)} label={c.label} />)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </React.Fragment>
+              ))}
             </div>
           </Modal>
         );

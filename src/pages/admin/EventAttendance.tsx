@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, FileText, Printer, Trash2, Upload } from 'lucide-react';
+import { ExternalLink, FileText, Maximize2, Printer, Trash2, Upload, ZoomIn, ZoomOut } from 'lucide-react';
 import { CreditedEvent, formatDutyDate, formatHours, termLabel, todayInManila, weekday } from '../../utils/dutyHours';
 import { API_BASE_URL, authHeaders, titleCaseName } from './adminData';
-import { Alert, Badge, Button, Checkbox, EmptyState, Modal, SearchInput, TableSkeleton, Textarea } from './AdminUI';
+import { Alert, Badge, Button, Checkbox, EmptyState, IconButton, Modal, SearchInput, TableSkeleton, Textarea } from './AdminUI';
 
 // Event attendance (Nov 2026): the AdSO prints a blank attendance sheet,
 // scholars sign it at the event, and afterwards the AdSO uploads the signed
@@ -228,10 +228,14 @@ export default function AttendanceDialog({ event: initialEvent, term, getToken, 
     onClose();
   };
   const viewingSheet = event.sheets.find(s => s.fileId === viewing);
+  // The sheet's zoom (1 = fit the width), to read handwritten numbers.
+  const [zoom, setZoom] = useState(1);
+  useEffect(() => setZoom(1), [viewing]);
 
   return (
     <Modal
-      size="xl"
+      size="full"
+      bodyClassName="p-5 lg:overflow-hidden"
       title={`Attendance: ${event.name}`}
       description={`${weekday(event.date)}, ${formatDutyDate(event.date, true)} · ${event.organizer} · ${formatHours(event.creditHours)} hours · ${termLabel(term)}`}
       onClose={close}
@@ -246,13 +250,15 @@ export default function AttendanceDialog({ event: initialEvent, term, getToken, 
         </div>
       }
     >
-      <div className="space-y-4">
+      {/* Nearly full screen: the sheet on the left (most of the width, with
+          zoom), the list on the right, each filling the height. */}
+      <div className="flex h-full min-h-0 flex-col gap-4">
         {error && <Alert tone="danger">{error}</Alert>}
         {notice && <Alert tone="success">{notice}</Alert>}
         {upcoming && <Alert tone="info">This event hasn’t happened yet. Print the sheet now; check attendance after the event.</Alert>}
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(22rem,1fr)]">
           {/* The signed sheets */}
-          <section className="min-w-0 space-y-3">
+          <section className="flex min-h-0 min-w-0 flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-ink">Signed sheets</h3>
               <div className="flex gap-2">
@@ -280,16 +286,26 @@ export default function AttendanceDialog({ event: initialEvent, term, getToken, 
                   ))}
                 </ul>
                 {viewingSheet && (
-                  <div className="space-y-2">
-                    <div className="overflow-auto rounded-control bg-surface-muted ring-1 ring-line max-h-[55vh]">
+                  <div className="flex min-h-0 flex-1 flex-col gap-2">
+                    <div className="h-[60vh] overflow-auto rounded-control bg-surface-muted ring-1 ring-line lg:h-auto lg:min-h-0 lg:flex-1">
                       {preview?.fileId !== viewingSheet.fileId
                         ? <div className="p-6"><TableSkeleton rows={3} label="Loading the sheet" /></div>
                         : viewingSheet.mimetype === 'application/pdf'
-                          ? <iframe src={preview.url} title={`Signed sheet: ${viewingSheet.filename}`} className="block h-[55vh] w-full bg-white" />
-                          : <img src={preview.url} alt={`Signed sheet: ${viewingSheet.filename}`} className="w-full" />}
+                          ? <iframe src={preview.url} title={`Signed sheet: ${viewingSheet.filename}`} className="block h-full min-h-[60vh] w-full bg-white" />
+                          : <img src={preview.url} alt={`Signed sheet: ${viewingSheet.filename}`} style={{ width: `${zoom * 100}%`, maxWidth: 'none' }} className="block" />}
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="truncate text-xs text-ink-subtle">{viewingSheet.filename}</span>
+                      <div className="flex min-w-0 items-center gap-1">
+                        {viewingSheet.mimetype !== 'application/pdf' && (
+                          <>
+                            <IconButton icon={ZoomOut} label="Zoom out" onClick={() => setZoom(z => Math.max(1, Math.round((z - 0.25) * 100) / 100))} disabled={zoom <= 1} />
+                            <span className="w-12 text-center text-xs tabular-nums text-ink-muted">{Math.round(zoom * 100)}%</span>
+                            <IconButton icon={ZoomIn} label="Zoom in" onClick={() => setZoom(z => Math.min(3, Math.round((z + 0.25) * 100) / 100))} disabled={zoom >= 3} />
+                            <IconButton icon={Maximize2} label="Fit to width" onClick={() => setZoom(1)} disabled={zoom === 1} />
+                          </>
+                        )}
+                        <span className="ml-2 truncate text-xs text-ink-subtle">{viewingSheet.filename}</span>
+                      </div>
                       <div className="flex gap-2">
                         <Button size="sm" variant="ghost" icon={ExternalLink} onClick={() => openSheet(viewingSheet.fileId)}>Open</Button>
                         <Button size="sm" variant="ghost" icon={Trash2} onClick={() => removeSheet(viewingSheet)} loading={busy === `del-${viewingSheet.fileId}`}>Remove</Button>
@@ -302,7 +318,7 @@ export default function AttendanceDialog({ event: initialEvent, term, getToken, 
           </section>
 
           {/* Who attended */}
-          <section className="min-w-0 space-y-3">
+          <section className="flex min-h-0 min-w-0 flex-col gap-3">
             <h3 className="text-sm font-semibold text-ink">Who attended</h3>
             <div className="space-y-2">
               <Textarea value={paste} onChange={e => { setPaste(e.target.value); setPasteNote(''); }} rows={2} placeholder="Type or paste student numbers from the sheet, e.g. 202399001 202398765" aria-label="Student numbers from the sheet" disabled={upcoming} />
@@ -315,9 +331,9 @@ export default function AttendanceDialog({ event: initialEvent, term, getToken, 
             {!scholars ? <TableSkeleton rows={5} label="Loading scholars" /> : scholars.length === 0 ? (
               <p className="text-sm text-ink-muted">No SFAG scholars this term.</p>
             ) : (
-              <ul className="max-h-[45vh] divide-y divide-line overflow-y-auto rounded-control ring-1 ring-line">
+              <ul className="max-h-[60vh] divide-y divide-line overflow-y-auto rounded-control ring-1 ring-line lg:max-h-none lg:min-h-0 lg:flex-1">
                 {shown.map(s => (
-                  <li key={s.studentNumber} className="flex items-center justify-between gap-2 px-3 py-2">
+                  <li key={s.studentNumber} className={`flex items-center justify-between gap-2 px-4 py-3 ${ticked.has(s.studentNumber) ? 'bg-accent-subtle/40' : ''}`}>
                     <Checkbox
                       checked={ticked.has(s.studentNumber)}
                       onChange={on => toggle(s.studentNumber, on)}

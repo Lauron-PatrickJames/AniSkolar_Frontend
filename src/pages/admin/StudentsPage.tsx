@@ -3,7 +3,7 @@ import { ChevronRight, MessageSquare, Trash2, Users } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatDate, titleCaseName } from './adminData';
 import {
   Alert, Avatar, Badge, Button, Card, ConfirmDialog, EmptyState, ErrorState, IconButton, MobileList, PageHeader, Pagination,
-  RowLink, SearchInput, Select, Table, TableSkeleton, Tabs, Td, Th, Toast, Toolbar, Tooltip, Tr, Truncate, usePagination
+  RowLink, SearchInput, Select, Table, TableSkeleton, Td, Th, Toast, Toolbar, Tooltip, Tr, Truncate, usePagination
 } from './AdminUI';
 import { COLLEGES, collegeName } from '../../data/programs';
 import { DeclaredScholarship } from '../../types';
@@ -66,11 +66,9 @@ const OUTCOMES: { value: Outcome; label: string }[] = [
   { value: '', label: 'Any status' },
   { value: 'rejected', label: 'Rejected' },
   { value: 'ended', label: 'Scholarship ended' },
-  { value: 'none', label: 'No applications' },
   { value: 'active', label: 'Active' },
 ];
 
-type Show = 'not-applied' | 'applied' | 'all';
 
 const fullName = (s: StudentRow) =>
   titleCaseName([s.firstName, s.middleName, s.lastName].filter(Boolean).join(' ') || s.name || s.studentNumber);
@@ -84,7 +82,6 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
   const [rows, setRows] = useState<StudentRow[] | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [show, setShow] = useState<Show>('not-applied');
   const [search, setSearch] = useState('');
   const [college, setCollege] = useState('');
   const [outcome, setOutcome] = useState<Outcome>('');
@@ -117,8 +114,6 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (rows ?? []).filter(s => {
-      if (show === 'not-applied' && s.applications > 0) return false;
-      if (show === 'applied' && s.applications === 0) return false;
       if (college && s.college !== college) return false;
       if (outcome && s.outcome !== outcome) return false;
       if (!matchesDeclared(s, declared)) return false;
@@ -126,9 +121,9 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
       return [fullName(s), s.studentNumber, s.email, s.course, s.programCode, s.college]
         .some(v => (v ?? '').toLowerCase().includes(q));
     });
-  }, [rows, show, search, college, outcome, declared]);
+  }, [rows, search, college, outcome, declared]);
 
-  const pager = usePagination(filtered, 20, `${show}|${search}|${college}|${outcome}|${declared}`);
+  const pager = usePagination(filtered, 20, `${search}|${college}|${outcome}|${declared}`);
   const filtersActive = !!search.trim() || !!college || !!outcome || !!declared;
 
   const canPick = (s: StudentRow) => s.outcome !== 'active';
@@ -192,24 +187,14 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
 
   return (
     <>
-      <PageHeader title="Students" description="Everyone who has set up an AniSkolar profile, and whether they've applied." />
+      <PageHeader title="Students" description="Everyone who has set up an AniSkolar profile." />
 
-      {/* No count cards here: numbers live on Statistics (panel, Nov 2026).
-          The same three views are tabs. */}
+      {/* Everyone who signed up. Who applied is on Scholars and
+          Applications; "Not applied yet" is a Status choice (Nov 2026). */}
       <Card
         flush
         headerSlot={
           <>
-          <Tabs<Show>
-            label="Show"
-            value={show}
-            onChange={setShow}
-            tabs={[
-              { key: 'all', label: 'Everyone' },
-              { key: 'applied', label: 'Applied' },
-              { key: 'not-applied', label: 'Not applied yet' },
-            ]}
-          />
           <Toolbar>
             <SearchInput value={search} onChange={setSearch} label="Search students" placeholder="Search name, student no., email or program…" className="min-w-56 flex-1" />
             <Select value={college} onChange={setCollege} label="College" className="w-full sm:w-56">
@@ -233,7 +218,7 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
         ) : filtered.length === 0 ? (
           filtersActive
             ? <EmptyState icon={Users} title="No students match" action={<Button onClick={() => { setSearch(''); setCollege(''); setOutcome(''); setDeclared(''); }}>Clear filters</Button>} />
-            : <EmptyState icon={Users} title={show === 'not-applied' ? 'Everyone who signed up has applied' : show === 'applied' ? 'No one has applied yet' : 'No students yet'} />
+            : <EmptyState icon={Users} title="No students yet" />
         ) : (
           <>
             {skipped.length > 0 && (

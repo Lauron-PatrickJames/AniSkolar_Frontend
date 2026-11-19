@@ -95,7 +95,6 @@ test.describe('AdSO', () => {
     await openView(page, 'Students');
     await expectOnPage(page, 'Students');
     const main = page.getByRole('main');
-    await main.getByRole('tab', { name: 'Everyone' }).click();
     await expect(main.getByRole('checkbox', { name: 'Select Juan Dela Cruz' }).filter({ visible: true }).first()).toBeVisible();
     await expect(main.getByText('Holds 2', { exact: true }).filter({ visible: true }).first()).toBeVisible();
 

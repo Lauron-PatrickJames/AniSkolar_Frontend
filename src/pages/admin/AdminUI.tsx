@@ -1280,7 +1280,9 @@ export function TableSkeleton({ rows = 6, label = 'Loading' }: { rows?: number; 
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])';
 
-const MODAL_SIZES = { sm: 'sm:max-w-md', md: 'sm:max-w-2xl', lg: 'sm:max-w-4xl', xl: 'sm:max-w-6xl' };
+// 'full': nearly the whole screen, for working side by side (e.g. checking
+// a signed attendance sheet against the list).
+const MODAL_SIZES = { sm: 'sm:max-w-md', md: 'sm:max-w-2xl', lg: 'sm:max-w-4xl', xl: 'sm:max-w-6xl', full: 'sm:max-w-[min(96vw,112rem)]' };
 
 // Accessible dialog: rendered in a portal, traps Tab focus, closes on
 // Escape or backdrop click (unless `dismissible` is false, e.g. while
@@ -1378,7 +1380,7 @@ export function Modal({ title, description, children, footer, onClose, size = 'm
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         className={`relative flex w-full flex-col bg-surface text-ink shadow-overlay outline-none sm:rounded-card ${MODAL_SIZES[size]} ${
-          sheet ? 'h-dvh sm:h-[min(44rem,88dvh)]' : 'max-h-[92dvh] rounded-t-card sm:max-h-[88dvh]'
+          size === 'full' ? 'h-dvh sm:h-[94dvh]' : sheet ? 'h-dvh sm:h-[min(44rem,88dvh)]' : 'max-h-[92dvh] rounded-t-card sm:max-h-[88dvh]'
         }`}
       >
         {/* No line under the title when there's no body (a title-only confirmation). */}

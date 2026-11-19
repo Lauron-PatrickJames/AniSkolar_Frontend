@@ -120,12 +120,6 @@ const EXPORT_COLUMNS: { key: string; label: string; numeric?: boolean; getValue:
   { key: 'totalApplications', label: 'Total Applications', numeric: true, getValue: s => s.totalApplications },
   { key: 'approvedCount', label: 'Approved', numeric: true, getValue: s => s.approvedCount },
   { key: 'rejectedCount', label: 'Rejected', numeric: true, getValue: s => s.rejectedCount },
-  {
-    key: 'approvalRate', label: 'Approval Rate', numeric: true, getValue: s => {
-      const decided = s.approvedCount + s.rejectedCount;
-      return decided > 0 ? `${((s.approvedCount / decided) * 100).toFixed(0)}%` : '—';
-    }
-  },
   { key: 'latestStatus', label: 'Current Status', getValue: s => (s.latestEndReason === 'Declined' ? 'Declined by student' : s.latestEndReason) || s.latestStatus },
   { key: 'isRenewing', label: 'Returning', getValue: s => (s.isReturning ? 'Yes' : 'No') },
   { key: 'firstSubmission', label: 'First Submission', getValue: s => formatDate(s.firstSubmission) }
@@ -185,13 +179,12 @@ async function exportScholarsToExcel(params: {
     const [header = [], ...lines] = parseCsv(await response.text()).filter(r => r.some(c => c.trim()));
     const NUMBERS = new Set(['Total Applications', 'Approved', 'Rejected']);
     const columns: ExcelColumn[] = header.map(h => (
-      NUMBERS.has(h) ? { header: h, format: 'integer' } : h === 'Approval Rate' ? { header: h, format: 'percent' } : { header: h }
+      NUMBERS.has(h) ? { header: h, format: 'integer' } : { header: h }
     ));
     const rows = lines.map(line => header.map((h, i): ExcelValue => {
       const v = (line[i] ?? '').trim();
       if (!v || v === '—') return null;
       if (NUMBERS.has(h) && /^\d+$/.test(v)) return Number(v);
-      if (h === 'Approval Rate' && /^\d+%$/.test(v)) return Number(v.slice(0, -1)) / 100;
       return v;
     }));
     const filters = [params.search && `Search: “${params.search}”`, params.renewalFilter !== 'all' && (params.renewalFilter === 'renewing' ? 'Returning only' : 'First-time only'), params.approvedFilter !== 'any' && (params.approvedFilter === 'yes' ? 'With an approval' : 'Without an approval')].filter(Boolean).join('  ·  ');

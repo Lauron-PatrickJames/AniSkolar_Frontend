@@ -1,13 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Building2, CalendarClock, Clock, Mail, Play, RefreshCw, Shuffle, Sunrise } from 'lucide-react';
-import { API_BASE_URL, authHeaders, formatDateTime, titleCaseName } from './adminData';
-import { ResultDialog, Alert, Badge, Button, Card, Checkbox, ErrorState, Field, Modal, PageHeader, Skeleton, Table, Td, TextInput, Th, Toast, Tr } from './AdminUI';
+import { Building2, CalendarClock, CalendarDays, Clock, Mail, Pencil, Play, Plus, RefreshCw, Trash2, Zap } from 'lucide-react';
+import { API_BASE_URL, authHeaders, formatDateTime } from './adminData';
+import { ResultDialog, Alert, Badge, Button, Card, Checkbox, ConfirmDialog, DatePicker, EmptyState, ErrorState, Field, Modal, PageHeader, SegmentedControl, Select, Skeleton, Table, Td, TextInput, Textarea, Th, Toast, Tr } from './AdminUI';
+import EmailAudience, { DEFAULT_EMAIL_TARGET, EmailTarget, describeTarget } from './EmailAudience';
+import { mockScholarships, acceptsOnlineApplications } from '../../data/scholarships';
 
 // AdSO: what AniSkolar does on its own (backend utils/automation.js):
 // reminders, the morning summary and the start-of-semester office
 // assignment. Everything starts off. Each job can be previewed (nothing is
 // sent or changed) and run now; the timers run it on schedule once it's on.
 // Personal emails go through an outbox that sends a few a minute.
+// Below them, the AdSO's own automations (backend utils/customAutomations.js):
+// an email on a schedule to an audience, or to the student involved when an
+// application or renewal changes.
 
 type JobName = 'dutyReminders' | 'officeHeadReminders' | 'deadlineReminders';
 interface LastRun { period: string; at: string; queued: number; summary: string; error?: string }
@@ -15,6 +20,28 @@ interface AutomationView {
   settings: Record<JobName, boolean> & { updatedBy: string | null; updatedAt: string | null };
   lastRuns: Partial<Record<JobName, LastRun>>;
   outbox: { queued: number; sentLast7Days: number; failedLast7Days: number; perMinute: number; mailEnabled: boolean };
+  custom?: CustomAutomation[];
+}
+type Frequency = 'once' | 'daily' | 'weekly' | 'monthly';
+type EventName = 'applicationSubmitted' | 'applicationApproved' | 'applicationNeedsRevision' | 'applicationRejected'
+  | 'renewalSubmitted' | 'renewalRenewed' | 'renewalNeedsRevision' | 'renewalNotRenewed';
+interface CustomAutomation {
+  _id: string;
+  name: string;
+  enabled: boolean;
+  trigger: 'schedule' | 'event';
+  frequency?: Frequency;
+  date?: string;
+  weekday?: number;
+  dayOfMonth?: number;
+  hour?: number;
+  audience?: 'students' | 'officeHeads';
+  emailTarget?: EmailTarget;
+  event?: EventName;
+  scholarshipIds?: string[];
+  subject: string;
+  body: string;
+  lastRun?: LastRun;
 }
 interface JobResult {
   queued: number;
@@ -40,6 +67,38 @@ const JOBS: { name: JobName; title: string; when: string; icon: React.ElementTyp
   },
 ];
 
+const EVENTS: { value: EventName; label: string }[] = [
+  { value: 'applicationSubmitted', label: 'An application is submitted' },
+  { value: 'applicationApproved', label: 'An application is approved' },
+  { value: 'applicationNeedsRevision', label: 'An application needs revision' },
+  { value: 'applicationRejected', label: 'An application is rejected' },
+  { value: 'renewalSubmitted', label: 'A renewal is submitted' },
+  { value: 'renewalRenewed', label: 'A renewal is approved (renewed)' },
+  { value: 'renewalNeedsRevision', label: 'A renewal needs revision' },
+  { value: 'renewalNotRenewed', label: 'A renewal is not renewed' },
+];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const hourLabel = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? 'AM' : 'PM'}`;
+const longDay = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+const scholarshipName = (id: string) => mockScholarships.find(s => s.id === id)?.name ?? id;
+const todayManila = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+
+// "Every Monday, 8:00 AM · to Current scholars of …" / "When an application is approved (SFAG) · to the student".
+function describeAutomation(a: CustomAutomation): string {
+  if (a.trigger === 'event') {
+    const what = EVENTS.find(e => e.value === a.event)?.label.replace(/^An? /, '') ?? a.event;
+    const only = a.scholarshipIds?.length ? ` (${a.scholarshipIds.map(scholarshipName).join(', ')})` : '';
+    return `When ${a.event?.startsWith('application') ? 'an' : 'a'} ${what}${only} · to the student`;
+  }
+  const at = hourLabel(a.hour ?? 8);
+  const when = a.frequency === 'once' ? `On ${a.date ? longDay(a.date) : '?'}, ${at}`
+    : a.frequency === 'weekly' ? `Every ${WEEKDAYS[a.weekday ?? 1]}, ${at}`
+      : a.frequency === 'monthly' ? `Monthly on day ${a.dayOfMonth}, ${at}`
+        : `Daily, ${at}`;
+  const who = a.audience === 'officeHeads' ? 'office heads' : describeTarget(a.emailTarget ?? DEFAULT_EMAIL_TARGET);
+  return `${when} · to ${who}`;
+}
+
 function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
     <button
@@ -62,8 +121,12 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
   const [saving, setSaving] = useState<string | null>(null);
   const [toast, setToast] = useState('');
   const [result, setResult] = useState('');
-  const [preview, setPreview] = useState<JobName | null>(null);
+  const [preview, setPreview] = useState<{ title: string; path: string } | null>(null);
   const [outboxOpen, setOutboxOpen] = useState(false);
+  // The automation being added (null) or edited; undefined when closed.
+  const [editing, setEditing] = useState<CustomAutomation | null | undefined>(undefined);
+  const [deleting, setDeleting] = useState<CustomAutomation | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const call = useCallback(async <T,>(path: string, init?: { method: string; body?: unknown }): Promise<T> => {
     const res = await fetch(`${API_BASE_URL}/api/automation${path}`, {
@@ -147,7 +210,7 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
                     <p className={`text-xs ${last?.error ? 'text-danger' : 'text-ink-subtle'}`}>
                       {last ? `Last run ${formatDateTime(last.at)}: ${last.error ? `failed (${last.error})` : `${last.summary}${last.queued ? ` ${last.queued} emails queued.` : ''}`}` : 'Hasn’t run yet.'}
                     </p>
-                    <Button size="sm" icon={Play} onClick={() => setPreview(job.name)} disabled={!data}>Preview / run now</Button>
+                    <Button size="sm" icon={Play} onClick={() => setPreview({ title: job.title, path: `/${job.name}` })} disabled={!data}>Preview / run now</Button>
                   </div>
                 </div>
                 <Switch
@@ -162,9 +225,105 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
         })}
       </div>
 
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3 pt-2">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Your automations</h2>
+            <p className="text-sm text-ink-muted">Emails you set up yourself: on a schedule, or when an application or renewal changes.</p>
+          </div>
+          <Button variant="primary" icon={Plus} onClick={() => setEditing(null)} disabled={!data}>Add automation</Button>
+        </div>
+        {data && !data.custom?.length && (
+          <Card><EmptyState icon={Zap} title="No automations of your own yet" description="Add one to email students or office heads on a schedule, or a student when their application or renewal changes." /></Card>
+        )}
+        {data?.custom?.map(a => {
+          const last = a.lastRun;
+          const Icon = a.trigger === 'event' ? Zap : CalendarDays;
+          const done = a.trigger === 'schedule' && a.frequency === 'once' && last?.period === a.date;
+          return (
+            <Card key={a._id}>
+              <div className="flex items-start gap-4">
+                <span className={`mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full ${a.enabled ? 'bg-accent-subtle text-accent' : 'bg-surface-muted text-ink-subtle'}`}>
+                  <Icon className="size-4" aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <h3 className="text-sm font-semibold text-ink">{a.name}</h3>
+                    <Badge tone={a.enabled ? 'success' : 'neutral'}>{a.enabled ? 'On' : done ? 'Sent' : 'Off'}</Badge>
+                  </div>
+                  <p className="text-sm text-ink-muted">{describeAutomation(a)}</p>
+                  <p className="truncate text-sm text-ink"><span className="text-ink-subtle">Subject:</span> {a.subject}</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <p className={`text-xs ${last?.error ? 'text-danger' : 'text-ink-subtle'}`}>
+                      {last ? `Last run ${formatDateTime(last.at)}: ${last.error ? `failed (${last.error})` : last.summary}` : 'Hasn’t run yet.'}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setEditing(a)}>Edit</Button>
+                      <Button size="sm" variant="ghost" icon={Trash2} onClick={() => setDeleting(a)}>Delete</Button>
+                      <Button size="sm" icon={Play} onClick={() => setPreview({ title: a.name, path: `/custom/${a._id}` })}>Preview / run now</Button>
+                    </div>
+                  </div>
+                </div>
+                <Switch
+                  checked={a.enabled}
+                  disabled={saving === a._id}
+                  label={`${a.name}: ${a.enabled ? 'on' : 'off'}`}
+                  onChange={async v => {
+                    setSaving(a._id);
+                    try {
+                      setData(await call<AutomationView>(`/custom/${a._id}`, { method: 'PATCH', body: { enabled: v } }));
+                      setToast(`${a.name} is ${v ? 'on' : 'off'}.`);
+                    } catch (err) {
+                      setToast(err instanceof Error ? err.message : 'Failed to save.');
+                    } finally {
+                      setSaving(null);
+                    }
+                  }}
+                />
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {editing !== undefined && (
+        <AutomationDialog
+          initial={editing}
+          call={call}
+          getToken={getToken}
+          onClose={() => setEditing(undefined)}
+          onSaved={(view, name) => { setData(view); setEditing(undefined); setToast(`${name} saved.`); }}
+        />
+      )}
+      {deleting && (
+        <ConfirmDialog
+          title={`Delete “${deleting.name}”?`}
+          confirmLabel="Delete"
+          confirmIcon={Trash2}
+          tone="danger"
+          busy={deleteBusy}
+          onCancel={() => { if (!deleteBusy) setDeleting(null); }}
+          onConfirm={async () => {
+            setDeleteBusy(true);
+            try {
+              setData(await call<AutomationView>(`/custom/${deleting._id}`, { method: 'DELETE' }));
+              setToast(`${deleting.name} deleted.`);
+              setDeleting(null);
+            } catch (err) {
+              setToast(err instanceof Error ? err.message : 'Failed to delete.');
+            } finally {
+              setDeleteBusy(false);
+            }
+          }}
+        >
+          <p className="text-sm text-ink-muted">It stops sending. Emails it already queued still go out.</p>
+        </ConfirmDialog>
+      )}
+
       {preview && (
         <PreviewDialog
-          job={JOBS.find(j => j.name === preview)!}
+          title={preview.title}
+          path={preview.path}
           call={call}
           onClose={() => setPreview(null)}
           onRan={(view, result) => {
@@ -187,8 +346,9 @@ export default function AutomationPage({ getToken }: { getToken: () => Promise<s
   );
 }
 
-function PreviewDialog({ job, call, onClose, onRan }: {
-  job: (typeof JOBS)[number];
+function PreviewDialog({ title, path, call, onClose, onRan }: {
+  title: string;
+  path: string;
   call: <T>(path: string, init?: { method: string; body?: unknown }) => Promise<T>;
   onClose: () => void;
   onRan: (view: AutomationView, result: JobResult) => void;
@@ -199,17 +359,17 @@ function PreviewDialog({ job, call, onClose, onRan }: {
 
   useEffect(() => {
     let cancelled = false;
-    call<{ result: JobResult }>(`/${job.name}/preview`, { method: 'POST' })
+    call<{ result: JobResult }>(`${path}/preview`, { method: 'POST' })
       .then(body => { if (!cancelled) setResult(body.result); })
       .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to preview.'); });
     return () => { cancelled = true; };
-  }, [call, job.name]);
+  }, [call, path]);
 
   const run = async () => {
     setRunning(true);
     setError('');
     try {
-      const body = await call<{ result: JobResult } & AutomationView>(`/${job.name}/run`, { method: 'POST' });
+      const body = await call<{ result: JobResult } & AutomationView>(`${path}/run`, { method: 'POST' });
       onRan(body, body.result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run.');
@@ -222,7 +382,7 @@ function PreviewDialog({ job, call, onClose, onRan }: {
   return (
     <Modal
       size="lg"
-      title={`${job.title}: preview`}
+      title={`${title}: preview`}
       onClose={onClose}
       dismissible={!running}
       footer={
@@ -307,3 +467,165 @@ function FailedEmailsDialog({ call, onClose, onRetried }: {
   );
 }
 
+
+// Add or edit one of the AdSO's own automations.
+type When = 'On a schedule' | 'When something happens';
+function AutomationDialog({ initial, call, getToken, onClose, onSaved }: {
+  initial: CustomAutomation | null;
+  call: <T>(path: string, init?: { method: string; body?: unknown }) => Promise<T>;
+  getToken: () => Promise<string | null>;
+  onClose: () => void;
+  onSaved: (view: AutomationView, name: string) => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? '');
+  const [when, setWhen] = useState<When>(initial?.trigger === 'event' ? 'When something happens' : 'On a schedule');
+  const [frequency, setFrequency] = useState<Frequency>(initial?.frequency ?? 'weekly');
+  const [date, setDate] = useState(initial?.date ?? '');
+  const [weekday, setWeekday] = useState(String(initial?.weekday ?? 1));
+  const [dayOfMonth, setDayOfMonth] = useState(String(initial?.dayOfMonth ?? 1));
+  const [hour, setHour] = useState(String(initial?.hour ?? 8));
+  const [audience, setAudience] = useState<'students' | 'officeHeads'>(initial?.audience ?? 'students');
+  const [target, setTarget] = useState<EmailTarget>(initial?.emailTarget ?? DEFAULT_EMAIL_TARGET);
+  const [event, setEvent] = useState<EventName | ''>(initial?.event ?? '');
+  const [scholarshipId, setScholarshipId] = useState(initial?.scholarshipIds?.[0] ?? '');
+  const [subject, setSubject] = useState(initial?.subject ?? '');
+  const [body, setBody] = useState(initial?.body ?? '');
+  const [enabled, setEnabled] = useState(initial?.enabled ?? false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const isEvent = when === 'When something happens';
+  const scholarships = mockScholarships.filter(acceptsOnlineApplications);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    const payload = {
+      name, subject, body, enabled,
+      ...(isEvent
+        ? { trigger: 'event', event, scholarshipIds: scholarshipId ? [scholarshipId] : [] }
+        : {
+          trigger: 'schedule', frequency, hour: Number(hour), audience,
+          ...(frequency === 'once' ? { date } : {}),
+          ...(frequency === 'weekly' ? { weekday: Number(weekday) } : {}),
+          ...(frequency === 'monthly' ? { dayOfMonth: Number(dayOfMonth) } : {}),
+          ...(audience === 'students' ? { emailTarget: target } : {}),
+        }),
+    };
+    try {
+      const view = await call<AutomationView>(initial ? `/custom/${initial._id}` : '/custom', { method: initial ? 'PUT' : 'POST', body: payload });
+      onSaved(view, name.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      size="lg"
+      sheet
+      title={initial ? 'Edit automation' : 'Add automation'}
+      onClose={onClose}
+      dismissible={!busy}
+      footer={
+        <>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" form="automation-form" variant="primary" loading={busy}>{initial ? 'Save changes' : 'Add automation'}</Button>
+        </>
+      }
+    >
+      <form id="automation-form" onSubmit={save} noValidate className="space-y-5">
+        {error && <Alert tone="danger" onDismiss={() => setError('')}>{error}</Alert>}
+        <Field label="Name" helper="For you; students don’t see it.">
+          <TextInput value={name} onChange={e => setName(e.target.value)} maxLength={100} placeholder="e.g. Monthly reminder to SFAG scholars" />
+        </Field>
+
+        <Field label="When it sends">
+          <SegmentedControl<When> label="When it sends" options={['On a schedule', 'When something happens']} value={when} onChange={v => v && setWhen(v)} />
+        </Field>
+
+        {isEvent ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="When" helper="Emails the student whose application or renewal it is.">
+              <Select value={event} onChange={v => setEvent(v as EventName)} label="When">
+                <option value="" disabled>Choose what happens</option>
+                {EVENTS.map(ev => <option key={ev.value} value={ev.value}>{ev.label}</option>)}
+              </Select>
+            </Field>
+            <Field label="For">
+              <Select value={scholarshipId} onChange={setScholarshipId} label="For">
+                <option value="">Any scholarship</option>
+                {scholarships.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </Field>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field label="How often">
+                <Select value={frequency} onChange={v => setFrequency(v as Frequency)} label="How often">
+                  <option value="once">Once</option>
+                  <option value="daily">Every day</option>
+                  <option value="weekly">Every week</option>
+                  <option value="monthly">Every month</option>
+                </Select>
+              </Field>
+              {frequency === 'once' && (
+                <Field label="Date">
+                  <DatePicker value={date} onChange={setDate} min={todayManila()} />
+                </Field>
+              )}
+              {frequency === 'weekly' && (
+                <Field label="Day">
+                  <Select value={weekday} onChange={setWeekday} label="Day">
+                    {WEEKDAYS.map((d, i) => <option key={d} value={String(i)}>{d}</option>)}
+                  </Select>
+                </Field>
+              )}
+              {frequency === 'monthly' && (
+                <Field label="Day of the month">
+                  <Select value={dayOfMonth} onChange={setDayOfMonth} label="Day of the month">
+                    {Array.from({ length: 28 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{i + 1}</option>)}
+                  </Select>
+                </Field>
+              )}
+              <Field label="Time" helper="Philippine time.">
+                <Select value={hour} onChange={setHour} label="Time">
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={String(h)}>{hourLabel(h)}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <Field label="Send to">
+              <SegmentedControl<'Students' | 'Office heads'>
+                label="Send to"
+                options={['Students', 'Office heads']}
+                value={audience === 'students' ? 'Students' : 'Office heads'}
+                onChange={v => v && setAudience(v === 'Students' ? 'students' : 'officeHeads')}
+              />
+            </Field>
+            {audience === 'students'
+              ? <EmailAudience value={target} onChange={setTarget} relatedScholarshipId="" getToken={getToken} disabled={busy} />
+              : <p className="text-sm text-ink-muted">Every duty office head with an email in Duty hours → Offices.</p>}
+          </>
+        )}
+
+        <Field label="Subject">
+          <TextInput value={subject} onChange={e => setSubject(e.target.value)} maxLength={150} placeholder="e.g. A reminder from the scholarship office" />
+        </Field>
+        <Field
+          label="Message"
+          helper={<>You can write {'{firstName}'}{isEvent ? <>, {'{scholarship}'} and {'{status}'}</> : audience === 'officeHeads' ? <> and {'{office}'}</> : null}; they’re filled in for each person. Lines starting with “- ” become a list.</>}
+        >
+          <Textarea value={body} onChange={e => setBody(e.target.value)} rows={7} maxLength={5000} placeholder={'Hi {firstName},\n\n…'} />
+        </Field>
+        <Checkbox
+          checked={enabled}
+          onChange={setEnabled}
+          label="On"
+          description={isEvent ? 'Emails only for changes from now on.' : 'Sends on schedule. You can also preview and send it now from its card.'}
+        />
+      </form>
+    </Modal>
+  );
+}

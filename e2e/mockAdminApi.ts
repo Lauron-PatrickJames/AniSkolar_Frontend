@@ -61,6 +61,14 @@ const json = (route: Route, body: unknown, status = 200) =>
 // decisions: each "approve" / "return" the AdSO sends.
 export async function mockAdminApi(page: Page, { decisions = [] as string[] } = {}) {
   let pending = [PENDING_ANNOUNCEMENT];
+  // The AdSO's own automations, added on the Automation page.
+  const custom: Record<string, unknown>[] = [];
+  const automationView = () => ({
+    settings: { dutyReminders: true, officeHeadReminders: true, deadlineReminders: true, updatedBy: null, updatedAt: null },
+    lastRuns: {},
+    outbox: { queued: 0, sentLast7Days: 0, failedLast7Days: 0, perMinute: 10, mailEnabled: false },
+    custom,
+  });
   await page.route(`${API}/api/**`, route => {
     const { pathname } = new URL(route.request().url());
     const decided = pathname.match(/^\/api\/announcements\/([^/]+)\/(approve|return)$/);
@@ -68,6 +76,10 @@ export async function mockAdminApi(page: Page, { decisions = [] as string[] } = 
       decisions.push(decided[2]);
       pending = pending.filter(a => a.id !== decided[1]);
       return json(route, { announcement: { ...PENDING_ANNOUNCEMENT, status: decided[2] === 'approve' ? 'published' : 'draft' } });
+    }
+    if (pathname === '/api/automation/custom' && route.request().method() === 'POST') {
+      custom.push({ _id: `c${custom.length + 1}`, scholarshipIds: [], ...route.request().postDataJSON() });
+      return json(route, automationView(), 201);
     }
     if (route.request().method() !== 'GET') return json(route, { ok: true });
     switch (pathname) {
@@ -81,12 +93,7 @@ export async function mockAdminApi(page: Page, { decisions = [] as string[] } = 
       case '/api/students': return json(route, { students: STUDENTS, total: STUDENTS.length });
       case '/api/renewals/admin/periods': return json(route, { periods: [] });
       case '/api/fse': return json(route, { reports: [] });
-      case '/api/automation':
-        return json(route, {
-          settings: { dutyReminders: true, officeHeadReminders: true, deadlineReminders: true, updatedBy: null, updatedAt: null },
-          lastRuns: {},
-          outbox: { queued: 0, sentLast7Days: 0, failedLast7Days: 0, perMinute: 10, mailEnabled: false },
-        });
+      case '/api/automation': return json(route, automationView());
       case '/api/automation/outbox': return json(route, { emails: [] });
       default: return json(route, {});
     }

@@ -98,6 +98,22 @@ test.describe('AdSO', () => {
     await expect(main.getByRole('checkbox', { name: 'Select Juan Dela Cruz' }).filter({ visible: true })).toHaveCount(0);
   });
 
+  test('Automation: adds an automation of its own', async ({ page }) => {
+    await openView(page, 'Automation');
+    await expectOnPage(page, 'Automation');
+    await page.getByRole('button', { name: 'Add automation' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add automation' });
+    await dialog.getByLabel('Name').fill('Approval follow-up');
+    await dialog.getByRole('button', { name: 'When something happens' }).click();
+    await dialog.getByLabel('When', { exact: true }).selectOption('applicationApproved');
+    await dialog.getByLabel('Subject').fill('Your {scholarship} is approved');
+    await dialog.getByLabel('Message').fill('Hi {firstName}, welcome aboard.');
+    await dialog.getByRole('button', { name: 'Add automation' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole('heading', { name: 'Approval follow-up' })).toBeVisible();
+    await expect(page.getByText('When an application is approved · to the student')).toBeVisible();
+  });
+
   test('the logo goes back to the dashboard', async ({ page }) => {
     await openView(page, 'Applications');
     await showMenu(page);

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Award, ChevronRight, MessageSquare, Trash2, UserCheck, UserRound, Users } from 'lucide-react';
+import { ChevronRight, MessageSquare, Trash2, UserCheck, UserRound, Users } from 'lucide-react';
 import { API_BASE_URL, authHeaders, formatDate, titleCaseName } from './adminData';
 import {
   Alert, Avatar, Badge, Button, Card, ConfirmDialog, EmptyState, ErrorState, IconButton, KpiCard, KpiGrid, MobileList, PageHeader, Pagination,
@@ -14,7 +14,7 @@ import { DeclaredScholarship } from '../../types';
 // Students the office no longer needs (rejected, graduated, stopped) can be
 // deleted with their records: they go to the Trash for 30 days
 // (POST /api/students/delete; anyone with something active is skipped).
-// "Holding 2+" finds students who hold more than one scholarship by
+// A "Holds 2" badge marks students who hold more than one scholarship by
 // AniSkolar's records (they choose which to keep); the "Declared" filter
 // finds the ones who listed scholarships themselves (Profile → Scholarships
 // you hold), e.g. outside grants or ones from before AniSkolar.
@@ -53,7 +53,6 @@ const DECLARED: { value: Declared; label: string }[] = [
   { value: 'external', label: 'Declared outside grants' },
   { value: 'none', label: 'Declared none' },
 ];
-const heldCount = (s: StudentRow) => s.held?.length ?? 0;
 function matchesDeclared(s: StudentRow, d: Declared) {
   const list = s.declaredScholarships ?? [];
   if (d === 'any') return list.length > 0;
@@ -71,7 +70,7 @@ const OUTCOMES: { value: Outcome; label: string }[] = [
   { value: 'active', label: 'Active' },
 ];
 
-type Show = 'not-applied' | 'applied' | 'all' | 'multiple';
+type Show = 'not-applied' | 'applied' | 'all';
 
 const fullName = (s: StudentRow) =>
   titleCaseName([s.firstName, s.middleName, s.lastName].filter(Boolean).join(' ') || s.name || s.studentNumber);
@@ -118,7 +117,7 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
   const counts = useMemo(() => {
     const all = rows ?? [];
     const applied = all.filter(s => s.applications > 0).length;
-    return { all: all.length, applied, notApplied: all.length - applied, multiple: all.filter(s => heldCount(s) >= 2).length };
+    return { all: all.length, applied, notApplied: all.length - applied };
   }, [rows]);
 
   const filtered = useMemo(() => {
@@ -126,7 +125,6 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
     return (rows ?? []).filter(s => {
       if (show === 'not-applied' && s.applications > 0) return false;
       if (show === 'applied' && s.applications === 0) return false;
-      if (show === 'multiple' && heldCount(s) < 2) return false;
       if (college && s.college !== college) return false;
       if (outcome && s.outcome !== outcome) return false;
       if (!matchesDeclared(s, declared)) return false;
@@ -202,11 +200,10 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
     <>
       <PageHeader title="Students" description="Everyone who has set up an AniSkolar profile, and whether they've applied." />
 
-      <KpiGrid columns={4}>
+      <KpiGrid columns={3}>
         <KpiCard label="Signed up" value={counts.all} icon={Users} loading={!rows && loading} active={show === 'all'} onClick={() => setShow('all')} />
         <KpiCard label="Applied" value={counts.applied} icon={UserCheck} tone="success" loading={!rows && loading} active={show === 'applied'} onClick={() => setShow('applied')} />
         <KpiCard label="Not applied yet" value={counts.notApplied} icon={UserRound} tone={counts.notApplied ? 'warning' : 'neutral'} loading={!rows && loading} active={show === 'not-applied'} onClick={() => setShow('not-applied')} />
-        <KpiCard label="Holding 2+ scholarships" value={counts.multiple} icon={Award} tone={counts.multiple ? 'danger' : 'neutral'} hint="By AniSkolar's records" loading={!rows && loading} active={show === 'multiple'} onClick={() => setShow('multiple')} />
       </KpiGrid>
 
       <Card
@@ -234,7 +231,7 @@ export default function StudentsPage({ getToken, onOpenScholar, onMessageStudent
         ) : filtered.length === 0 ? (
           filtersActive
             ? <EmptyState icon={Users} title="No students match" action={<Button onClick={() => { setSearch(''); setCollege(''); setOutcome(''); setDeclared(''); }}>Clear filters</Button>} />
-            : <EmptyState icon={Users} title={show === 'not-applied' ? 'Everyone who signed up has applied' : show === 'applied' ? 'No one has applied yet' : show === 'multiple' ? 'No one holds more than one scholarship' : 'No students yet'} />
+            : <EmptyState icon={Users} title={show === 'not-applied' ? 'Everyone who signed up has applied' : show === 'applied' ? 'No one has applied yet' : 'No students yet'} />
         ) : (
           <>
             {skipped.length > 0 && (

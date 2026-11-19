@@ -19,6 +19,9 @@ export interface ApplyCheck {
   noText: string;
   // A No that's an invitation (join us), not a dead end.
   encourage?: boolean;
+  // Members only (no application): the button says how to get it instead
+  // of "Apply" (panel, Nov 2026).
+  joinLabel?: string;
 }
 
 export const APPLY_CHECKS: Record<string, ApplyCheck> = {
@@ -30,6 +33,7 @@ export const APPLY_CHECKS: Record<string, ApplyCheck> = {
   },
   s7: {
     question: 'Are you a varsity player of DLSU-D?',
+    joinLabel: 'Be a varsity player',
     yesApplies: false,
     yesTitle: 'No application needed',
     yesText: 'Varsity players don’t apply. Your coach evaluates and endorses you, the SDO Director approves, and the Sports Development Office adds you as a scholar. You’ll get an email and see it under My Scholarship.',
@@ -39,6 +43,7 @@ export const APPLY_CHECKS: Record<string, ApplyCheck> = {
   },
   s8: {
     question: 'Are you a member of the Vicissitude Editorial Board or Editorial Staff?',
+    joinLabel: 'Be a member of Vicissitude',
     yesApplies: false,
     yesTitle: 'No application needed',
     yesText: 'Vicissitude adds its members as scholars each semester, based on their evaluation and duty hours. You’ll get an email and see it under My Scholarship.',
@@ -48,6 +53,7 @@ export const APPLY_CHECKS: Record<string, ApplyCheck> = {
   },
   s10: {
     question: 'Are you an officer of the 267th NROTC unit?',
+    joinLabel: 'Be an officer of the 267th NROTCU',
     yesApplies: false,
     yesTitle: 'No application needed',
     yesText: 'The ROTC Office adds its officers as scholars each semester, at their current rank, when the Commandant or the ROTC Coordinator recommends them. You’ll get an email and see it under My Scholarship.',
@@ -57,6 +63,7 @@ export const APPLY_CHECKS: Record<string, ApplyCheck> = {
   },
   s12: {
     question: 'Are you a member of the Heraldo Filipino Editorial Staff?',
+    joinLabel: 'Be a member of the Heraldo Filipino',
     yesApplies: false,
     yesTitle: 'No application needed',
     yesText: 'The Heraldo Filipino adds its Editorial Staff as scholars. Your discount is computed from your scholarship points each term. You’ll get an email and see it under My Scholarship.',

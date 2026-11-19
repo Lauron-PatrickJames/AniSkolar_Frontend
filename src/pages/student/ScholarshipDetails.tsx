@@ -195,7 +195,7 @@ export default function ScholarshipDetails({
               onClick={() => onApply(scholarship.id)}
               className="w-full md:w-auto text-sm font-semibold px-8 py-3.5 rounded-xl bg-brand-green text-white hover:bg-brand-green-dark shadow-sm transition-all focus:outline-hidden inline-flex items-center justify-center gap-2"
             >
-              Apply For This Scholarship
+              {APPLY_CHECKS[scholarship.id]?.joinLabel ?? 'Apply For This Scholarship'}
             </button>
           ) : isInfoOnly ? (
             <span className="w-full md:w-auto px-5 py-3 rounded-xl bg-slate-100 text-slate-500 border border-slate-200 text-sm font-semibold inline-flex items-center justify-center gap-2">
@@ -231,7 +231,7 @@ export default function ScholarshipDetails({
           <Info className="w-4.5 h-4.5 text-sky-700 shrink-0 mt-0.5" />
           <div className="text-xs text-sky-900 leading-relaxed">
             <p className="font-bold mb-0.5">How this scholarship is awarded</p>
-            <p>{scholarship.availNote ?? 'This scholarship isn\'t applied for online.'} Go to the <span className="font-bold">{handlingOffice(scholarship)}</span> to apply or ask about it.</p>
+            <p>{scholarship.availNote ?? 'This scholarship isn\'t applied for online.'} Go to the <span className="font-bold">{handlingOffice(scholarship)}</span> to {APPLY_CHECKS[scholarship.id]?.joinLabel ? 'join or ask about it' : 'apply or ask about it'}.</p>
           </div>
         </div>
       )}

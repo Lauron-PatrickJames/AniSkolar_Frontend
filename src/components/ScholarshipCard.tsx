@@ -188,7 +188,7 @@ export default function ScholarshipCard({
                 isApplied ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' : 'bg-brand-green text-white hover:bg-brand-green-dark shadow-sm'
               }`}
             >
-              <span>{isApplied ? 'You’re a scholar' : 'Apply'}</span>
+              <span className="truncate">{isApplied ? 'You’re a scholar' : (APPLY_CHECKS[scholarship.id]?.joinLabel ?? 'Apply').replace(/^(Be an? (member|officer)) of .*$/, '$1')}</span>
               {!isApplied && <ChevronRight className="w-3.5 h-3.5" />}
             </button>
           )}

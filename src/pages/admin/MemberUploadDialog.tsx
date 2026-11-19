@@ -22,15 +22,18 @@ const HEADERS: [keyof MemberRow, RegExp][] = [
   ['email', /e-?mail/i],
 ];
 
-// Rows of cells → members. A header row (any cell naming a column) sets
-// the columns; without one, the first column is the student number.
+// Rows of cells → members. Any layout works (the Registrar's file isn't a
+// fixed format): a header row naming the columns, if there is one in the
+// first rows, finds the names and emails; the student number is that
+// column, or else any cell in the row with 9 digits. Rows without a
+// student number (titles, totals, blank lines) are left out.
 export function rowsToMembers(rows: string[][]): MemberRow[] {
   const cells = rows.map(r => r.map(c => String(c ?? '').trim())).filter(r => r.some(Boolean));
   if (!cells.length) return [];
   const headerAt = cells.findIndex(r => r.some(c => HEADERS.some(([, re]) => re.test(c))));
   let cols: Partial<Record<keyof MemberRow, number>> = { studentNumber: 0 };
   let body = cells;
-  if (headerAt >= 0 && headerAt < 5) {
+  if (headerAt >= 0 && headerAt < 15) {
     cols = {};
     cells[headerAt].forEach((c, i) => {
       const hit = HEADERS.find(([key, re]) => re.test(c) && cols[key] === undefined);
@@ -39,9 +42,14 @@ export function rowsToMembers(rows: string[][]): MemberRow[] {
     body = cells.slice(headerAt + 1);
   }
   const at = (r: string[], k: keyof MemberRow) => (cols[k] === undefined ? '' : r[cols[k]!] ?? '');
+  const digits = (v: string) => v.replace(/[\s-]/g, '');
   return body
-    .map(r => ({ studentNumber: at(r, 'studentNumber').replace(/[\s-]/g, ''), firstName: at(r, 'firstName'), lastName: at(r, 'lastName'), email: at(r, 'email').toLowerCase() }))
-    .filter(m => m.studentNumber || m.firstName || m.lastName);
+    .map(r => {
+      const fromColumn = digits(at(r, 'studentNumber'));
+      const studentNumber = /^\d{9}$/.test(fromColumn) ? fromColumn : (r.map(digits).find(c => /^\d{9}$/.test(c)) ?? '');
+      return { studentNumber, firstName: at(r, 'firstName'), lastName: at(r, 'lastName'), email: at(r, 'email').toLowerCase() };
+    })
+    .filter(m => m.studentNumber);
 }
 
 async function readFile(file: File): Promise<string[][]> {
@@ -90,7 +98,7 @@ export default function MemberUploadDialog({ scholarships, getToken, onClose, on
     if (file.size > 5 * 1024 * 1024) { setError('The file must be under 5MB.'); return; }
     try {
       const list = rowsToMembers(await readFile(file));
-      if (!list.length) { setError('No members found in the file. Put the student numbers in the first column, or use the template.'); return; }
+      if (!list.length) { setError('No 9-digit student numbers were found in the file.'); return; }
       setFileName(file.name);
       setMembers(list);
     } catch {
@@ -157,7 +165,9 @@ export default function MemberUploadDialog({ scholarships, getToken, onClose, on
         <>
           <Button onClick={onClose} disabled={busy}>Cancel</Button>
           <Button variant="primary" icon={Upload} onClick={submit} loading={busy} disabled={!members?.length || !approved}>
-            {members?.length ? `Add ${members.length} ${members.length === 1 ? 'member' : 'members'}` : 'Add members'}
+            {registrarList
+              ? (members?.length ? `Add ${members.length} ${members.length === 1 ? 'scholar' : 'scholars'}` : 'Add scholars')
+              : (members?.length ? `Add ${members.length} ${members.length === 1 ? 'member' : 'members'}` : 'Add members')}
           </Button>
         </>
       }
@@ -177,15 +187,22 @@ export default function MemberUploadDialog({ scholarships, getToken, onClose, on
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-ink">{fileName || 'Excel or CSV file'}</p>
               <p className="text-xs text-ink-muted">
-                {members ? `${members.length} ${members.length === 1 ? 'member' : 'members'} found` : 'Student number, and for members not yet on AniSkolar: first name, last name and DLSU-D email.'}
+                {members
+                  ? `${members.length} ${registrarList ? (members.length === 1 ? 'student' : 'students') : (members.length === 1 ? 'member' : 'members')} found`
+                  : registrarList
+                    ? 'The file from the Registrar, as it is. AniSkolar finds the student numbers in it.'
+                    : 'Student number, and for members not yet on AniSkolar: first name, last name and DLSU-D email.'}
               </p>
             </div>
             <input ref={input} type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={e => { void pick(e.target.files?.[0]); e.target.value = ''; }} />
             <Button size="sm" icon={Upload} onClick={() => input.current?.click()} disabled={busy}>{members ? 'Choose another' : 'Choose file'}</Button>
           </div>
-          <button type="button" onClick={downloadTemplate} className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline">
-            <Download className="size-3.5" aria-hidden /> Download the template
-          </button>
+          {/* The Registrar's file comes as it is: no template for it. */}
+          {!registrarList && (
+            <button type="button" onClick={downloadTemplate} className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline">
+              <Download className="size-3.5" aria-hidden /> Download the template
+            </button>
+          )}
         </div>
 
         {members && members.length > 0 && (
@@ -207,8 +224,8 @@ export default function MemberUploadDialog({ scholarships, getToken, onClose, on
         )}
         {incomplete > 0 && <Alert tone="warning">{incomplete === 1 ? '1 row doesn’t' : `${incomplete} rows don’t`} have a 9-digit student number and will be skipped.</Alert>}
 
-        <Field label="Message to the members" optional>
-          <Textarea value={note} onChange={e => setNote(e.target.value)} rows={2} maxLength={2000} disabled={busy} placeholder="e.g. Thank you for your service this semester!" />
+        <Field label={registrarList ? 'Message to the scholars' : 'Message to the members'} optional>
+          <Textarea value={note} onChange={e => setNote(e.target.value)} rows={2} maxLength={2000} disabled={busy} placeholder={registrarList ? 'e.g. Congratulations on your Academic Scholarship!' : 'e.g. Thank you for your service this semester!'} />
         </Field>
         <Checkbox checked={approved} onChange={setApproved} disabled={busy} label={registrarList ? 'This is the Registrar’s list of students granted this scholarship' : `The ${approver} approved this list`} />
       </div>

@@ -205,23 +205,31 @@ export default function MemberUploadDialog({ scholarships, getToken, onClose, on
           )}
         </div>
 
-        {members && members.length > 0 && (
-          <div className="max-h-56 overflow-y-auto rounded-control border border-line">
-            <Table label="Members to add">
-              <thead><tr><Th>Student number</Th><Th>Name</Th><Th>Email</Th></tr></thead>
-              <tbody>
+        {/* A plain list with its own header (the shared table's sticky
+            header floats inside a small scroll box). Name and Email only
+            when the file has them. */}
+        {members && members.length > 0 && (() => {
+          const withNames = members.some(m => m.firstName || m.lastName);
+          const withEmails = members.some(m => m.email);
+          const cols = `grid gap-3 px-3 ${withNames && withEmails ? 'grid-cols-[8rem_1fr_1fr]' : withNames || withEmails ? 'grid-cols-[8rem_1fr]' : 'grid-cols-1'}`;
+          return (
+            <div className="overflow-hidden rounded-control border border-line">
+              <div className={`${cols} border-b border-line bg-surface-muted py-2 text-xs font-medium text-ink-muted`}>
+                <span>Student number</span>{withNames && <span>Name</span>}{withEmails && <span>Email</span>}
+              </div>
+              <ul className="max-h-56 divide-y divide-line overflow-y-auto text-sm">
                 {members.slice(0, 100).map((m, i) => (
-                  <Tr key={`${m.studentNumber}-${i}`}>
-                    <Td className={`font-mono ${/^\d{9}$/.test(m.studentNumber) ? '' : 'text-danger'}`}>{m.studentNumber || 'Missing'}</Td>
-                    <Td>{[m.firstName, m.lastName].filter(Boolean).join(' ') || '—'}</Td>
-                    <Td>{m.email || '—'}</Td>
-                  </Tr>
+                  <li key={`${m.studentNumber}-${i}`} className={`${cols} py-2`}>
+                    <span className={`font-mono tabular-nums ${/^\d{9}$/.test(m.studentNumber) ? 'text-ink' : 'text-danger'}`}>{m.studentNumber || 'Missing'}</span>
+                    {withNames && <span className="truncate text-ink">{[m.firstName, m.lastName].filter(Boolean).join(' ') || '—'}</span>}
+                    {withEmails && <span className="truncate text-ink-muted">{m.email || '—'}</span>}
+                  </li>
                 ))}
-              </tbody>
-            </Table>
-            {members.length > 100 && <p className="p-2 text-center text-xs text-ink-muted">and {members.length - 100} more</p>}
-          </div>
-        )}
+              </ul>
+              {members.length > 100 && <p className="border-t border-line p-2 text-center text-xs text-ink-muted">and {(members.length - 100).toLocaleString()} more</p>}
+            </div>
+          );
+        })()}
         {incomplete > 0 && <Alert tone="warning">{incomplete === 1 ? '1 row doesn’t' : `${incomplete} rows don’t`} have a 9-digit student number and will be skipped.</Alert>}
 
         <Field label={registrarList ? 'Message to the scholars' : 'Message to the members'} optional>
